@@ -1,0 +1,11 @@
+{
+  "name": "Hotel Check-in Admin",
+  "short_name": "HotelAdmin",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#1a1a2e",
+  "description": "Hotel check-in management admin panel",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false
+}
