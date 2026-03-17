@@ -1,4 +1,4 @@
-enum ExpenseCategory { cleaning, maintenance, utilities, supplies, other }
+enum ExpenseCategory { cleaning, maintenance, utilities, supplies, restaurant, other }
 
 class Expense {
   final String id;
@@ -91,6 +91,8 @@ class Expense {
         return 'Utilities';
       case ExpenseCategory.supplies:
         return 'Supplies';
+      case ExpenseCategory.restaurant:
+        return 'Restaurant';
       case ExpenseCategory.other:
         return 'Other';
     }

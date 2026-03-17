@@ -112,6 +112,7 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
       case ExpenseCategory.maintenance: return Icons.build_rounded;
       case ExpenseCategory.utilities: return Icons.electric_bolt_rounded;
       case ExpenseCategory.supplies: return Icons.inventory_2_rounded;
+      case ExpenseCategory.restaurant: return Icons.restaurant_rounded;
       case ExpenseCategory.other: return Icons.receipt_long_rounded;
     }
   }

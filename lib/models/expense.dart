@@ -91,6 +91,8 @@ class Expense {
         return 'Utilities';
       case ExpenseCategory.supplies:
         return 'Supplies';
+      case ExpenseCategory.restaurant:
+        return 'Restaurant';
       case ExpenseCategory.other:
         return 'Other';
     }
