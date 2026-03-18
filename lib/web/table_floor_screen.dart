@@ -909,7 +909,9 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
                   onPressed: () => showDialog(
                         context: context,
                         builder: (_) => RestaurantInvoiceDialog(
-                            order: openOrders.last, table: table),
+                            order: openOrders.last, 
+                            table: table,
+                            allOrders: openOrders.length > 1 ? openOrders : null),
                       )),
               const SizedBox(width: 8),
               _actionBtn(Icons.payment_rounded, 'Collect Payment', _kGreen,

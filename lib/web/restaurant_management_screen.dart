@@ -1446,7 +1446,7 @@ class _TablesTab extends StatefulWidget {
 
 class _TablesTabState extends State<_TablesTab> {
   List<RestaurantTable> _tables = [];
-  Map<String, RestaurantOrder?> _activeOrders = {};
+  Map<String, List<RestaurantOrder>> _activeOrders = {};
   bool _loading = true;
   final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
   Timer? _refreshTimer;
@@ -1469,9 +1469,12 @@ class _TablesTabState extends State<_TablesTab> {
   Future<void> _load({bool silent = false}) async {
     if (!silent) setState(() => _loading = true);
     final tables = await widget.service.getTables();
-    final orders = <String, RestaurantOrder?>{};
+    final orders = <String, List<RestaurantOrder>>{};
     for (final t in tables) {
-      orders[t.id] = await widget.service.getActiveOrderForTable(t.id);
+      final list = await widget.service.getOpenOrdersForTable(t.id);
+      if (list.isNotEmpty) {
+        orders[t.id] = list;
+      }
     }
     if (!mounted) return;
     setState(() {
@@ -1519,10 +1522,10 @@ class _TablesTabState extends State<_TablesTab> {
     }
   }
 
-  void _showOrderDetail(RestaurantTable table, RestaurantOrder order) {
+  void _showOrderDetail(RestaurantTable table, List<RestaurantOrder> orders) {
     showDialog(
       context: context,
-      builder: (_) => _TableOrderDialog(table: table, order: order, currency: _currency),
+      builder: (_) => _TableOrderDialog(table: table, orders: orders, currency: _currency),
     );
   }
 
@@ -1580,17 +1583,18 @@ class _TablesTabState extends State<_TablesTab> {
   }
 
   Widget _tableCard(RestaurantTable table) {
-    final order = _activeOrders[table.id];
-    final isOccupied = order != null;
+    final orders = _activeOrders[table.id];
+    final isOccupied = orders != null && orders.isNotEmpty;
+    final latestOrder = isOccupied ? orders.last : null;
 
     final bgColor = isOccupied ? _RC.occupiedLight : _RC.availableLight;
     final borderColor = isOccupied ? _RC.occupied.withOpacity(0.4) : _RC.available.withOpacity(0.4);
     final iconColor = isOccupied ? _RC.occupied : _RC.available;
-    final statusLabel = isOccupied ? _orderStatusLabel(order!.status) : 'Available';
-    final statusColor = isOccupied ? _orderStatusColor(order!.status) : _RC.available;
+    final statusLabel = isOccupied ? _orderStatusLabel(latestOrder!.status) : 'Available';
+    final statusColor = isOccupied ? _orderStatusColor(latestOrder!.status) : _RC.available;
 
     return GestureDetector(
-      onTap: isOccupied ? () => _showOrderDetail(table, order!) : null,
+      onTap: isOccupied ? () => _showOrderDetail(table, orders) : null,
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
@@ -1640,7 +1644,7 @@ class _TablesTabState extends State<_TablesTab> {
             Text('${table.capacity} seats',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
             const Spacer(),
-            if (isOccupied && order != null) ...[
+            if (isOccupied && latestOrder != null) ...[
               const Divider(color: Colors.black12),
               // Kitchen status badge
               Row(
@@ -1648,31 +1652,31 @@ class _TablesTabState extends State<_TablesTab> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: _kitchenStatusColor(order).withOpacity(0.15),
+                      color: _kitchenStatusColor(latestOrder).withOpacity(0.15),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(_kitchenStatusIcon(order),
-                            size: 11, color: _kitchenStatusColor(order)),
+                        Icon(_kitchenStatusIcon(latestOrder),
+                            size: 11, color: _kitchenStatusColor(latestOrder)),
                         const SizedBox(width: 4),
-                        Text(_kitchenStatusLabel(order),
+                        Text(_kitchenStatusLabel(latestOrder),
                             style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: _kitchenStatusColor(order))),
+                                color: _kitchenStatusColor(latestOrder))),
                       ],
                     ),
                   ),
                   const Spacer(),
-                  Text('${order.items.where((i) => !i.isFullyRefunded).fold(0, (s, i) => s + i.activeQuantity)} items',
+                  Text('${orders.fold(0, (s, o) => s + o.items.where((i) => !i.isFullyRefunded).fold(0, (s2, i) => s2 + i.activeQuantity))} items',
                       style: const TextStyle(
                           fontSize: 11, color: Color(0xFF7C2D12))),
                 ],
               ),
               const SizedBox(height: 6),
-              Text(_currency.format(order.totalAmount),
+              Text(_currency.format(orders.fold(0.0, (s, o) => s + o.totalAmount)),
                   style: const TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w800, color: _RC.occupied)),
               const SizedBox(height: 4),
@@ -1899,11 +1903,11 @@ class _AddTableDialogState extends State<_AddTableDialog> {
 
 class _TableOrderDialog extends StatelessWidget {
   final RestaurantTable table;
-  final RestaurantOrder order;
+  final List<RestaurantOrder> orders;
   final NumberFormat currency;
-  const _TableOrderDialog({required this.table, required this.order, required this.currency});
+  const _TableOrderDialog({required this.table, required this.orders, required this.currency});
 
-  String _statusLabel() {
+  String _statusLabel(RestaurantOrder order) {
     if (order.status == OrderStatus.served &&
         order.paymentStatus == PaymentStatus.unpaid) return 'Payment Due';
     switch (order.status) {
@@ -1915,7 +1919,7 @@ class _TableOrderDialog extends StatelessWidget {
     }
   }
 
-  Color _statusColor() {
+  Color _statusColor(RestaurantOrder order) {
     if (order.status == OrderStatus.served &&
         order.paymentStatus == PaymentStatus.unpaid) return Colors.purple;
     switch (order.status) {
@@ -1927,7 +1931,7 @@ class _TableOrderDialog extends StatelessWidget {
     }
   }
 
-  IconData _statusIcon() {
+  IconData _statusIcon(RestaurantOrder order) {
     if (order.status == OrderStatus.served &&
         order.paymentStatus == PaymentStatus.unpaid) return Icons.payments_rounded;
     switch (order.status) {
@@ -1942,7 +1946,61 @@ class _TableOrderDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final timeF = DateFormat('HH:mm');
-    final statusColor = _statusColor();
+    final latestOrder = orders.last;
+    final statusColor = _statusColor(latestOrder);
+
+    // Flatten all items across all orders for this table
+    final allItemsWidget = <Widget>[];
+    for (var idx = 0; idx < orders.length; idx++) {
+      final order = orders[idx];
+      if (orders.length > 1) {
+        allItemsWidget.add(Padding(
+          padding: EdgeInsets.only(bottom: 8, top: idx == 0 ? 0 : 16),
+          child: Row(
+            children: [
+              Text(order.parentOrderId != null ? 'Add-On Ticket #${order.orderNumber}' : 'Ticket #${order.orderNumber}',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.indigo.shade600)),
+              const Spacer(),
+              Text(_statusLabel(order), style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+            ],
+          ),
+        ));
+      }
+      for (final item in order.items) {
+        allItemsWidget.add(Row(
+          children: [
+            Text(item.menuItem.imageUrl.isNotEmpty ? item.menuItem.imageUrl : '🍽️',
+                style: const TextStyle(fontSize: 22)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.menuItem.name,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  Text(currency.format(item.menuItem.price),
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _RC.accentLight,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text('x${item.quantity}',
+                  style: const TextStyle(fontWeight: FontWeight.w700, color: _RC.accent)),
+            ),
+            const SizedBox(width: 12),
+            Text(currency.format(item.subtotal),
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          ],
+        ));
+        allItemsWidget.add(Divider(color: Colors.grey.shade100));
+      }
+    }
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
@@ -1971,7 +2029,7 @@ class _TableOrderDialog extends StatelessWidget {
                       children: [
                         Text('Table ${table.tableNumber} — Active Order',
                             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                        Text('${order.orderNumber} • Placed at ${timeF.format(order.createdAt)}',
+                        Text('${orders.map((o) => o.orderNumber).join(" + ")} • Placed at ${timeF.format(orders.first.createdAt)}',
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                       ],
                     ),
@@ -1992,7 +2050,7 @@ class _TableOrderDialog extends StatelessWidget {
                       color: statusColor.withOpacity(0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(_statusIcon(), size: 18, color: statusColor),
+                    child: Icon(_statusIcon(latestOrder), size: 18, color: statusColor),
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -2000,56 +2058,34 @@ class _TableOrderDialog extends StatelessWidget {
                     children: [
                       const Text('Kitchen Status',
                           style: TextStyle(fontSize: 11, color: Colors.black45)),
-                      Text(_statusLabel(),
+                      Text(_statusLabel(latestOrder),
                           style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
                               color: statusColor)),
                     ],
                   ),
+                  if (orders.length > 1) ...[
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text('${orders.length} TICKETS', 
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.purple.shade700)),
+                    ),
+                  ]
                 ],
               ),
             ),
             // Items
             Flexible(
-              child: ListView.separated(
+              child: ListView(
                 shrinkWrap: true,
                 padding: const EdgeInsets.all(20),
-                separatorBuilder: (_, __) => Divider(color: Colors.grey.shade100),
-                itemCount: order.items.length,
-                itemBuilder: (_, i) {
-                  final item = order.items[i];
-                  return Row(
-                    children: [
-                      Text(item.menuItem.imageUrl.isNotEmpty ? item.menuItem.imageUrl : '🍽️',
-                          style: const TextStyle(fontSize: 22)),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(item.menuItem.name,
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                            Text(currency.format(item.menuItem.price),
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _RC.accentLight,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text('x${item.quantity}',
-                            style: const TextStyle(fontWeight: FontWeight.w700, color: _RC.accent)),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(currency.format(item.subtotal),
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                    ],
-                  );
-                },
+                children: allItemsWidget,
               ),
             ),
             // Total
@@ -2066,9 +2102,9 @@ class _TableOrderDialog extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${order.items.fold(0, (s, i) => s + i.quantity)} items',
+                      Text('${orders.fold(0, (s, o) => s + o.items.fold(0, (s2, i) => s2 + i.quantity))} items',
                           style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
-                      Text('Payment: ${_paymentLabel(order.paymentStatus)}',
+                      Text('Payment: ${_paymentLabel(latestOrder.paymentStatus)}',
                           style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
                     ],
                   ),
@@ -2076,7 +2112,7 @@ class _TableOrderDialog extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       const Text('Total', style: TextStyle(fontSize: 12, color: Colors.black45)),
-                      Text(currency.format(order.totalAmount),
+                      Text(currency.format(orders.fold(0.0, (s, o) => s + o.totalAmount)),
                           style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 22, color: _RC.occupied)),
                     ],
                   ),

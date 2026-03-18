@@ -547,16 +547,48 @@ class _KitchenScreenState extends State<KitchenScreen> {
               ],
             ),
             const SizedBox(height: 14),
-            ElevatedButton.icon(
-              onPressed: () => _showPaymentDialog(orderGroup),
-              icon: const Icon(Icons.payments_rounded, size: 16),
-              label: const Text('Collect Payment',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purple.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      final table = parent.tableId != null
+                          ? _tables.firstWhereOrNull((t) => t.id == parent.tableId)
+                          : null;
+                      showDialog(
+                        context: context,
+                        builder: (_) => RestaurantInvoiceDialog(
+                          order: parent,
+                          table: table,
+                          allOrders: isMulti ? orderGroup : null,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.receipt_outlined, size: 16),
+                    label: const Text('Invoice'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.purple.shade300,
+                      side: BorderSide(color: Colors.purple.shade700),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showPaymentDialog(orderGroup),
+                    icon: const Icon(Icons.payments_rounded, size: 16),
+                    label: const Text('Collect Payment',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.purple.shade700,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

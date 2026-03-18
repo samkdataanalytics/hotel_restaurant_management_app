@@ -264,14 +264,18 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  void _showInvoiceDialog(RestaurantOrder order) {
+  void _showInvoiceDialog(RestaurantOrder order, {List<RestaurantOrder>? allOrders}) {
     final table = order.tableId != null
         ? _tables.firstWhere((t) => t.id == order.tableId, orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0))
         : null;
     showDialog(
       context: context,
-      builder: (_) => RestaurantInvoiceDialog(order: order, table: table),
+      builder: (_) => RestaurantInvoiceDialog(order: order, table: table, allOrders: allOrders ?? (openOrdersAvailable(order) ? _allTableOrders[order.tableId!] : null)),
     );
+  }
+
+  bool openOrdersAvailable(RestaurantOrder order) {
+    return order.tableId != null && _allTableOrders.containsKey(order.tableId) && _allTableOrders[order.tableId!]!.length > 1;
   }
 
   // ─── BUILD ──────────────────────────────────────────
@@ -855,7 +859,7 @@ class _PosScreenState extends State<PosScreen> {
             Row(
               children: [
                 OutlinedButton.icon(
-                  onPressed: () => _showInvoiceDialog(latestOrder),
+                  onPressed: () => _showInvoiceDialog(latestOrder, allOrders: openOrders),
                   icon: const Icon(Icons.receipt_outlined, size: 13),
                   label: const Text('View Invoice', style: TextStyle(fontSize: 11)),
                   style: OutlinedButton.styleFrom(
@@ -889,7 +893,7 @@ class _PosScreenState extends State<PosScreen> {
             Row(
               children: [
                 OutlinedButton.icon(
-                  onPressed: () => _showInvoiceDialog(latestOrder),
+                  onPressed: () => _showInvoiceDialog(latestOrder, allOrders: openOrders),
                   icon: const Icon(Icons.receipt_outlined, size: 13),
                   label: const Text('View Invoice', style: TextStyle(fontSize: 11)),
                   style: OutlinedButton.styleFrom(
