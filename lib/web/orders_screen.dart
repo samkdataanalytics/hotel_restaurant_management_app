@@ -4,7 +4,7 @@ import '../models/restaurant_order.dart';
 import '../models/restaurant_table.dart';
 import '../app_theme.dart';
 import '../services/restaurant_service.dart';
-import 'pos_screen.dart';
+import 'restaurant_invoice_dialog.dart';
 
 const _kOrange = AppTheme.restaurantAccent;
 const _kOrangeBg = AppTheme.restaurantAccentBg;
@@ -487,14 +487,141 @@ class _OrdersScreenState extends State<OrdersScreen> {
         ),
       );
     }
+
+    // Group child orders under their parent using parentOrderId.
+    // Child orders are not shown as top-level rows.
+    final childrenByParent = <String, List<RestaurantOrder>>{};
+    final childIds = <String>{};
+
+    for (final o in orders) {
+      if (o.parentOrderId != null) {
+        childrenByParent.putIfAbsent(o.parentOrderId!, () => []).add(o);
+        childIds.add(o.id);
+      }
+    }
+
+    final items = <Widget>[];
+    for (final o in orders) {
+      if (childIds.contains(o.id)) continue; // rendered under parent
+      final children = childrenByParent[o.id] ?? [];
+      if (children.isEmpty) {
+        items.add(_buildOrderCard(o));
+      } else {
+        children.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        items.add(_buildSessionCard(o, children));
+      }
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.all(20),
-      itemCount: orders.length,
-      itemBuilder: (_, i) => _buildOrderCard(orders[i]),
+      itemCount: items.length,
+      itemBuilder: (_, i) => items[i],
     );
   }
 
-  Widget _buildOrderCard(RestaurantOrder order) {
+  Widget _buildSessionCard(RestaurantOrder parent, List<RestaurantOrder> children) {
+    final allOrders = [parent, ...children];
+    final tableName = _tableName(parent.tableId);
+    final combinedSubtotal =
+        allOrders.fold(0.0, (s, o) => s + o.totalAmount);
+    final totalItems = allOrders.fold(
+        0,
+        (s, o) =>
+            s + o.items.fold(0, (s2, i) => s2 + (i.quantity - i.refundedQuantity)));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.teal.shade100, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2))
+        ],
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: _kOrangeBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '#${parent.orderNumber}',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      color: _kOrange),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (parent.tableId != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    tableName,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        color: Colors.teal.shade700),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              _chip('${children.length} ADD-ON${children.length == 1 ? "" : "S"}',
+                  Colors.teal.shade700),
+              const SizedBox(width: 6),
+              _chip(_paymentLbl(parent.paymentStatus),
+                  _paymentColor(parent.paymentStatus)),
+              const Spacer(),
+              Text(
+                DateFormat('MMM d, HH:mm').format(parent.createdAt),
+                style: const TextStyle(fontSize: 12, color: Colors.black38),
+              ),
+            ],
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 4),
+            child: Text(
+              '${allOrders.map((o) => "#${o.orderNumber}").join(" + ")}  ·  $totalItems item(s)  ·  Combined: ${_currency.format(combinedSubtotal)}',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            ),
+          ),
+          children: allOrders
+              .map((o) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: o.parentOrderId != null
+                              ? Colors.teal.shade100
+                              : Colors.grey.shade200,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: _buildOrderCard(o, nested: true),
+                    ),
+                  ))
+              .toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderCard(RestaurantOrder order, {bool nested = false}) {
     final isCancelled = order.status == OrderStatus.cancelled;
     final isServed = order.status == OrderStatus.served;
     final canCancel = !isCancelled && !isServed;
@@ -503,18 +630,21 @@ class _OrdersScreenState extends State<OrdersScreen> {
         0.0, (s, i) => s + i.menuItem.price * i.refundedQuantity);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: isCancelled ? Border.all(color: Colors.red.shade100) : null,
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2))
-        ],
-      ),
+      margin: nested ? EdgeInsets.zero : const EdgeInsets.only(bottom: 12),
+      decoration: nested
+          ? null
+          : BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  isCancelled ? Border.all(color: Colors.red.shade100) : null,
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2))
+              ],
+            ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

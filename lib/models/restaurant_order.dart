@@ -91,6 +91,9 @@ class RestaurantOrder {
   final List<OrderItem> items;
   /// True when a cancelled order had inventory restored (only for pending cancels).
   final bool inventoryRestored;
+  /// null = this is a standalone / parent order.
+  /// non-null = this is a child add-on order; value is the parent order's id.
+  final String? parentOrderId;
 
   RestaurantOrder({
     required this.id,
@@ -103,6 +106,7 @@ class RestaurantOrder {
     required this.createdAt,
     required this.items,
     this.inventoryRestored = false,
+    this.parentOrderId,
   });
 
   double get totalAmount => items.fold(0.0, (sum, item) => sum + item.subtotal);
@@ -118,6 +122,7 @@ class RestaurantOrder {
     DateTime? createdAt,
     List<OrderItem>? items,
     bool? inventoryRestored,
+    String? parentOrderId,
   }) {
     return RestaurantOrder(
       id: id ?? this.id,
@@ -130,6 +135,7 @@ class RestaurantOrder {
       createdAt: createdAt ?? this.createdAt,
       items: items ?? this.items,
       inventoryRestored: inventoryRestored ?? this.inventoryRestored,
+      parentOrderId: parentOrderId ?? this.parentOrderId,
     );
   }
 
@@ -145,6 +151,7 @@ class RestaurantOrder {
       'createdAt': createdAt.toIso8601String(),
       'items': items.map((x) => x.toMap()).toList(),
       'inventoryRestored': inventoryRestored,
+      'parentOrderId': parentOrderId,
     };
   }
 
@@ -169,6 +176,7 @@ class RestaurantOrder {
       createdAt: DateTime.parse(map['createdAt']),
       items: List<OrderItem>.from(map['items']?.map((x) => OrderItem.fromMap(x)) ?? []),
       inventoryRestored: map['inventoryRestored'] as bool? ?? false,
+      parentOrderId: map['parentOrderId'],
     );
   }
 }

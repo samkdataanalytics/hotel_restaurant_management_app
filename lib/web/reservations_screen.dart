@@ -1279,7 +1279,10 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     }
   }
 
+  bool _saving = false;
+
   Future<void> _submit() async {
+    if (_saving) return;
     if (!_formKey.currentState!.validate()) return;
     if (_checkInDate == null || _checkOutDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1308,10 +1311,10 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
       idNumber: existingGuest?.idNumber ?? '',
       nationality: existingGuest?.nationality ?? '',
     );
-    await widget.bookingService.addGuest(guest);
+    await widget.bookingService.updateGuest(guest);
 
     // Auto-generate ref for new bookings, keep existing for edits
-    final bookingRef = existingBooking?.bookingRef ?? widget.bookingService.getNextBookingRef();
+    final bookingRef = existingBooking?.bookingRef ?? await widget.bookingService.getNextBookingRef();
 
     final booking = Booking(
       id: existingBooking?.id ?? _uuid.v4(),
@@ -1328,8 +1331,24 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
       isPaid: _isPaid,
     );
 
-    await widget.bookingService.addReservation(booking);
-    if (mounted) Navigator.pop(context, true);
+    setState(() => _saving = true);
+    try {
+      if (existingBooking != null) {
+        await widget.bookingService.updateBooking(booking);
+      } else {
+        await widget.bookingService.addReservation(booking);
+      }
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Save failed: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
   }
 
   @override
