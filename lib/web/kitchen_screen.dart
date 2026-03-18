@@ -2,13 +2,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import 'package:collection/collection.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_theme.dart';
 import '../models/restaurant_order.dart';
 import '../models/booking.dart';
 import '../models/guest.dart';
 import '../models/expense.dart';
+import '../models/restaurant_table.dart';
 import '../services/restaurant_service.dart';
 import '../services/booking_service.dart';
+import 'restaurant_invoice_dialog.dart';
 
 class KitchenScreen extends StatefulWidget {
   const KitchenScreen({super.key});
@@ -23,7 +27,9 @@ class _KitchenScreenState extends State<KitchenScreen> {
   final _timeFormat = DateFormat('hh:mm a');
 
   List<RestaurantOrder> _allOrders = [];
+  List<RestaurantTable> _tables = [];
   Timer? _refreshTimer;
+  RealtimeChannel? _realtimeChannel;
   bool _isLoading = true;
 
   @override
@@ -31,18 +37,32 @@ class _KitchenScreenState extends State<KitchenScreen> {
     super.initState();
     _loadData();
     _refreshTimer = Timer.periodic(
-        const Duration(seconds: 10), (_) => _loadData(silent: true));
+        const Duration(seconds: 5), (_) => _loadData(silent: true));
+    // Real-time: reload instantly whenever any order row changes
+    _realtimeChannel = Supabase.instance.client
+        .channel('kitchen_orders_rt')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'restaurant_orders',
+          callback: (_) => _loadData(silent: true),
+        )
+        .subscribe();
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _realtimeChannel?.unsubscribe();
     super.dispose();
   }
 
   Future<void> _loadData({bool silent = false}) async {
     if (!silent) setState(() => _isLoading = true);
-    final orders = await _restaurantService.getOrders();
+    final ordersFuture = _restaurantService.getOrders();
+    final tablesFuture = _restaurantService.getTables();
+    final orders = await ordersFuture;
+    final tables = await tablesFuture;
     final now = DateTime.now();
     final todayOrders = orders.where((o) =>
         o.createdAt.year == now.year &&
@@ -53,8 +73,29 @@ class _KitchenScreenState extends State<KitchenScreen> {
     if (!mounted) return;
     setState(() {
       _allOrders = todayOrders;
+      _tables = tables;
       _isLoading = false;
     });
+  }
+
+  /// Returns the display name for a table ID, e.g. "Table 3".
+  String _tableName(String? tableId) {
+    if (tableId == null) return '';
+    try {
+      return 'Table ${_tables.firstWhere((t) => t.id == tableId).tableNumber}';
+    } catch (_) {
+      return 'Table ?';
+    }
+  }
+
+  /// Returns how many open (non-cancelled, unpaid) orders exist for a table today.
+  int _openOrderCountForTable(String? tableId) {
+    if (tableId == null) return 0;
+    return _allOrders.where((o) =>
+        o.tableId == tableId &&
+        o.status != OrderStatus.cancelled &&
+        o.paymentStatus != PaymentStatus.paid &&
+        o.paymentStatus != PaymentStatus.chargedToRoom).length;
   }
 
   Future<void> _updateStatus(RestaurantOrder order, OrderStatus next) async {
@@ -145,8 +186,30 @@ class _KitchenScreenState extends State<KitchenScreen> {
   }
 
   // ── Payment-due column ──────────────────────────────────────────────────────
+
+  /// Groups payment-due orders by parent-child relationship.
+  /// Returns a list of groups; each group is [parent, ...children] or [orphan].
+  List<List<RestaurantOrder>> _groupedPaymentDueOrders() {
+    final flat = _paymentDueOrders;
+    final childIds = <String>{};
+    for (final o in flat) {
+      if (o.parentOrderId != null) childIds.add(o.id);
+    }
+
+    final groups = <List<RestaurantOrder>>[];
+    for (final o in flat) {
+      if (childIds.contains(o.id)) continue; // will be added under its parent
+      final children = flat
+          .where((c) => c.parentOrderId == o.id)
+          .toList()
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      groups.add([o, ...children]);
+    }
+    return groups;
+  }
+
   Widget _buildPaymentColumn() {
-    final orders = _paymentDueOrders;
+    final groups = _groupedPaymentDueOrders();
     const color = Colors.purple;
     return Expanded(
       child: Container(
@@ -186,7 +249,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
                     decoration: BoxDecoration(
                         color: Colors.purple.shade900,
                         borderRadius: BorderRadius.circular(12)),
-                    child: Text('${orders.length}',
+                    child: Text('${groups.length}',
                         style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold)),
@@ -195,7 +258,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
               ),
             ),
             Expanded(
-              child: orders.isEmpty
+              child: groups.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -212,9 +275,8 @@ class _KitchenScreenState extends State<KitchenScreen> {
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.all(12),
-                      itemCount: orders.length,
-                      itemBuilder: (_, i) =>
-                          _buildPaymentCard(orders[i]),
+                      itemCount: groups.length,
+                      itemBuilder: (_, i) => _buildPaymentCard(groups[i]),
                     ),
             ),
           ],
@@ -259,17 +321,22 @@ class _KitchenScreenState extends State<KitchenScreen> {
   // ── Order card (Pending / Preparing / Ready) ─────────────────────────────────
   Widget _buildOrderCard(
       RestaurantOrder order, OrderStatus nextStatus, MaterialColor color) {
-    final minutes = DateTime.now().difference(order.createdAt).inMinutes;
+    final age = DateTime.now().difference(order.createdAt);
+    final minutes = age.inMinutes;
     final isUrgent =
         order.status == OrderStatus.pending && minutes > 15;
+    final isNew = order.status == OrderStatus.pending && age.inSeconds < 30;
+    final isAddon = order.parentOrderId != null;
 
     return Card(
       color: const Color(0xFF334155),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: isUrgent
-            ? BorderSide(color: Colors.red.shade400, width: 2)
-            : BorderSide.none,
+        side: isNew
+            ? BorderSide(color: Colors.orange.shade300, width: 2)
+            : isUrgent
+                ? BorderSide(color: Colors.red.shade400, width: 2)
+                : BorderSide.none,
       ),
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -292,15 +359,25 @@ class _KitchenScreenState extends State<KitchenScreen> {
             ),
             const SizedBox(height: 8),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _badge(order.type.name.toUpperCase(), Colors.black38,
-                    Colors.white70),
-                if (order.tableId != null) ...[
-                  const SizedBox(width: 8),
-                  _badge('Tbl ${order.tableId!.substring(order.tableId!.length > 4 ? order.tableId!.length - 4 : 0)}',
-                      Colors.blue.withOpacity(0.3), Colors.blue),
-                ],
-                const Spacer(),
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _badge(order.type.name.toUpperCase(), Colors.black38,
+                          Colors.white70),
+                      if (order.tableId != null)
+                        _badge(_tableName(order.tableId),
+                            Colors.blue.withOpacity(0.3), Colors.blue),
+                      if (isAddon)
+                        _badge('ADD-ON', Colors.amber.withOpacity(0.25), Colors.amber.shade300),
+                      if (isNew)
+                        _badge('NEW', Colors.orange.shade700, Colors.white),
+                    ],
+                  ),
+                ),
                 if (minutes > 0)
                   Text('${minutes}m',
                       style: TextStyle(
@@ -346,10 +423,14 @@ class _KitchenScreenState extends State<KitchenScreen> {
     );
   }
 
-  // ── Payment-due card ─────────────────────────────────────────────────────────
-  Widget _buildPaymentCard(RestaurantOrder order) {
-    final currency =
-        NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  // ── Payment-due card (accepts 1 or more orders as a group) ──────────────────
+  Widget _buildPaymentCard(List<RestaurantOrder> orderGroup) {
+    final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+    final parent = orderGroup.first;
+    final isMulti = orderGroup.length > 1;
+    final combinedTotal =
+        orderGroup.fold(0.0, (s, o) => s + o.totalAmount);
+
     return Card(
       color: const Color(0xFF334155),
       shape: RoundedRectangleBorder(
@@ -362,37 +443,76 @@ class _KitchenScreenState extends State<KitchenScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // ─ Header row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('#${order.orderNumber}',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold)),
-                Text(_timeFormat.format(order.createdAt),
-                    style: TextStyle(
-                        color: Colors.grey.shade400, fontSize: 14)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isMulti
+                          ? orderGroup.map((o) => '#${o.orderNumber}').join(' + ')
+                          : '#${parent.orderNumber}',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold),
+                    ),
+                    if (isMulti)
+                      Text(
+                        '${orderGroup.length} tickets combined',
+                        style: TextStyle(
+                            color: Colors.purple.shade300, fontSize: 12),
+                      ),
+                  ],
+                ),
+                Text(_timeFormat.format(parent.createdAt),
+                    style:
+                        TextStyle(color: Colors.grey.shade400, fontSize: 14)),
               ],
             ),
             const SizedBox(height: 8),
-            Row(
+            // ─ Badges
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
               children: [
-                _badge(order.type.name.toUpperCase(), Colors.black38,
+                _badge(parent.type.name.toUpperCase(), Colors.black38,
                     Colors.white70),
-                if (order.tableId != null) ...[
-                  const SizedBox(width: 8),
+                if (parent.tableId != null)
                   _badge(
-                      'Tbl ${order.tableId!.substring(order.tableId!.length > 4 ? order.tableId!.length - 4 : 0)}',
+                      _tableName(parent.tableId),
                       Colors.purple.withOpacity(0.3),
                       Colors.purple.shade200),
-                ],
+                if (isMulti)
+                  _badge('COMBINED', Colors.amber.withOpacity(0.2),
+                      Colors.amber.shade300),
               ],
             ),
             const Divider(color: Colors.white24, height: 24),
-            ...order.items
-                .where((i) => !i.isFullyRefunded)
-                .map((item) => Padding(
+
+            // ─ Items — per-ticket sub-headers when multi
+            ...orderGroup.expand((o) {
+              final visibleItems =
+                  o.items.where((i) => !i.isFullyRefunded).toList();
+              return [
+                if (isMulti)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      o.parentOrderId != null
+                          ? '— Add-On #${o.orderNumber}'
+                          : '— Ticket #${o.orderNumber}',
+                      style: TextStyle(
+                          color: o.parentOrderId != null
+                              ? Colors.teal.shade300
+                              : Colors.blue.shade300,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ...visibleItems.map((item) => Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Row(
                         children: [
@@ -405,19 +525,21 @@ class _KitchenScreenState extends State<KitchenScreen> {
                           Expanded(
                               child: Text(item.menuItem.name,
                                   style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15))),
+                                      color: Colors.white, fontSize: 15))),
                         ],
                       ),
                     )),
+              ];
+            }),
+
             const Divider(color: Colors.white24, height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Total',
+                Text(isMulti ? 'Combined Total' : 'Total',
                     style: TextStyle(
                         color: Colors.grey.shade400, fontSize: 13)),
-                Text(currency.format(order.totalAmount),
+                Text(currency.format(combinedTotal),
                     style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -426,7 +548,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
             ),
             const SizedBox(height: 14),
             ElevatedButton.icon(
-              onPressed: () => _showPaymentDialog(order),
+              onPressed: () => _showPaymentDialog(orderGroup),
               icon: const Icon(Icons.payments_rounded, size: 16),
               label: const Text('Collect Payment',
                   style: TextStyle(fontWeight: FontWeight.bold)),
@@ -454,11 +576,17 @@ class _KitchenScreenState extends State<KitchenScreen> {
   }
 
   // ── Payment dialog ────────────────────────────────────────────────────────────
-  void _showPaymentDialog(RestaurantOrder order) {
+  void _showPaymentDialog(List<RestaurantOrder> orderGroup) {
+    final tableId = orderGroup.first.tableId;
+    final table = tableId != null
+        ? _tables.firstWhereOrNull((t) => t.id == tableId)
+        : null;
+
     showDialog(
       context: context,
       builder: (_) => _KitchenPaymentDialog(
-        order: order,
+        orderGroup: orderGroup,
+        table: table,
         restaurantService: _restaurantService,
         bookingService: _bookingService,
         onComplete: () {
@@ -475,13 +603,15 @@ class _KitchenScreenState extends State<KitchenScreen> {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _KitchenPaymentDialog extends StatefulWidget {
-  final RestaurantOrder order;
+  final List<RestaurantOrder> orderGroup;
+  final RestaurantTable? table;
   final RestaurantService restaurantService;
   final BookingService bookingService;
   final VoidCallback onComplete;
 
   const _KitchenPaymentDialog({
-    required this.order,
+    required this.orderGroup,
+    this.table,
     required this.restaurantService,
     required this.bookingService,
     required this.onComplete,
@@ -521,9 +651,31 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
 
   Future<void> _collectPaid() async {
     setState(() => _loading = true);
-    await widget.restaurantService.collectTablePayment(
-      orderId: widget.order.id,
-      paymentStatus: PaymentStatus.paid,
+    final parent = widget.orderGroup.first;
+    if (parent.tableId != null) {
+      // Settle all open orders for this table at once
+      await widget.restaurantService.settleAllTableOrders(
+        tableId: parent.tableId!,
+        paymentStatus: PaymentStatus.paid,
+      );
+    } else {
+      // Takeaway / no table — settle each order individually
+      for (final o in widget.orderGroup) {
+        await widget.restaurantService.collectTablePayment(
+          orderId: o.id,
+          paymentStatus: PaymentStatus.paid,
+        );
+      }
+    }
+    if (!mounted) return;
+    // Show invoice before dismissing
+    await showDialog(
+      context: context,
+      builder: (_) => RestaurantInvoiceDialog(
+        order: widget.orderGroup.first,
+        table: widget.table,
+        allOrders: widget.orderGroup.length > 1 ? widget.orderGroup : null,
+      ),
     );
     widget.onComplete();
   }
@@ -532,33 +684,61 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
     if (_selectedGuest == null) return;
     final b = _selectedGuest!['booking'] as Booking;
     setState(() => _loading = true);
+    final parent = widget.orderGroup.first;
 
-    await widget.restaurantService.collectTablePayment(
-      orderId: widget.order.id,
-      paymentStatus: PaymentStatus.chargedToRoom,
-      bookingId: b.id,
-      roomId: b.roomId,
+    if (parent.tableId != null) {
+      // Settle all open orders for this table at once (creates one combined expense)
+      await widget.restaurantService.settleAllTableOrders(
+        tableId: parent.tableId!,
+        paymentStatus: PaymentStatus.chargedToRoom,
+        bookingId: b.id,
+        roomId: b.roomId,
+      );
+    } else {
+      final combinedAmount =
+          widget.orderGroup.fold(0.0, (s, o) => s + o.totalAmount);
+      final nums = widget.orderGroup.map((o) => '#${o.orderNumber}').join(', ');
+      for (final o in widget.orderGroup) {
+        await widget.restaurantService.collectTablePayment(
+          orderId: o.id,
+          paymentStatus: PaymentStatus.chargedToRoom,
+          bookingId: b.id,
+          roomId: b.roomId,
+        );
+      }
+      await widget.bookingService.addExpense(Expense(
+        id: _uuid.v4(),
+        description: 'Restaurant Orders $nums',
+        amount: combinedAmount,
+        date: DateTime.now(),
+        category: ExpenseCategory.restaurant,
+        isBillable: true,
+        bookingId: b.id,
+        roomId: b.roomId,
+        isPaid: false,
+      ));
+    }
+
+    if (!mounted) return;
+    // Show invoice before dismissing
+    await showDialog(
+      context: context,
+      builder: (_) => RestaurantInvoiceDialog(
+        order: widget.orderGroup.first,
+        table: widget.table,
+        allOrders: widget.orderGroup.length > 1 ? widget.orderGroup : null,
+      ),
     );
-
-    // Record expense on the room invoice
-    await widget.bookingService.addExpense(Expense(
-      id: _uuid.v4(),
-      description: 'Restaurant Order #${widget.order.orderNumber}',
-      amount: widget.order.totalAmount,
-      date: DateTime.now(),
-      category: ExpenseCategory.restaurant,
-      isBillable: true,
-      bookingId: b.id,
-      roomId: b.roomId,
-      isPaid: false,
-    ));
-
     widget.onComplete();
   }
 
   @override
   Widget build(BuildContext context) {
-    final total = widget.order.totalAmount;
+    final orders = widget.orderGroup;
+    final combinedTotal = orders.fold(0.0, (s, o) => s + o.totalAmount);
+    final titleText = orders.length == 1
+        ? 'Collect Payment — #${orders.first.orderNumber}'
+        : 'Collect Payment — ${orders.map((o) => "#${o.orderNumber}").join(" + ")}';
 
     return AlertDialog(
       shape:
@@ -568,7 +748,11 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
           const Icon(Icons.payments_rounded,
               color: Colors.purple, size: 22),
           const SizedBox(width: 10),
-          Text('Collect Payment — #${widget.order.orderNumber}'),
+          Expanded(
+            child: Text(titleText,
+                style: const TextStyle(fontSize: 15),
+                overflow: TextOverflow.ellipsis),
+          ),
         ],
       ),
       content: SizedBox(
@@ -596,11 +780,17 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
                             style: TextStyle(
                                 color: Colors.black54, fontSize: 12)),
                         const SizedBox(height: 4),
-                        Text(_currency.format(total),
+                        Text(_currency.format(combinedTotal),
                             style: const TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.w800,
                                 color: Colors.purple)),
+                        if (orders.length > 1)
+                          Text(
+                            '${orders.length} tickets combined',
+                            style: TextStyle(
+                                color: Colors.purple.shade400, fontSize: 12),
+                          ),
                       ],
                     ),
                   ),

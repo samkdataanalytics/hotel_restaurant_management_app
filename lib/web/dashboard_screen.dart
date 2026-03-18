@@ -22,6 +22,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, int> _stats = {};
   List<Map<String, dynamic>> _recentCheckIns = [];
   bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -30,21 +31,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadData() async {
-    final stats = await _bookingService.getDashboardStats();
-    final checkIns = await _bookingService.getEnrichedCheckIns();
+    try {
+      final stats = await _bookingService.getDashboardStats();
+      final checkIns = await _bookingService.getEnrichedCheckIns();
 
-    if (!mounted) return;
-    setState(() {
-      _stats = stats;
-      _recentCheckIns = checkIns.take(10).toList();
-      _isLoading = false;
-    });
+      if (!mounted) return;
+      setState(() {
+        _stats = stats;
+        _recentCheckIns = checkIns.take(10).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
+    }
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 48),
+              const SizedBox(height: 16),
+              const Text('Failed to load dashboard',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              SelectableText(_error!,
+                  style: const TextStyle(color: Colors.red, fontSize: 13)),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => setState(() {
+                  _isLoading = true;
+                  _error = null;
+                  _loadData();
+                }),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return Container(

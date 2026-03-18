@@ -10,7 +10,7 @@ import '../models/restaurant_table.dart';
 import '../services/booking_service.dart';
 import '../app_theme.dart';
 import '../services/restaurant_service.dart';
-import 'pos_screen.dart'; // RestaurantInvoiceDialog
+import 'restaurant_invoice_dialog.dart';
 
 const _kOrange = AppTheme.restaurantAccent;
 const _kOrangeBg = AppTheme.restaurantAccentBg;
@@ -30,13 +30,13 @@ class _PaymentResult {
 // ─── Payment Dialog ───────────────────────────────────────────────────────────
 
 class _PaymentDialog extends StatefulWidget {
-  final RestaurantOrder order;
+  final List<RestaurantOrder> orders;
   final RestaurantTable table;
   final BookingService bookingService;
   final NumberFormat currency;
 
   const _PaymentDialog({
-    required this.order,
+    required this.orders,
     required this.table,
     required this.bookingService,
     required this.currency,
@@ -136,9 +136,11 @@ class _PaymentDialogState extends State<_PaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final subtotal = widget.order.totalAmount;
+    final subtotal = widget.orders.fold(0.0, (s, o) => s + o.totalAmount);
     final tax = subtotal * 0.08;
     final total = subtotal + tax;
+    final orderNumbers =
+        widget.orders.map((o) => '#${o.orderNumber}').join(' + ');
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -162,7 +164,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                           style: TextStyle(
                               fontSize: 17, fontWeight: FontWeight.w800)),
                       Text(
-                          'Table ${widget.table.tableNumber}  ·  Order #${widget.order.orderNumber}',
+                          'Table ${widget.table.tableNumber}  ·  $orderNumbers',
                           style: const TextStyle(
                               fontSize: 12, color: Colors.black38)),
                     ],
@@ -386,7 +388,8 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
 
   // ── Data
   List<RestaurantTable> _tables = [];
-  Map<String, RestaurantOrder> _tabOrders = {}; // tableId → active unpaid order
+  /// tableId → all open (unpaid, non-cancelled) orders, oldest first
+  Map<String, List<RestaurantOrder>> _allTableOrders = {};
   List<MenuItem> _menuItems = [];
   List<String> _categories = [];
 
@@ -413,18 +416,17 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
     final orders = await _service.getOrders();
     final menuItems = await _service.getMenuItems();
 
-    // Active tab = dine-in order that is not yet served/cancelled and still unpaid
-    final tabOrders = <String, RestaurantOrder>{};
+    // Build map of tableId → all open (unpaid, non-cancelled) orders oldest-first
+    final allTableOrders = <String, List<RestaurantOrder>>{};
     for (final o in orders) {
       if (o.tableId == null) continue;
-      if (o.status == OrderStatus.cancelled || o.status == OrderStatus.served)
-        continue;
+      if (o.status == OrderStatus.cancelled) continue;
       if (o.paymentStatus == PaymentStatus.paid ||
           o.paymentStatus == PaymentStatus.chargedToRoom) continue;
-      final existing = tabOrders[o.tableId!];
-      if (existing == null || o.createdAt.isAfter(existing.createdAt)) {
-        tabOrders[o.tableId!] = o;
-      }
+      allTableOrders.putIfAbsent(o.tableId!, () => []).add(o);
+    }
+    for (final list in allTableOrders.values) {
+      list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     }
 
     final cats =
@@ -434,7 +436,7 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
     setState(() {
       _tables = tables
         ..sort((a, b) => a.tableNumber.compareTo(b.tableNumber));
-      _tabOrders = tabOrders;
+      _allTableOrders = allTableOrders;
       _menuItems = menuItems;
       _categories = cats;
       _selectedCategory ??= cats.isNotEmpty ? cats.first : null;
@@ -445,7 +447,7 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
   // ── Selection
 
   void _selectTable(RestaurantTable table) {
-    final hasOpenTab = _tabOrders.containsKey(table.id);
+    final hasOpenTab = _allTableOrders.containsKey(table.id);
     setState(() {
       _selectedTableId = table.id;
       _isAddingItems = !hasOpenTab; // available → open item picker immediately
@@ -469,15 +471,26 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
           })
           .toList();
 
-      final existingOrder = _tabOrders[_selectedTableId!];
+      final openOrders = _allTableOrders[_selectedTableId!];
+      final latestOrder = openOrders?.isNotEmpty == true ? openOrders!.last : null;
       RestaurantOrder updated;
 
-      if (existingOrder == null) {
+      final isInKitchen = latestOrder != null &&
+          (latestOrder.status == OrderStatus.preparing ||
+              latestOrder.status == OrderStatus.ready ||
+              latestOrder.status == OrderStatus.served);
+
+      if (latestOrder == null || isInKitchen) {
+        // New tab OR add-on when latest order is already in-kitchen/served.
+        // Link to the root parent so all add-ons share one parent.
+        final parentId = latestOrder == null
+            ? null
+            : (latestOrder.parentOrderId ?? latestOrder.id);
         updated = await _service.createTableOrder(
-            tableId: _selectedTableId!, items: newItems);
+            tableId: _selectedTableId!, items: newItems, parentOrderId: parentId);
       } else {
-        updated =
-            await _service.addItemsToOrder(existingOrder.id, newItems);
+        // Latest order is still pending — append items to it
+        updated = await _service.addItemsToOrder(latestOrder.id, newItems);
       }
 
       await _load();
@@ -497,15 +510,15 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
     }
   }
 
-  // ── Collect payment
+  // ── Collect payment (settles all open orders for the table at once)
 
   Future<void> _collectPayment(
-      RestaurantOrder order, RestaurantTable table) async {
+      List<RestaurantOrder> openOrders, RestaurantTable table) async {
     final result = await showDialog<_PaymentResult>(
       context: context,
       barrierDismissible: false,
       builder: (_) => _PaymentDialog(
-        order: order,
+        orders: openOrders,
         table: table,
         bookingService: _bookingService,
         currency: _currency,
@@ -515,19 +528,25 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
 
     setState(() => _isProcessing = true);
     try {
-      final paid = await _service.collectTablePayment(
-        orderId: order.id,
+      final settledOrders = await _service.settleAllTableOrders(
+        tableId: table.id,
         paymentStatus: result.paymentStatus,
         bookingId: result.bookingId,
         roomId: result.roomId,
       );
 
       if (!mounted) return;
-      // Show invoice
-      await showDialog(
-        context: context,
-        builder: (_) => RestaurantInvoiceDialog(order: paid, table: table),
-      );
+      // Show combined invoice using openOrders (already in memory, guaranteed complete)
+      if (openOrders.isNotEmpty) {
+        await showDialog(
+          context: context,
+          builder: (_) => RestaurantInvoiceDialog(
+            order: openOrders.first,
+            table: table,
+            allOrders: openOrders.length > 1 ? openOrders : null,
+          ),
+        );
+      }
       await _load();
       if (!mounted) return;
       setState(() {
@@ -668,13 +687,14 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
   }
 
   Widget _buildTableCard(RestaurantTable table) {
-    final order = _tabOrders[table.id];
-    final isOccupied = order != null;
+    final openOrders = _allTableOrders[table.id];
+    final isOccupied = openOrders != null && openOrders.isNotEmpty;
     final isSelected = _selectedTableId == table.id;
 
+    // Use the oldest order's createdAt for elapsed time (session start)
     String timeLabel = '';
     if (isOccupied) {
-      final elapsed = DateTime.now().difference(order.createdAt);
+      final elapsed = DateTime.now().difference(openOrders!.first.createdAt);
       timeLabel = elapsed.inMinutes < 60
           ? '${elapsed.inMinutes}m'
           : '${elapsed.inHours}h ${elapsed.inMinutes % 60}m';
@@ -759,12 +779,14 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
               const Spacer(),
               if (isOccupied) ...[
                 Text(
-                  '${order.items.fold(0, (s, i) => s + i.activeQuantity)} item(s)',
+                  '${openOrders!.fold(0, (s, o) => s + o.items.fold(0, (s2, i) => s2 + i.activeQuantity))} item(s)'
+                  '${openOrders.length > 1 ? " · ${openOrders.length} tickets" : ""}',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _currency.format(order.totalAmount),
+                  _currency.format(
+                      openOrders.fold(0.0, (s, o) => s + o.totalAmount)),
                   style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -792,10 +814,10 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
   Widget _buildDetailPanel() {
     if (_selectedTableId == null) return _buildIdleState();
     if (_isAddingItems) return _buildItemPickerPanel();
-    final order = _tabOrders[_selectedTableId!];
-    if (order == null) return _buildIdleState();
+    final openOrders = _allTableOrders[_selectedTableId!];
+    if (openOrders == null || openOrders.isEmpty) return _buildIdleState();
     final table = _tables.firstWhere((t) => t.id == _selectedTableId);
-    return _buildOrderPanel(order, table);
+    return _buildOrderPanel(openOrders, table);
   }
 
   Widget _buildIdleState() {
@@ -824,11 +846,13 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
 
   // ─── Order view ───────────────────────────────────────
 
-  Widget _buildOrderPanel(RestaurantOrder order, RestaurantTable table) {
-    final subtotal = order.totalAmount;
+  Widget _buildOrderPanel(List<RestaurantOrder> openOrders, RestaurantTable table) {
+    final subtotal = openOrders.fold(0.0, (s, o) => s + o.totalAmount);
     final tax = subtotal * 0.08;
     final total = subtotal + tax;
-    final elapsed = DateTime.now().difference(order.createdAt);
+    final totalItems = openOrders.fold(
+        0, (s, o) => s + o.items.fold(0, (s2, i) => s2 + i.activeQuantity));
+    final elapsed = DateTime.now().difference(openOrders.first.createdAt);
     final timeStr = elapsed.inMinutes < 60
         ? '${elapsed.inMinutes} min'
         : '${elapsed.inHours}h ${elapsed.inMinutes % 60}m';
@@ -857,12 +881,16 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
                       const SizedBox(width: 6),
                       _pill('UNPAID', Colors.red.shade500,
                           Colors.red.shade50),
+                      if (openOrders.length > 1) ...[
+                        const SizedBox(width: 6),
+                        _pill('${openOrders.length} TICKETS',
+                            Colors.purple.shade600, Colors.purple.shade50),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    'Order #${order.orderNumber}  ·  '
-                    '${order.items.fold(0, (s, i) => s + i.activeQuantity)} item(s)',
+                    '${openOrders.map((o) => "#${o.orderNumber}").join(" + ")}  ·  $totalItems item(s)',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                   ),
                 ],
@@ -880,24 +908,25 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
                   outlined: true,
                   onPressed: () => showDialog(
                         context: context,
-                        builder: (_) =>
-                            RestaurantInvoiceDialog(order: order, table: table),
+                        builder: (_) => RestaurantInvoiceDialog(
+                            order: openOrders.last, table: table),
                       )),
               const SizedBox(width: 8),
               _actionBtn(Icons.payment_rounded, 'Collect Payment', _kGreen,
-                  onPressed:
-                      _isProcessing ? null : () => _collectPayment(order, table)),
+                  onPressed: _isProcessing
+                      ? null
+                      : () => _collectPayment(openOrders, table)),
             ],
           ),
         ),
         const Divider(height: 1),
 
-        // ── Items list
+        // ── Items list — all orders, with ticket sub-headers when multiple
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.all(20),
-            itemCount: order.items.length,
-            itemBuilder: (_, i) => _buildOrderItemRow(order.items[i]),
+            itemCount: _buildOrderItemList(openOrders).length,
+            itemBuilder: (_, i) => _buildOrderItemList(openOrders)[i],
           ),
         ),
 
@@ -941,6 +970,72 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
         ),
       ],
     );
+  }
+
+  /// Builds the flat widget list for all items across all open orders.
+  /// Inserts a ticket sub-header between orders when there are multiple tickets.
+  List<Widget> _buildOrderItemList(List<RestaurantOrder> orders) {
+    final widgets = <Widget>[];
+    for (var idx = 0; idx < orders.length; idx++) {
+      final order = orders[idx];
+      if (orders.length > 1) {
+        final isChild = order.parentOrderId != null;
+        widgets.add(Padding(
+          padding: EdgeInsets.only(
+              bottom: 6, top: idx == 0 ? 0 : 12),
+          child: Row(
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isChild
+                      ? Colors.teal.shade50
+                      : Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  isChild
+                      ? 'Add-On #${order.orderNumber}'
+                      : 'Ticket #${order.orderNumber}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isChild
+                        ? Colors.teal.shade700
+                        : Colors.blue.shade700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _statusLabelShort(order.status),
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+              ),
+            ],
+          ),
+        ));
+      }
+      for (final item in order.items) {
+        widgets.add(_buildOrderItemRow(item));
+      }
+    }
+    return widgets;
+  }
+
+  String _statusLabelShort(OrderStatus s) {
+    switch (s) {
+      case OrderStatus.pending:
+        return 'Pending';
+      case OrderStatus.preparing:
+        return 'In Kitchen';
+      case OrderStatus.ready:
+        return 'Ready to Serve';
+      case OrderStatus.served:
+        return 'Served';
+      case OrderStatus.cancelled:
+        return 'Cancelled';
+    }
   }
 
   Widget _buildOrderItemRow(OrderItem item) {
@@ -1009,7 +1104,12 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
 
   Widget _buildItemPickerPanel() {
     final table = _tables.firstWhere((t) => t.id == _selectedTableId);
-    final isNewTab = !_tabOrders.containsKey(_selectedTableId!);
+    final isNewTab = !_allTableOrders.containsKey(_selectedTableId!);
+    final existingOrderForPicker = _allTableOrders[_selectedTableId!]?.lastOrNull;
+    final isAddOn = existingOrderForPicker != null &&
+        (existingOrderForPicker.status == OrderStatus.preparing ||
+            existingOrderForPicker.status == OrderStatus.ready ||
+            existingOrderForPicker.status == OrderStatus.served);
     final filteredItems = _selectedCategory == null
         ? _menuItems
         : _menuItems.where((m) => m.category == _selectedCategory).toList();
@@ -1043,16 +1143,20 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isNewTab
-                        ? 'New Order — Table ${table.tableNumber}'
-                        : 'Add to Tab — Table ${table.tableNumber}',
+                    isAddOn
+                        ? 'Add-On Order — Table ${table.tableNumber}'
+                        : isNewTab
+                            ? 'New Order — Table ${table.tableNumber}'
+                            : 'Add to Tab — Table ${table.tableNumber}',
                     style: const TextStyle(
                         fontSize: 16, fontWeight: FontWeight.w800),
                   ),
                   Text(
-                    isNewTab
-                        ? 'Select items to open the tab'
-                        : 'Select items to add to the running tab',
+                    isAddOn
+                        ? 'Creates a new separate kitchen ticket'
+                        : isNewTab
+                            ? 'Select items to open the tab'
+                            : 'Select items to add to the running tab',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                   ),
                 ],
@@ -1153,10 +1257,19 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
                         height: 14,
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.check_rounded, size: 16),
-                label: Text(isNewTab ? 'Open Tab' : 'Add to Tab'),
+                    : Icon(
+                        isAddOn
+                            ? Icons.send_rounded
+                            : Icons.check_rounded,
+                        size: 16),
+                label: Text(isAddOn
+                    ? 'Send to Kitchen'
+                    : isNewTab
+                        ? 'Open Tab'
+                        : 'Add to Tab'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _kOrange,
+                  backgroundColor:
+                      isAddOn ? const Color(0xFF0D9488) : _kOrange,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   padding:
