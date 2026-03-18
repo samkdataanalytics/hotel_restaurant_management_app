@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
@@ -11,19 +12,19 @@ import '../models/restaurant_order.dart';
 import '../models/inventory_item.dart';
 import '../services/restaurant_service.dart';
 
-// ─── Color palette for restaurant sections ───────────────────────────────────
+// ─── Color palette for restaurant sections — sourced from AppTheme ───────────
 class _RC {
-  static const accent = Color(0xFFF97316);   // orange — restaurant brand
-  static const accentLight = Color(0xFFFFF7ED);
-  static const accentMid = Color(0xFFFFEDD5);
-  static const available = Color(0xFF22C55E);
+  static const accent = AppTheme.restaurantAccent;
+  static const accentLight = AppTheme.restaurantAccentBg;
+  static const accentMid = AppTheme.restaurantAccentMid;
+  static const available = AppTheme.statusGreen;
   static const availableLight = Color(0xFFDCFCE7);
-  static const occupied = Color(0xFFEF4444);
+  static const occupied = AppTheme.statusRed;
   static const occupiedLight = Color(0xFFFFE4E4);
-  static const preparing = Color(0xFFF59E0B);
+  static const preparing = AppTheme.statusAmber;
   static const preparingLight = Color(0xFFFEF3C7);
   static const costBg = Color(0xFFF0FDF4);
-  static const bg = Color(0xFFFAFAFA);
+  static const bg = AppTheme.pageBg;
 }
 
 class RestaurantManagementScreen extends StatefulWidget {
@@ -1448,14 +1449,25 @@ class _TablesTabState extends State<_TablesTab> {
   Map<String, RestaurantOrder?> _activeOrders = {};
   bool _loading = true;
   final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Auto-refresh so floor manager sees kitchen status updates in real-time
+    _refreshTimer = Timer.periodic(
+        const Duration(seconds: 10), (_) => _load(silent: true));
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) setState(() => _loading = true);
     final tables = await widget.service.getTables();
     final orders = <String, RestaurantOrder?>{};
     for (final t in tables) {
@@ -1630,16 +1642,46 @@ class _TablesTabState extends State<_TablesTab> {
             const Spacer(),
             if (isOccupied && order != null) ...[
               const Divider(color: Colors.black12),
-              Text('${order.items.length} items ordered',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF7C2D12))),
+              // Kitchen status badge
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _kitchenStatusColor(order).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_kitchenStatusIcon(order),
+                            size: 11, color: _kitchenStatusColor(order)),
+                        const SizedBox(width: 4),
+                        Text(_kitchenStatusLabel(order),
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: _kitchenStatusColor(order))),
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  Text('${order.items.where((i) => !i.isFullyRefunded).fold(0, (s, i) => s + i.activeQuantity)} items',
+                      style: const TextStyle(
+                          fontSize: 11, color: Color(0xFF7C2D12))),
+                ],
+              ),
+              const SizedBox(height: 6),
               Text(_currency.format(order.totalAmount),
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _RC.occupied)),
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w800, color: _RC.occupied)),
               const SizedBox(height: 4),
               Row(
                 children: [
                   const Icon(Icons.touch_app_rounded, size: 12, color: Colors.black38),
                   const SizedBox(width: 4),
-                  Text('Tap for details', style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                  Text('Tap for details',
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
                 ],
               ),
             ] else ...[
@@ -1690,6 +1732,43 @@ class _TablesTabState extends State<_TablesTab> {
       case OrderStatus.ready: return _RC.available;
       case OrderStatus.served: return Colors.grey;
       case OrderStatus.cancelled: return _RC.occupied;
+    }
+  }
+
+  // Kitchen-aware status helpers (served+unpaid → Payment Due)
+  String _kitchenStatusLabel(RestaurantOrder order) {
+    if (order.status == OrderStatus.served &&
+        order.paymentStatus == PaymentStatus.unpaid) return 'Payment Due';
+    switch (order.status) {
+      case OrderStatus.pending:    return 'Pending';
+      case OrderStatus.preparing:  return 'Preparing';
+      case OrderStatus.ready:      return 'Ready to Serve';
+      case OrderStatus.served:     return 'Served';
+      case OrderStatus.cancelled:  return 'Cancelled';
+    }
+  }
+
+  Color _kitchenStatusColor(RestaurantOrder order) {
+    if (order.status == OrderStatus.served &&
+        order.paymentStatus == PaymentStatus.unpaid) return Colors.purple;
+    switch (order.status) {
+      case OrderStatus.pending:    return _RC.preparing;
+      case OrderStatus.preparing:  return AppTheme.adminPrimary;
+      case OrderStatus.ready:      return _RC.available;
+      case OrderStatus.served:     return Colors.grey;
+      case OrderStatus.cancelled:  return _RC.occupied;
+    }
+  }
+
+  IconData _kitchenStatusIcon(RestaurantOrder order) {
+    if (order.status == OrderStatus.served &&
+        order.paymentStatus == PaymentStatus.unpaid) return Icons.payments_rounded;
+    switch (order.status) {
+      case OrderStatus.pending:    return Icons.hourglass_top_rounded;
+      case OrderStatus.preparing:  return Icons.outdoor_grill_rounded;
+      case OrderStatus.ready:      return Icons.check_circle_rounded;
+      case OrderStatus.served:     return Icons.done_all_rounded;
+      case OrderStatus.cancelled:  return Icons.cancel_rounded;
     }
   }
 }
@@ -1824,9 +1903,46 @@ class _TableOrderDialog extends StatelessWidget {
   final NumberFormat currency;
   const _TableOrderDialog({required this.table, required this.order, required this.currency});
 
+  String _statusLabel() {
+    if (order.status == OrderStatus.served &&
+        order.paymentStatus == PaymentStatus.unpaid) return 'Payment Due';
+    switch (order.status) {
+      case OrderStatus.pending:   return 'Pending';
+      case OrderStatus.preparing: return 'Preparing';
+      case OrderStatus.ready:     return 'Ready to Serve';
+      case OrderStatus.served:    return 'Served';
+      case OrderStatus.cancelled: return 'Cancelled';
+    }
+  }
+
+  Color _statusColor() {
+    if (order.status == OrderStatus.served &&
+        order.paymentStatus == PaymentStatus.unpaid) return Colors.purple;
+    switch (order.status) {
+      case OrderStatus.pending:   return _RC.preparing;
+      case OrderStatus.preparing: return AppTheme.adminPrimary;
+      case OrderStatus.ready:     return _RC.available;
+      case OrderStatus.served:    return Colors.grey;
+      case OrderStatus.cancelled: return _RC.occupied;
+    }
+  }
+
+  IconData _statusIcon() {
+    if (order.status == OrderStatus.served &&
+        order.paymentStatus == PaymentStatus.unpaid) return Icons.payments_rounded;
+    switch (order.status) {
+      case OrderStatus.pending:   return Icons.hourglass_top_rounded;
+      case OrderStatus.preparing: return Icons.outdoor_grill_rounded;
+      case OrderStatus.ready:     return Icons.check_circle_rounded;
+      case OrderStatus.served:    return Icons.done_all_rounded;
+      case OrderStatus.cancelled: return Icons.cancel_rounded;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final timeF = DateFormat('HH:mm');
+    final statusColor = _statusColor();
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
@@ -1861,6 +1977,36 @@ class _TableOrderDialog extends StatelessWidget {
                     ),
                   ),
                   IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
+                ],
+              ),
+            ),
+            // Kitchen status banner
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              color: statusColor.withOpacity(0.08),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(_statusIcon(), size: 18, color: statusColor),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Kitchen Status',
+                          style: TextStyle(fontSize: 11, color: Colors.black45)),
+                      Text(_statusLabel(),
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: statusColor)),
+                    ],
+                  ),
                 ],
               ),
             ),

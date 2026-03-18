@@ -148,6 +148,14 @@ class DatabaseService {
     return list;
   }
 
+  Future<List<Expense>> getExpensesByBookingId(String bookingId) async {
+    final list = _expenses.values
+        .where((e) => e.bookingId == bookingId)
+        .toList();
+    list.sort((a, b) => b.date.compareTo(a.date));
+    return list;
+  }
+
   Future<void> insertExpense(Expense expense) async {
     _expenses[expense.id] = expense;
   }

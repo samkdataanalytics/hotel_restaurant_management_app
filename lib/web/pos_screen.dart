@@ -11,9 +11,9 @@ import '../models/expense.dart';
 import '../services/restaurant_service.dart';
 import '../services/booking_service.dart';
 
-// ─── Restaurant brand colors (keep in sync with restaurant_management_screen) ─
-const _kOrange = Color(0xFFF97316);
-const _kOrangeBg = Color(0xFFFFF7ED);
+// ─── Restaurant brand colors — sourced from AppTheme ─────────────────────────
+const _kOrange = AppTheme.restaurantAccent;
+const _kOrangeBg = AppTheme.restaurantAccentBg;
 
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
@@ -38,6 +38,7 @@ class _PosScreenState extends State<PosScreen> {
   String? _selectedBookingId;
 
   bool _isLoading = true;
+  Map<String, RestaurantOrder> _activeTabs = {};
 
   @override
   void initState() {
@@ -48,10 +49,32 @@ class _PosScreenState extends State<PosScreen> {
   Future<void> _loadData() async {
     final items = await _restaurantService.getMenuItems();
     final tables = await _restaurantService.getTables();
+
+    // Load orders separately — bad stored data should never block the menu
+    List<RestaurantOrder> orders = [];
+    try {
+      orders = await _restaurantService.getOrders();
+    } catch (_) {}
+
     if (!mounted) return;
+
+    // Build active-tab map: tableId → most-recent unpaid non-terminal order
+    final tabs = <String, RestaurantOrder>{};
+    for (final o in orders) {
+      if (o.tableId == null) continue;
+      if (o.status == OrderStatus.cancelled || o.status == OrderStatus.served) continue;
+      if (o.paymentStatus == PaymentStatus.paid ||
+          o.paymentStatus == PaymentStatus.chargedToRoom) continue;
+      final existing = tabs[o.tableId!];
+      if (existing == null || o.createdAt.isAfter(existing.createdAt)) {
+        tabs[o.tableId!] = o;
+      }
+    }
+
     setState(() {
       _menuItems = items;
       _tables = tables;
+      _activeTabs = tabs;
       _isLoading = false;
     });
   }
@@ -92,11 +115,15 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  Future<RestaurantOrder?> _checkout({required PaymentStatus paymentStatus, String? bookingId}) async {
+  Future<RestaurantOrder?> _checkout({required PaymentStatus paymentStatus, String? bookingId, String? roomId}) async {
     if (_cart.isEmpty) return null;
     if (_orderType == OrderType.dineIn && _selectedTableId == null) {
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a table for Dine-in orders.')),
+        const SnackBar(
+          content: Text('Please select a table for Dine-in orders.'),
+          duration: Duration(seconds: 3),
+        ),
       );
       return null;
     }
@@ -126,31 +153,42 @@ class _PosScreenState extends State<PosScreen> {
         category: ExpenseCategory.restaurant,
         isBillable: true,
         bookingId: bookingId,
+        roomId: roomId,   // ← needed so RoomExpensesDialog picks it up
         isPaid: false,
       ));
     }
 
     setState(() {
       _cart.clear();
-      _selectedTableId = null;
+      // Keep _selectedTableId so the next order can be placed immediately
+      // for the same table (e.g. dessert after mains).
       _selectedBookingId = null;
       _isLoading = false;
     });
 
+    // Refresh tables to reflect the latest occupancy status.
+    _loadData();
+
     return order;
   }
 
-  Future<void> _handleCheckout(PaymentStatus status, {String? bookingId}) async {
-    final order = await _checkout(paymentStatus: status, bookingId: bookingId);
+  Future<void> _handleCheckout(PaymentStatus status, {String? bookingId, String? roomId}) async {
+    final order = await _checkout(paymentStatus: status, bookingId: bookingId, roomId: roomId);
     if (order == null || !mounted) return;
+    // Clear any queued snackbars (e.g. previous "Order placed!" still visible)
+    // before showing the new one so messages never stack invisibly.
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Order #${order.orderNumber} placed!'),
         backgroundColor: AppTheme.success,
+        duration: const Duration(seconds: 4),
         action: SnackBarAction(
           label: 'Print Invoice',
           textColor: Colors.white,
-          onPressed: () => _showInvoiceDialog(order),
+          onPressed: () {
+            if (mounted) _showInvoiceDialog(order);
+          },
         ),
       ),
     );
@@ -201,7 +239,11 @@ class _PosScreenState extends State<PosScreen> {
                       trailing: ElevatedButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          _handleCheckout(PaymentStatus.chargedToRoom, bookingId: b.id);
+                          _handleCheckout(
+                            PaymentStatus.chargedToRoom,
+                            bookingId: b.id,
+                            roomId: b.roomId,
+                          );
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.warning,
@@ -225,7 +267,7 @@ class _PosScreenState extends State<PosScreen> {
         : null;
     showDialog(
       context: context,
-      builder: (_) => _InvoiceDialog(order: order, table: table),
+      builder: (_) => RestaurantInvoiceDialog(order: order, table: table),
     );
   }
 
@@ -235,9 +277,9 @@ class _PosScreenState extends State<PosScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
-      body: Row(
+    return ColoredBox(
+      color: const Color(0xFFF1F5F9),
+      child: Row(
         children: [
           Expanded(
             flex: 7,
@@ -450,11 +492,39 @@ class _PosScreenState extends State<PosScreen> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
               value: _selectedTableId,
-              items: _tables
-                  .map((t) => DropdownMenuItem(value: t.id, child: Text('Table ${t.tableNumber} (${t.capacity} pax)')))
-                  .toList(),
+              items: _tables.map((t) {
+                final hasTab = _activeTabs.containsKey(t.id);
+                return DropdownMenuItem(
+                  value: t.id,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Table ${t.tableNumber} (${t.capacity} pax)'),
+                      if (hasTab) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: _kOrange.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text('ACTIVE TAB',
+                              style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: _kOrange)),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              }).toList(),
               onChanged: (val) => setState(() => _selectedTableId = val),
             ),
+            if (_selectedTableId != null &&
+                _activeTabs.containsKey(_selectedTableId!))
+              _buildActiveTabBanner(_activeTabs[_selectedTableId!]!),
           ],
         ],
       ),
@@ -541,20 +611,37 @@ class _PosScreenState extends State<PosScreen> {
             ],
           ),
           const SizedBox(height: 14),
-          // Pay now
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _cart.isEmpty ? null : () => _handleCheckout(PaymentStatus.paid),
-              icon: const Icon(Icons.payments_rounded, size: 18),
-              label: const Text('Pay Now', style: TextStyle(fontWeight: FontWeight.w700)),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                backgroundColor: AppTheme.success,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          // Cash / Card
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _cart.isEmpty ? null : () => _handleCheckout(PaymentStatus.paid),
+                  icon: const Icon(Icons.attach_money_rounded, size: 18),
+                  label: const Text('Cash', style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: AppTheme.success,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _cart.isEmpty ? null : () => _handleCheckout(PaymentStatus.paid),
+                  icon: const Icon(Icons.credit_card_rounded, size: 18),
+                  label: const Text('Card', style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: const Color(0xFF0EA5E9),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Row(
@@ -605,17 +692,128 @@ class _PosScreenState extends State<PosScreen> {
       ),
     );
   }
+
+  /// Banner shown below the table dropdown when the selected table already
+  /// has a running tab (opened from the Tables screen).
+  Widget _buildActiveTabBanner(RestaurantOrder tab) {
+    final table = _tables.firstWhere((t) => t.id == tab.tableId,
+        orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0));
+    final itemCount = tab.items.fold(0, (s, i) => s + i.activeQuantity);
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _kOrangeBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _kOrange.withOpacity(0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.receipt_long_rounded,
+                  size: 14, color: _kOrange),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Active tab — $itemCount item(s)  ·  '
+                  '${_currencyFormat.format(tab.totalAmount)}',
+                  style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _kOrange),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _showInvoiceDialog(tab),
+                icon: const Icon(Icons.receipt_outlined, size: 13),
+                label: const Text('View Invoice',
+                    style: TextStyle(fontSize: 11)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _kOrange,
+                  side: const BorderSide(color: _kOrange),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(7)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (_cart.isNotEmpty)
+                OutlinedButton.icon(
+                  onPressed: _addCartToTab,
+                  icon: const Icon(Icons.playlist_add_rounded, size: 13),
+                  label: const Text('Add Cart to Tab',
+                      style: TextStyle(fontSize: 11)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.teal,
+                    side: const BorderSide(color: Colors.teal),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(7)),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Adds all cart items to an existing table tab then clears the cart.
+  Future<void> _addCartToTab() async {
+    final tab = _activeTabs[_selectedTableId!];
+    if (tab == null || _cart.isEmpty) return;
+    setState(() => _isLoading = true);
+    try {
+      final newItems = _cart
+          .map((i) => OrderItem(id: _uuid.v4(), menuItem: i.menuItem, quantity: i.quantity))
+          .toList();
+      await _restaurantService.addItemsToOrder(tab.id, newItems);
+      setState(() {
+        _cart.clear();
+        _isLoading = false;
+      });
+      _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              '${newItems.length} item(s) added to Table ${_tables.firstWhere((t) => t.id == _selectedTableId).tableNumber} tab.'),
+          backgroundColor: _kOrange,
+        ),
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  INVOICE DIALOG
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _InvoiceDialog extends StatelessWidget {
+class RestaurantInvoiceDialog extends StatelessWidget {
   final RestaurantOrder order;
   final RestaurantTable? table;
 
-  const _InvoiceDialog({required this.order, this.table});
+  const RestaurantInvoiceDialog({super.key, required this.order, this.table});
 
   @override
   Widget build(BuildContext context) {
@@ -720,43 +918,77 @@ class _InvoiceDialog extends StatelessWidget {
                     ),
                     const Divider(thickness: 1.5),
 
-                    // Items
-                    ...order.items.map((item) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 7),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                flex: 4,
-                                child: Row(
-                                  children: [
-                                    Text(item.menuItem.imageUrl.isNotEmpty ? item.menuItem.imageUrl : '🍽️',
-                                        style: const TextStyle(fontSize: 18)),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(item.menuItem.name,
-                                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+                    // Items (skip fully-refunded lines; show active qty only)
+                    ...order.items
+                        .where((item) => !item.isFullyRefunded)
+                        .map((item) => Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 7),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 4,
+                                    child: Row(
+                                      children: [
+                                        Text(
+                                            item.menuItem.imageUrl.isNotEmpty
+                                                ? item.menuItem.imageUrl
+                                                : '🍽️',
+                                            style: const TextStyle(
+                                                fontSize: 18)),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(item.menuItem.name,
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      fontSize: 13)),
+                                              if (item.refundedQuantity > 0)
+                                                Text(
+                                                  '${item.refundedQuantity} unit(s) refunded',
+                                                  style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors
+                                                          .orange.shade600),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                        '${item.activeQuantity}',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                            color: Colors.grey.shade600,
+                                            fontSize: 13)),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                        currency
+                                            .format(item.menuItem.price),
+                                        textAlign: TextAlign.end,
+                                        style: TextStyle(
+                                            color: Colors.grey.shade600,
+                                            fontSize: 13)),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                        currency.format(item.subtotal),
+                                        textAlign: TextAlign.end,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13)),
+                                  ),
+                                ],
                               ),
-                              Expanded(
-                                child: Text('${item.quantity}',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                              ),
-                              Expanded(
-                                child: Text(currency.format(item.menuItem.price),
-                                    textAlign: TextAlign.end,
-                                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                              ),
-                              Expanded(
-                                child: Text(currency.format(item.subtotal),
-                                    textAlign: TextAlign.end,
-                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                              ),
-                            ],
-                          ),
-                        )),
+                            )),
 
                     const Divider(thickness: 1.5),
                     const SizedBox(height: 8),

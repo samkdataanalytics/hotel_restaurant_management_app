@@ -214,6 +214,10 @@ class BookingService {
     return _db.getRoomExpenses(roomId);
   }
 
+  Future<List<Expense>> getExpensesByBookingId(String bookingId) async {
+    return _db.getExpensesByBookingId(bookingId);
+  }
+
   Future<void> addExpense(Expense expense) async {
     await _db.insertExpense(expense);
   }

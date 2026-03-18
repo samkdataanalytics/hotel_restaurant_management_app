@@ -136,9 +136,10 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: _adminCard,
         elevation: 0,
+        shadowColor: Colors.black12,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: Color(0xFFE2E8F0)),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -178,6 +179,58 @@ class AppTheme {
       ),
     );
   }
+
+  // ─── Shared Design Tokens (used by all web screens) ─────────────────────────
+
+  /// Unified card border-radius.
+  static const double cardRadius = 12.0;
+
+  /// Standard horizontal page content padding.
+  static const double pagePadH = 32.0;
+
+  /// Subtle card shadow shared by hotel and restaurant cards.
+  static List<BoxShadow> get cardShadow => [
+    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2)),
+  ];
+
+  /// Standard white card: consistent border, radius, shadow.
+  static BoxDecoration get cardDecoration => BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(cardRadius),
+    border: Border.all(color: const Color(0xFFE2E8F0)),
+    boxShadow: cardShadow,
+  );
+
+  /// KPI card with coloured left accent bar.
+  static BoxDecoration kpiDecoration(Color accent) => BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(cardRadius),
+    border: Border(
+      left: BorderSide(color: accent, width: 4),
+      top: const BorderSide(color: Color(0xFFE2E8F0)),
+      right: const BorderSide(color: Color(0xFFE2E8F0)),
+      bottom: const BorderSide(color: Color(0xFFE2E8F0)),
+    ),
+    boxShadow: cardShadow,
+  );
+
+  // ─── Restaurant Section (const — safe in const expressions) ─────────────────
+
+  static const Color restaurantAccent    = Color(0xFFF97316);
+  static const Color restaurantAccentBg  = Color(0xFFFFF7ED);
+  static const Color restaurantAccentMid = Color(0xFFFFEDD5);
+
+  // ─── Semantic Status Colors (const) ─────────────────────────────────────────
+
+  static const Color statusGreen  = Color(0xFF22C55E);   // success / available
+  static const Color statusAmber  = Color(0xFFF59E0B);   // warning / preparing
+  static const Color statusRed    = Color(0xFFEF4444);   // danger / occupied
+  static const Color statusBlue   = Color(0xFF3B82F6);   // info / hotel accent
+  static const Color statusPurple = Color(0xFF8B5CF6);   // payment due
+
+  // ─── Page Background ─────────────────────────────────────────────────────────
+
+  static const Color pageBg = Color(0xFFF8FAFC);
 
   // ─── Helper Colors for Web Admin ─────────────────────────
 

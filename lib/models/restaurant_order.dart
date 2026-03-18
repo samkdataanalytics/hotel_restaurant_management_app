@@ -9,7 +9,8 @@ class OrderItem {
   final MenuItem menuItem;
   int quantity;
   String notes;
-  bool isRefunded;
+  bool isRefunded;       // true = ALL units refunded (full refund)
+  int refundedQuantity;  // number of units refunded so far (partial or full)
 
   OrderItem({
     required this.id,
@@ -17,9 +18,20 @@ class OrderItem {
     this.quantity = 1,
     this.notes = '',
     this.isRefunded = false,
+    this.refundedQuantity = 0,
   });
 
-  double get subtotal => isRefunded ? 0.0 : (menuItem.price * quantity);
+  /// Units still charged (ordered minus any refunds).
+  int get activeQuantity {
+    if (isRefunded) return 0;
+    return (quantity - refundedQuantity).clamp(0, quantity);
+  }
+
+  /// True when no remaining chargeable units exist.
+  bool get isFullyRefunded => isRefunded || refundedQuantity >= quantity;
+
+  /// Amount still due (only the un-refunded portion).
+  double get subtotal => menuItem.price * activeQuantity;
 
   OrderItem copyWith({
     String? id,
@@ -27,6 +39,7 @@ class OrderItem {
     int? quantity,
     String? notes,
     bool? isRefunded,
+    int? refundedQuantity,
   }) {
     return OrderItem(
       id: id ?? this.id,
@@ -34,6 +47,7 @@ class OrderItem {
       quantity: quantity ?? this.quantity,
       notes: notes ?? this.notes,
       isRefunded: isRefunded ?? this.isRefunded,
+      refundedQuantity: refundedQuantity ?? this.refundedQuantity,
     );
   }
 
@@ -44,16 +58,23 @@ class OrderItem {
       'quantity': quantity,
       'notes': notes,
       'isRefunded': isRefunded,
+      'refundedQuantity': refundedQuantity,
     };
   }
 
   factory OrderItem.fromMap(Map<String, dynamic> map) {
+    final qty = map['quantity']?.toInt() ?? 1;
+    final wasFullyRefunded = map['isRefunded'] as bool? ?? false;
     return OrderItem(
       id: map['id'],
       menuItem: MenuItem.fromMap(map['menuItem']),
-      quantity: map['quantity']?.toInt() ?? 1,
+      quantity: qty,
       notes: map['notes'] ?? '',
-      isRefunded: map['isRefunded'] ?? false,
+      isRefunded: wasFullyRefunded,
+      // backwards-compat: if old record had isRefunded=true, treat all units as refunded
+      refundedQuantity: wasFullyRefunded
+          ? qty
+          : (map['refundedQuantity']?.toInt() ?? 0),
     );
   }
 }
@@ -68,6 +89,8 @@ class RestaurantOrder {
   final String? bookingId; // If charged to a hotel guest
   final DateTime createdAt;
   final List<OrderItem> items;
+  /// True when a cancelled order had inventory restored (only for pending cancels).
+  final bool inventoryRestored;
 
   RestaurantOrder({
     required this.id,
@@ -79,6 +102,7 @@ class RestaurantOrder {
     this.bookingId,
     required this.createdAt,
     required this.items,
+    this.inventoryRestored = false,
   });
 
   double get totalAmount => items.fold(0.0, (sum, item) => sum + item.subtotal);
@@ -93,6 +117,7 @@ class RestaurantOrder {
     String? bookingId,
     DateTime? createdAt,
     List<OrderItem>? items,
+    bool? inventoryRestored,
   }) {
     return RestaurantOrder(
       id: id ?? this.id,
@@ -104,6 +129,7 @@ class RestaurantOrder {
       bookingId: bookingId ?? this.bookingId,
       createdAt: createdAt ?? this.createdAt,
       items: items ?? this.items,
+      inventoryRestored: inventoryRestored ?? this.inventoryRestored,
     );
   }
 
@@ -118,6 +144,7 @@ class RestaurantOrder {
       'bookingId': bookingId,
       'createdAt': createdAt.toIso8601String(),
       'items': items.map((x) => x.toMap()).toList(),
+      'inventoryRestored': inventoryRestored,
     };
   }
 
@@ -141,6 +168,7 @@ class RestaurantOrder {
       bookingId: map['bookingId'],
       createdAt: DateTime.parse(map['createdAt']),
       items: List<OrderItem>.from(map['items']?.map((x) => OrderItem.fromMap(x)) ?? []),
+      inventoryRestored: map['inventoryRestored'] as bool? ?? false,
     );
   }
 }

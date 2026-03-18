@@ -11,6 +11,10 @@ import 'expenses_management_screen.dart';
 import 'pos_screen.dart';
 import 'kitchen_screen.dart';
 import 'restaurant_management_screen.dart';
+import 'orders_screen.dart';
+import 'restaurant_analytics_screen.dart';
+import 'cancellations_refunds_screen.dart';
+import 'table_floor_screen.dart';
 
 class AdminApp extends StatelessWidget {
   const AdminApp({super.key});
@@ -65,10 +69,14 @@ const _pages = <Widget>[
   ReservationsScreen(),
   FinancialsScreen(),
   ExpensesManagementScreen(),
-  // RESTAURANT (6–8)
+  // RESTAURANT (6–10)
   PosScreen(),
   KitchenScreen(),
   RestaurantManagementScreen(),
+  OrdersScreen(),
+  RestaurantAnalyticsScreen(),
+  CancellationsRefundsScreen(),
+  TableFloorScreen(),
 ];
 
 const _sections = <_NavSection>[
@@ -87,12 +95,16 @@ const _sections = <_NavSection>[
   ),
   _NavSection(
     'RESTAURANT',
-    Color(0xFFF97316),   // orange
+    AppTheme.restaurantAccent,
     Color(0x1AF97316),
     [
       _NavItem(Icons.point_of_sale_rounded,    'POS',        6),
       _NavItem(Icons.restaurant_menu_rounded,  'Kitchen',    7),
       _NavItem(Icons.menu_book_rounded,        'Restaurant', 8),
+      _NavItem(Icons.receipt_long_rounded,          'Orders',       9),
+      _NavItem(Icons.analytics_rounded,             'Analytics',    10),
+      _NavItem(Icons.remove_circle_outline_rounded, 'Cancellations', 11),
+      _NavItem(Icons.table_restaurant_rounded,       'Tables',        12),
     ],
   ),
 ];

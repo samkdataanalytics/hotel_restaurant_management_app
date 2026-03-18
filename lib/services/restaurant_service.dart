@@ -8,6 +8,8 @@ import '../models/ingredient.dart';
 import '../models/ingredient_price.dart';
 import '../models/menu_item_cost_record.dart';
 import '../models/inventory_item.dart';
+import 'booking_service.dart';
+import '../models/expense.dart';
 
 class RestaurantService {
   final String _menuKey = 'mock_menu_data';
@@ -19,6 +21,7 @@ class RestaurantService {
   final String _inventoryKey = 'mock_inventory_data';
 
   final _uuid = const Uuid();
+  final _bookingService = BookingService();
 
   static final RestaurantService _instance = RestaurantService._internal();
   factory RestaurantService() => _instance;
@@ -363,13 +366,18 @@ class RestaurantService {
     }
     await prefs.setString(_ordersKey, json.encode(orders.map((e) => e.toMap()).toList()));
 
-    // Sync table status
+    // Sync table status.
+    // Table is freed only when: cancelled, OR served AND payment collected.
+    // "served but unpaid" keeps the table occupied so payment can be collected first.
     if (order.tableId != null) {
-      final isActive = order.status != OrderStatus.served && order.status != OrderStatus.cancelled;
+      final shouldFree = order.status == OrderStatus.cancelled ||
+          (order.status == OrderStatus.served &&
+              (order.paymentStatus == PaymentStatus.paid ||
+                  order.paymentStatus == PaymentStatus.chargedToRoom));
       final tables = await getTables();
       final tIdx = tables.indexWhere((t) => t.id == order.tableId);
       if (tIdx != -1) {
-        final newStatus = isActive ? TableStatus.occupied : TableStatus.available;
+        final newStatus = shouldFree ? TableStatus.available : TableStatus.occupied;
         await saveTable(tables[tIdx].copyWith(status: newStatus));
       }
     }
@@ -381,17 +389,22 @@ class RestaurantService {
   }
 
   Future<void> _deductInventoryForOrder(RestaurantOrder order) async {
-    final menuItems = await getMenuItems();
+    await _deductInventoryForItems(order.items);
+  }
+
+  Future<void> _deductInventoryForItems(List<OrderItem> items) async {
+    final menuItemsData = await getMenuItems();
     final inventory = await getInventory();
 
-    for (final orderItem in order.items) {
-      final menuItem = menuItems.firstWhere(
+    for (final orderItem in items) {
+      final menuItem = menuItemsData.firstWhere(
         (m) => m.id == orderItem.menuItem.id,
         orElse: () => orderItem.menuItem,
       );
       for (final ing in menuItem.ingredients) {
         final deductAmount = ing.quantity * orderItem.quantity;
-        final invIdx = inventory.indexWhere((inv) => inv.ingredientId == ing.ingredientId);
+        final invIdx =
+            inventory.indexWhere((inv) => inv.ingredientId == ing.ingredientId);
         if (invIdx != -1) {
           final current = inventory[invIdx].currentStock;
           inventory[invIdx] = inventory[invIdx].copyWith(
@@ -402,16 +415,115 @@ class RestaurantService {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_inventoryKey, json.encode(inventory.map((e) => e.toMap()).toList()));
+    await prefs.setString(
+        _inventoryKey, json.encode(inventory.map((e) => e.toMap()).toList()));
   }
 
-  /// Returns the most recent active order for a table (not served or cancelled).
+  // ─── TABLE TAB MANAGEMENT ────────────────────────────
+
+  /// Creates a new dine-in tab for a table and returns the saved order.
+  Future<RestaurantOrder> createTableOrder({
+    required String tableId,
+    required List<OrderItem> items,
+  }) async {
+    final ts = DateTime.now();
+    final orderNumber = ts.millisecondsSinceEpoch.toString().substring(7);
+    final order = RestaurantOrder(
+      id: _uuid.v4(),
+      orderNumber: orderNumber,
+      tableId: tableId,
+      type: OrderType.dineIn,
+      status: OrderStatus.pending,
+      paymentStatus: PaymentStatus.unpaid,
+      createdAt: ts,
+      items: items,
+    );
+    await saveOrder(order); // handles table occupied status + inventory deduction
+    return order;
+  }
+
+  /// Appends [newItems] to an existing active order and deducts inventory
+  /// for the newly added items only.
+  Future<RestaurantOrder> addItemsToOrder(
+      String orderId, List<OrderItem> newItems) async {
+    final orders = await getOrders();
+    final idx = orders.indexWhere((o) => o.id == orderId);
+    if (idx == -1) throw Exception('Order not found');
+    final order = orders[idx];
+    final updatedOrder =
+        order.copyWith(items: [...order.items, ...newItems]);
+    orders[idx] = updatedOrder;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _ordersKey, json.encode(orders.map((e) => e.toMap()).toList()));
+    await _deductInventoryForItems(newItems);
+    return updatedOrder;
+  }
+
+  /// Marks an order as served + paid, frees the table, and creates a
+  /// room-charge expense when applicable.
+  Future<RestaurantOrder> collectTablePayment({
+    required String orderId,
+    required PaymentStatus paymentStatus,
+    String? bookingId,
+    String? roomId,
+  }) async {
+    final orders = await getOrders();
+    final idx = orders.indexWhere((o) => o.id == orderId);
+    if (idx == -1) throw Exception('Order not found');
+    final order = orders[idx];
+
+    final updatedOrder = order.copyWith(
+      status: OrderStatus.served,
+      paymentStatus: paymentStatus,
+      bookingId: bookingId,
+    );
+    orders[idx] = updatedOrder;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _ordersKey, json.encode(orders.map((e) => e.toMap()).toList()));
+
+    // Free the table
+    if (order.tableId != null) {
+      final tables = await getTables();
+      final tIdx = tables.indexWhere((t) => t.id == order.tableId);
+      if (tIdx != -1) {
+        await saveTable(tables[tIdx].copyWith(status: TableStatus.available));
+      }
+    }
+
+    // Create room-charge expense
+    if (paymentStatus == PaymentStatus.chargedToRoom &&
+        bookingId != null &&
+        roomId != null) {
+      await _bookingService.addExpense(Expense(
+        id: _uuid.v4(),
+        description: 'Restaurant Order #${order.orderNumber}',
+        amount: order.totalAmount,
+        category: ExpenseCategory.restaurant,
+        date: DateTime.now(),
+        bookingId: bookingId,
+        roomId: roomId,
+        isBillable: true,
+      ));
+    }
+
+    return updatedOrder;
+  }
+
+  /// Returns the most recent active order for a table.
+  /// "Active" = not cancelled AND not (served + payment collected).
+  /// Served-but-unpaid orders keep the table occupied until payment.
   Future<RestaurantOrder?> getActiveOrderForTable(String tableId) async {
     final orders = await getOrders();
-    final active = orders.where((o) =>
-        o.tableId == tableId &&
-        o.status != OrderStatus.served &&
-        o.status != OrderStatus.cancelled).toList();
+    final active = orders.where((o) {
+      if (o.tableId != tableId) return false;
+      if (o.status == OrderStatus.cancelled) return false;
+      if (o.status == OrderStatus.served &&
+          (o.paymentStatus == PaymentStatus.paid ||
+              o.paymentStatus == PaymentStatus.chargedToRoom)) return false;
+      return true;
+    }).toList();
     if (active.isEmpty) return null;
     active.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return active.first;
@@ -459,4 +571,161 @@ class RestaurantService {
       minStockLevel: minLevel,
     ));
   }
+
+  // ─── CANCEL & REFUND ────────────────────────────────
+
+  /// Cancels an active order.
+  /// Inventory is restored **only** when the order was still [OrderStatus.pending]
+  /// (i.e. preparation had not started). For preparing / ready orders the
+  /// ingredients are considered consumed and are NOT returned to stock.
+  Future<void> cancelOrder(String orderId) async {
+    final orders = await getOrders();
+    final idx = orders.indexWhere((o) => o.id == orderId);
+    if (idx == -1) return;
+    final order = orders[idx];
+    if (order.status == OrderStatus.cancelled) return;
+
+    final shouldRestoreInventory = order.status == OrderStatus.pending;
+
+    final updated = order.copyWith(
+      status: OrderStatus.cancelled,
+      inventoryRestored: shouldRestoreInventory,
+    );
+    orders[idx] = updated;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_ordersKey, json.encode(orders.map((e) => e.toMap()).toList()));
+
+    // Only restore ingredients if the order hadn't started being prepared
+    if (shouldRestoreInventory) {
+      await _restoreInventoryForOrder(order);
+    }
+
+    // Remove the room charge from the guest's folio if charged to room
+    if (order.paymentStatus == PaymentStatus.chargedToRoom &&
+        order.bookingId != null) {
+      await _removeRoomChargeForOrder(order);
+    }
+
+    // Free up the table
+    if (order.tableId != null) {
+      final tables = await getTables();
+      final tIdx = tables.indexWhere((t) => t.id == order.tableId);
+      if (tIdx != -1) {
+        await saveTable(tables[tIdx].copyWith(status: TableStatus.available));
+      }
+    }
+  }
+
+  /// Refunds [refundQty] units of a single order item and restores inventory.
+  /// Pass the full remaining quantity to do a complete line-item refund.
+  Future<void> refundOrderItem(
+      String orderId, String orderItemId, int refundQty) async {
+    final orders = await getOrders();
+    final idx = orders.indexWhere((o) => o.id == orderId);
+    if (idx == -1) return;
+    final order = orders[idx];
+
+    final itemIdx = order.items.indexWhere((i) => i.id == orderItemId);
+    if (itemIdx == -1) return;
+    final item = order.items[itemIdx];
+    if (item.isFullyRefunded) return;
+
+    // Clamp to whatever is still chargeable
+    final actualQty = refundQty.clamp(0, item.activeQuantity);
+    if (actualQty <= 0) return;
+
+    final newRefundedQty = item.refundedQuantity + actualQty;
+    final fullyRefunded = newRefundedQty >= item.quantity;
+
+    final updatedItems = List<OrderItem>.from(order.items);
+    updatedItems[itemIdx] = item.copyWith(
+      isRefunded: fullyRefunded,
+      refundedQuantity: newRefundedQty,
+    );
+    final updatedOrder = order.copyWith(items: updatedItems);
+
+    orders[idx] = updatedOrder;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _ordersKey, json.encode(orders.map((e) => e.toMap()).toList()));
+
+    // NOTE: Inventory is NOT restored on refunds — the food was already served
+    // and consumed. Restoring would misrepresent actual stock levels.
+
+    // Reduce the room charge on the guest folio by exactly what was refunded
+    if (order.paymentStatus == PaymentStatus.chargedToRoom &&
+        order.bookingId != null) {
+      final refundAmount = item.menuItem.price * actualQty;
+      await _adjustRoomChargeForRefund(order, refundAmount);
+    }
+  }
+
+  Future<void> _restoreInventoryForOrder(RestaurantOrder order) async {
+    final menuItems = await getMenuItems();
+    final inventory = await getInventory();
+
+    for (final orderItem in order.items) {
+      // Only restore the units that haven't already been refunded individually
+      final qty = orderItem.activeQuantity;
+      if (qty <= 0) continue;
+      final menuItem = menuItems.firstWhere(
+        (m) => m.id == orderItem.menuItem.id,
+        orElse: () => orderItem.menuItem,
+      );
+      for (final ing in menuItem.ingredients) {
+        final restoreAmount = ing.quantity * qty;
+        final invIdx = inventory.indexWhere((inv) => inv.ingredientId == ing.ingredientId);
+        if (invIdx != -1) {
+          inventory[invIdx] = inventory[invIdx].copyWith(
+            currentStock: inventory[invIdx].currentStock + restoreAmount,
+          );
+        }
+      }
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_inventoryKey, json.encode(inventory.map((e) => e.toMap()).toList()));
+  }
+
+  // ─── ROOM INVOICE SYNC ──────────────────────────────
+
+  /// Deletes the room-charge expense for a cancelled order.
+  Future<void> _removeRoomChargeForOrder(RestaurantOrder order) async {
+    final expenses =
+        await _bookingService.getExpensesByBookingId(order.bookingId!);
+    for (final e in expenses) {
+      if (e.description.contains(order.orderNumber)) {
+        await _bookingService.deleteExpense(e.id);
+      }
+    }
+  }
+
+  /// Reduces the room-charge expense when item(s) are refunded.
+  /// [refundAmount] is the exact monetary value to subtract.
+  /// If the remaining amount reaches zero the expense is deleted entirely.
+  Future<void> _adjustRoomChargeForRefund(
+      RestaurantOrder order, double refundAmount) async {
+    final expenses =
+        await _bookingService.getExpensesByBookingId(order.bookingId!);
+
+    for (final e in expenses) {
+      if (!e.description.contains(order.orderNumber)) continue;
+
+      final newAmount = e.amount - refundAmount;
+
+      if (newAmount <= 0) {
+        await _bookingService.deleteExpense(e.id);
+      } else {
+        await _bookingService.updateExpense(
+          e.copyWith(
+            amount: newAmount,
+            description:
+                'Restaurant Order #${order.orderNumber} (partial refund)',
+          ),
+        );
+      }
+      break; // only one expense per order
+    }
+  }
+
 }
