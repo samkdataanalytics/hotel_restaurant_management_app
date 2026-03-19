@@ -219,7 +219,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
             children: [
               const Text(
-                'Welcome to Grand Luxe Hotel',
+                'Welcome to HotRest Management',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
                 textAlign: TextAlign.center,
               ),

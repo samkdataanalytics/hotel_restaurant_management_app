@@ -20,6 +20,10 @@ class RestaurantService {
   factory RestaurantService() => _instance;
   RestaurantService._internal();
 
+  /// The hotel_id for the currently logged-in staff member.
+  /// Set this after login alongside BookingService.hotelId.
+  String? hotelId;
+
   /// No-op: data is now persisted in Supabase, no local init required.
   Future<void> init() async {}
 
@@ -36,7 +40,7 @@ class RestaurantService {
         'ingredients': r['ingredients'] ?? [],
       });
 
-  static Map<String, dynamic> _menuItemToRow(MenuItem item) => {
+  Map<String, dynamic> _menuItemToRow(MenuItem item) => {
         'id': item.id,
         'name': item.name,
         'description': item.description,
@@ -45,6 +49,7 @@ class RestaurantService {
         'image_url': item.imageUrl,
         'is_available': item.isAvailable,
         'ingredients': item.ingredients.map((e) => e.toMap()).toList(),
+        if (hotelId != null) 'hotel_id': hotelId,
       };
 
   static RestaurantTable _tableFromRow(Map<String, dynamic> r) =>
@@ -55,11 +60,12 @@ class RestaurantService {
         'status': r['status'] ?? 'available',
       });
 
-  static Map<String, dynamic> _tableToRow(RestaurantTable t) => {
+  Map<String, dynamic> _tableToRow(RestaurantTable t) => {
         'id': t.id,
         'table_number': t.tableNumber,
         'capacity': t.capacity,
         'status': t.status.name,
+        if (hotelId != null) 'hotel_id': hotelId,
       };
 
   static RestaurantOrder _orderFromRow(Map<String, dynamic> r) =>
@@ -77,7 +83,7 @@ class RestaurantService {
         'parentOrderId': r['parent_order_id'],
       });
 
-  static Map<String, dynamic> _orderToRow(RestaurantOrder o) => {
+  Map<String, dynamic> _orderToRow(RestaurantOrder o) => {
         'id': o.id,
         'order_number': o.orderNumber,
         'table_id': o.tableId,
@@ -89,6 +95,7 @@ class RestaurantService {
         'items': o.items.map((e) => e.toMap()).toList(),
         'inventory_restored': o.inventoryRestored,
         'parent_order_id': o.parentOrderId,
+        if (hotelId != null) 'hotel_id': hotelId,
       };
 
   static Ingredient _ingredientFromRow(Map<String, dynamic> r) =>
@@ -98,10 +105,11 @@ class RestaurantService {
         'unit': r['unit'] ?? 'kg',
       });
 
-  static Map<String, dynamic> _ingredientToRow(Ingredient i) => {
+  Map<String, dynamic> _ingredientToRow(Ingredient i) => {
         'id': i.id,
         'name': i.name,
         'unit': i.unit,
+        if (hotelId != null) 'hotel_id': hotelId,
       };
 
   static IngredientPrice _priceFromRow(Map<String, dynamic> r) =>
@@ -113,12 +121,13 @@ class RestaurantService {
         'note': r['note'],
       });
 
-  static Map<String, dynamic> _priceToRow(IngredientPrice p) => {
+  Map<String, dynamic> _priceToRow(IngredientPrice p) => {
         'id': p.id,
         'ingredient_id': p.ingredientId,
         'price_per_unit': p.pricePerUnit,
         'date': p.date.toIso8601String(),
         'note': p.note,
+        if (hotelId != null) 'hotel_id': hotelId,
       };
 
   static InventoryItem _inventoryFromRow(Map<String, dynamic> r) =>
@@ -128,11 +137,12 @@ class RestaurantService {
         'minStockLevel': r['min_stock_level'],
       });
 
-  static Map<String, dynamic> _inventoryToRow(InventoryItem i) => {
+  Map<String, dynamic> _inventoryToRow(InventoryItem i) => {
         'ingredient_id': i.ingredientId,
         'current_stock': i.currentStock,
         'min_stock_level': i.minStockLevel,
         'updated_at': DateTime.now().toIso8601String(),
+        if (hotelId != null) 'hotel_id': hotelId,
       };
 
   static MenuItemCostRecord _costRecordFromRow(Map<String, dynamic> r) =>
@@ -249,6 +259,7 @@ class RestaurantService {
       'menu_item_id': menuItemId,
       'cost': cost,
       'date': DateTime.now().toIso8601String(),
+      if (hotelId != null) 'hotel_id': hotelId,
     });
   }
 

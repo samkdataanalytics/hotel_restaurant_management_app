@@ -54,9 +54,8 @@ class InvoiceService {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('GRAND LUXE HOTEL', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-                      pw.SizedBox(height: 4),
-                      pw.Text('123 Ocean Drive, Miami Beach, FL 33139', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
+                      pw.Text('HOTREST MANAGEMENT', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
+                      pw.Text('123 Luxury Avenue', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                       pw.Text('contact@grandluxe.com | +1 (555) 123-4567', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                     ],
                   ),
@@ -180,11 +179,11 @@ class InvoiceService {
               ),
               
               pw.Spacer(),
-              
-              // FOOTER
+              pw.SizedBox(height: 20),
               pw.Divider(color: PdfColors.grey300),
-              pw.SizedBox(height: 8),
-              pw.Center(child: pw.Text('Thank you for choosing Grand Luxe Hotel.', style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic, color: PdfColors.grey700))),
+              pw.SizedBox(height: 10),
+              pw.Center(child: pw.Text('Thank you for choosing HotRest Management.', style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic, color: PdfColors.grey700))),
+              pw.Center(child: pw.Text('For inquiries, contact info@hotrestmanagement.com', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey500))),
             ],
           );
         },

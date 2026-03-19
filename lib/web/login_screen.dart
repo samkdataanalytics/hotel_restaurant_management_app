@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../app_theme.dart';
+import '../providers/hotel_session.dart';
 import 'admin_app.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -11,8 +13,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
-  final _usernameController = TextEditingController(text: '');
-  final _passwordController = TextEditingController(text: '');
+  final _emailController    = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _error;
@@ -36,18 +38,18 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     _fadeController.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
-    final username = _usernameController.text.trim();
+    final email    = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (username.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Please enter username and password');
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Please enter your email and password');
       return;
     }
 
@@ -56,11 +58,13 @@ class _LoginScreenState extends State<LoginScreen>
       _error = null;
     });
 
-    await Future.delayed(const Duration(milliseconds: 800));
+    final session = context.read<HotelSession>();
+    final err = await session.signIn(email, password);
 
     if (!mounted) return;
 
-    if (username == 'admin' && password == 'admin123') {
+    if (err == null) {
+      // Success — go to the admin layout
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const AdminLayout()),
@@ -68,7 +72,7 @@ class _LoginScreenState extends State<LoginScreen>
     } else {
       setState(() {
         _isLoading = false;
-        _error = 'Invalid credentials. Use admin / admin123';
+        _error = err;
       });
     }
   }
@@ -146,7 +150,7 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Grand Luxe Hotel Management',
+                    'HotRest Management',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.white.withOpacity(0.5),
@@ -154,15 +158,16 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                   const SizedBox(height: 36),
 
-                  // Username
+                  // Email
                   TextField(
-                    controller: _usernameController,
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Username',
+                      hintText: 'Email',
                       hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
                       prefixIcon: Icon(
-                        Icons.person_outline,
+                        Icons.email_outlined,
                         color: Colors.white.withOpacity(0.4),
                       ),
                       filled: true,
@@ -289,33 +294,6 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                   ),
 
-                  const SizedBox(height: 20),
-
-                  // Demo hint
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.adminPrimary.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: AppTheme.adminPrimary,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Demo: admin / admin123',
-                          style: TextStyle(
-                            color: AppTheme.adminPrimary,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
