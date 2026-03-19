@@ -95,7 +95,7 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                             child: const Icon(Icons.restaurant_rounded, color: _kOrange, size: 28),
                           ),
                           const SizedBox(height: 10),
-                          const Text('Grand Luxe Restaurant',
+                          const Text('HotRest Management',
                               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
                           const SizedBox(height: 4),
                           Text('123 Luxury Ave • Tel: +1 (555) 000-1234',

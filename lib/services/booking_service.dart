@@ -11,6 +11,10 @@ SupabaseClient get _db => Supabase.instance.client;
 class BookingService {
   final _uuid = const Uuid();
 
+  /// The hotel_id for the currently logged-in staff member.
+  /// Set this after login via [BookingService.hotelId] = session.hotelId!
+  String? hotelId;
+
   // ─── Row → Model mappers ───────────────────────────────────────────────────
 
   static Guest _guestFromRow(Map<String, dynamic> r) => Guest.fromMap({
@@ -26,7 +30,7 @@ class BookingService {
         'whatsApp': r['whats_app'],
       });
 
-  static Map<String, dynamic> _guestToRow(Guest g) => {
+  Map<String, dynamic> _guestToRow(Guest g) => {
         'id': g.id,
         'full_name': g.fullName,
         'email': g.email,
@@ -37,6 +41,7 @@ class BookingService {
         'passport_or_nic': g.passportOrNic,
         'date_of_birth': g.dateOfBirth?.toIso8601String(),
         'whats_app': g.whatsApp,
+        if (hotelId != null) 'hotel_id': hotelId,
       };
 
   static Room _roomFromRow(Map<String, dynamic> r) => Room.fromMap({
@@ -50,7 +55,7 @@ class BookingService {
         'maintenanceEnd': r['maintenance_end'],
       });
 
-  static Map<String, dynamic> _roomToRow(Room r) => {
+  Map<String, dynamic> _roomToRow(Room r) => {
         'id': r.id,
         'room_number': r.roomNumber,
         'type': r.type.name,
@@ -59,6 +64,7 @@ class BookingService {
         'price_per_night': r.pricePerNight,
         'maintenance_start': r.maintenanceStart?.toIso8601String(),
         'maintenance_end': r.maintenanceEnd?.toIso8601String(),
+        if (hotelId != null) 'hotel_id': hotelId,
       };
 
   static Booking _bookingFromRow(Map<String, dynamic> r) => Booking.fromMap({
@@ -80,7 +86,7 @@ class BookingService {
         'guestPreferences': r['guest_preferences'],
       });
 
-  static Map<String, dynamic> _bookingToRow(Booking b) => {
+  Map<String, dynamic> _bookingToRow(Booking b) => {
         'id': b.id,
         'booking_ref': b.bookingRef,
         'guest_id': b.guestId,
@@ -97,6 +103,7 @@ class BookingService {
         'is_guest_form_submitted': b.isGuestFormSubmitted,
         'is_paid': b.isPaid,
         'guest_preferences': b.guestPreferences,
+        if (hotelId != null) 'hotel_id': hotelId,
       };
 
   static CheckIn _checkInFromRow(Map<String, dynamic> r) => CheckIn.fromMap({
@@ -109,7 +116,7 @@ class BookingService {
         'keyIssued': r['key_issued'],
       });
 
-  static Map<String, dynamic> _checkInToRow(CheckIn c) => {
+  Map<String, dynamic> _checkInToRow(CheckIn c) => {
         'id': c.id,
         'booking_id': c.bookingId,
         'guest_id': c.guestId,
@@ -117,6 +124,7 @@ class BookingService {
         'check_in_time': c.checkInTime.toIso8601String(),
         'id_verified': c.idVerified,
         'key_issued': c.keyIssued,
+        if (hotelId != null) 'hotel_id': hotelId,
       };
 
   static Expense _expenseFromRow(Map<String, dynamic> r) => Expense.fromMap({
@@ -132,7 +140,7 @@ class BookingService {
         'bookingId': r['booking_id'],
       });
 
-  static Map<String, dynamic> _expenseToRow(Expense e) => {
+  Map<String, dynamic> _expenseToRow(Expense e) => {
         'id': e.id,
         'description': e.description,
         'amount': e.amount,
@@ -143,6 +151,7 @@ class BookingService {
         'is_billable': e.isBillable,
         'is_paid': e.isPaid,
         'booking_id': e.bookingId,
+        if (hotelId != null) 'hotel_id': hotelId,
       };
 
   // ─── Booking Reference ────────────────────────────────────────────────────

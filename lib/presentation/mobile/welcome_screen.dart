@@ -97,7 +97,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
                 // Hotel name
                 Text(
-                  'GRAND LUXE',
+                  'HOTREST MANAGEMENT',
                   style: Theme.of(context).textTheme.displayLarge?.copyWith(
                     letterSpacing: 6,
                     color: AppTheme.goldPrimary,

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../app_theme.dart';
+import '../providers/hotel_session.dart';
+import '../services/booking_service.dart';
+import '../services/restaurant_service.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
 import 'checkins_screen.dart';
@@ -122,6 +126,17 @@ class _AdminLayoutState extends State<AdminLayout> {
   int _selectedIndex = 0;
   bool _sidebarExpanded = true;
 
+  @override
+  void initState() {
+    super.initState();
+    // Propagate hotel_id into singleton services so every write is scoped.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final hotelId = context.read<HotelSession>().hotelId;
+      BookingService().hotelId    = hotelId;
+      RestaurantService().hotelId = hotelId;
+    });
+  }
+
   void _select(int index) => setState(() => _selectedIndex = index);
 
   @override
@@ -189,10 +204,16 @@ class _AdminLayoutState extends State<AdminLayout> {
           ),
           if (_sidebarExpanded) ...[
             const SizedBox(width: 12),
-            const Expanded(
-              child: Text('Grand Luxe',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
-                  overflow: TextOverflow.ellipsis),
+            Expanded(
+              child: Consumer<HotelSession>(
+                builder: (_, session, __) => Text(
+                  session.settings?.displayName.isNotEmpty == true
+                      ? session.settings!.displayName
+                      : 'HotRest Management',
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
           ],
         ],
@@ -347,10 +368,14 @@ class _AdminLayoutState extends State<AdminLayout> {
             borderRadius: BorderRadius.circular(10),
             child: InkWell(
               borderRadius: BorderRadius.circular(10),
-              onTap: () => Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              ),
+              onTap: () async {
+                await context.read<HotelSession>().signOut();
+                if (!context.mounted) return;
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
+              },
               child: Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: _sidebarExpanded ? 12 : 0,
