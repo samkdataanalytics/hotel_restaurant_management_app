@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart';
 import '../app_theme.dart';
+import '../providers/hotel_session.dart';
 import '../models/booking.dart';
 import '../models/room.dart';
 import '../models/expense.dart';
@@ -18,6 +20,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
   final _bookingService = BookingService();
   final _dateFormat = DateFormat('MMM dd, yyyy');
   final _shortDateFormat = DateFormat('MMM dd');
+  String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   List<Map<String, dynamic>> _enrichedBookings = [];
   List<Room> _rooms = [];
@@ -267,7 +270,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                   child: _buildSummaryCard(
                     title: 'Gross Revenue',
                     subtitle: 'Up to today',
-                    value: '\$${materializedRevenue.toStringAsFixed(0)}',
+                    value: '${_sym}${materializedRevenue.toStringAsFixed(0)}',
                     icon: Icons.account_balance_wallet_rounded,
                     color: AppTheme.success,
                   ),
@@ -277,7 +280,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                   child: _buildSummaryCard(
                     title: 'Total Costs',
                     subtitle: 'Room expenses up to today',
-                    value: '\$${totalExpenses.toStringAsFixed(0)}',
+                    value: '${_sym}${totalExpenses.toStringAsFixed(0)}',
                     icon: Icons.money_off_csred_rounded,
                     color: AppTheme.danger,
                   ),
@@ -287,7 +290,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                   child: _buildSummaryCard(
                     title: 'Net Profit',
                     subtitle: 'Gross Revenue - Costs',
-                    value: '\$${(materializedRevenue - totalExpenses).toStringAsFixed(0)}',
+                    value: '${_sym}${(materializedRevenue - totalExpenses).toStringAsFixed(0)}',
                     icon: Icons.payments_rounded,
                     color: AppTheme.warning,
                   ),
@@ -296,8 +299,8 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     title: 'Future & Potential',
-                    subtitle: 'Expected + \$${potentialRevenue.toStringAsFixed(0)} possible',
-                    value: '\$${futureRevenue.toStringAsFixed(0)}',
+                    subtitle: 'Expected + ${_sym}${potentialRevenue.toStringAsFixed(0)} possible',
+                    value: '${_sym}${futureRevenue.toStringAsFixed(0)}',
                     icon: Icons.event_available_rounded,
                     color: AppTheme.adminPrimary,
                   ),
@@ -482,7 +485,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                               child: Align(
                                 alignment: Alignment.centerRight,
                                 child: Text(
-                                  '\$${revenue.toStringAsFixed(2)}',
+                                  '${_sym}${revenue.toStringAsFixed(2)}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     color: revenue > 0 ? AppTheme.success : AppTheme.adminTextMuted,
@@ -496,7 +499,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                               child: Align(
                                 alignment: Alignment.centerRight,
                                 child: Text(
-                                  '\$${expenses.toStringAsFixed(2)}',
+                                  '${_sym}${expenses.toStringAsFixed(2)}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     color: expenses > 0 ? AppTheme.danger : AppTheme.adminTextMuted,
@@ -510,7 +513,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                               child: Align(
                                 alignment: Alignment.centerRight,
                                 child: Text(
-                                  profit < 0 ? '-\$${profit.abs().toStringAsFixed(2)}' : '\$${profit.toStringAsFixed(2)}',
+                                  profit < 0 ? '-${_sym}${profit.abs().toStringAsFixed(2)}' : '${_sym}${profit.toStringAsFixed(2)}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w700,
                                     color: profit > 0 ? AppTheme.success : (profit < 0 ? AppTheme.danger : AppTheme.adminTextMuted),
@@ -556,7 +559,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
             tooltipMargin: 8,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               return BarTooltipItem(
-                '${_shortDateFormat.format(days[group.x.toInt()])}\n\$${rod.toY.toStringAsFixed(0)}',
+                '${_shortDateFormat.format(days[group.x.toInt()])}\n${_sym}${rod.toY.toStringAsFixed(0)}',
                 const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
               );
             },
@@ -589,7 +592,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
               reservedSize: 40,
               getTitlesWidget: (value, meta) {
                 if (value == 0 || value == maxRevenue) return const SizedBox.shrink();
-                return Text('\$${value.toInt()}', style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 10));
+                return Text('${_sym}${value.toInt()}', style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 10));
               },
             ),
           ),

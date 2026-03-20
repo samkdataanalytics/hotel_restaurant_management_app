@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
+import '../providers/hotel_session.dart';
 import '../models/menu_item.dart';
 import '../models/ingredient.dart';
 import '../models/ingredient_price.dart';
@@ -146,7 +148,9 @@ class _MenuTabState extends State<_MenuTab> {
   List<Ingredient> _ingredients = [];
   Map<String, double> _currentCosts = {};
   bool _loading = true;
-  final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
 
   @override
   void initState() {
@@ -697,7 +701,8 @@ class _CostHistoryDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+    final sym = Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+    final currency = NumberFormat.currency(symbol: sym, decimalDigits: 2);
     final dateF = DateFormat('MMM dd, yyyy HH:mm');
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -745,7 +750,7 @@ class _CostHistoryDialog extends StatelessWidget {
                       subtitle: Text(dateF.format(r.date),
                           style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                       trailing: delta != null
-                          ? _deltaBadge(delta)
+                          ? _deltaBadge(sym, delta)
                           : Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
@@ -768,7 +773,7 @@ class _CostHistoryDialog extends StatelessWidget {
     );
   }
 
-  Widget _deltaBadge(double delta) {
+  Widget _deltaBadge(String sym, double delta) {
     final isUp = delta > 0;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -782,7 +787,7 @@ class _CostHistoryDialog extends StatelessWidget {
           Icon(isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
               size: 12, color: isUp ? _RC.occupied : _RC.available),
           const SizedBox(width: 2),
-          Text('\$${delta.abs().toStringAsFixed(2)}',
+          Text('${sym}${delta.abs().toStringAsFixed(2)}',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
                   color: isUp ? _RC.occupied : _RC.available)),
         ],
@@ -808,7 +813,9 @@ class _IngredientsTabState extends State<_IngredientsTab> {
   Ingredient? _selected;
   List<IngredientPrice> _selectedHistory = [];
   bool _loading = true;
-  final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 4);
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 4);
   final _dateF = DateFormat('MMM dd, yyyy');
 
   @override
@@ -1225,14 +1232,22 @@ class _IngredientDialogState extends State<_IngredientDialog> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
-    final ing = Ingredient(
-      id: widget.ingredient?.id ?? _uuid.v4(),
-      name: _name.text.trim(),
-      unit: _unit,
-    );
-    await widget.service.saveIngredient(ing);
-    if (!mounted) return;
-    Navigator.pop(context, true);
+    try {
+      final ing = Ingredient(
+        id: widget.ingredient?.id ?? _uuid.v4(),
+        name: _name.text.trim(),
+        unit: _unit,
+      );
+      await widget.service.saveIngredient(ing);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save ingredient: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override
@@ -1448,7 +1463,9 @@ class _TablesTabState extends State<_TablesTab> {
   List<RestaurantTable> _tables = [];
   Map<String, List<RestaurantOrder>> _activeOrders = {};
   bool _loading = true;
-  final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
   Timer? _refreshTimer;
 
   @override
@@ -1806,14 +1823,22 @@ class _AddTableDialogState extends State<_AddTableDialog> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
-    final table = RestaurantTable(
-      id: _uuid.v4(),
-      tableNumber: _tableNumber.text.trim(),
-      capacity: _capacity,
-    );
-    await widget.service.saveTable(table);
-    if (!mounted) return;
-    Navigator.pop(context, true);
+    try {
+      final table = RestaurantTable(
+        id: _uuid.v4(),
+        tableNumber: _tableNumber.text.trim(),
+        capacity: _capacity,
+      );
+      await widget.service.saveTable(table);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save table: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   @override

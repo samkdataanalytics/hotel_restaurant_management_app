@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../app_theme.dart';
+import '../providers/hotel_session.dart';
 import '../models/restaurant_order.dart';
 import '../models/restaurant_table.dart';
 
@@ -29,7 +31,8 @@ class RestaurantInvoiceDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+    final sym = Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+    final currency = NumberFormat.currency(symbol: sym, decimalDigits: 2);
     final dateF = DateFormat('MMM dd, yyyy  HH:mm');
     final isPreview = order.id == 'preview';
     // When allOrders is supplied, aggregate across all tickets; otherwise single order.

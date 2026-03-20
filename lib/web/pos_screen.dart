@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
+import '../providers/hotel_session.dart';
 import '../models/menu_item.dart';
 import '../models/restaurant_table.dart';
 import '../models/restaurant_order.dart';
@@ -27,7 +29,9 @@ class PosScreen extends StatefulWidget {
 class _PosScreenState extends State<PosScreen> {
   final _restaurantService = RestaurantService();
   final _bookingService = BookingService();
-  final _currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  NumberFormat get _currencyFormat => NumberFormat.currency(
+      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
   final _uuid = const Uuid();
 
   List<MenuItem> _menuItems = [];

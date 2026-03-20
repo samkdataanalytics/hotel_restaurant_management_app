@@ -5,7 +5,9 @@
       "Bash(head -20 grep -n \"_kOrange\\\\|_kOrangeBg\\\\|Color\\(0xFFF97316\\)\\\\|Color\\(0xFFFFF7ED\\)\\\\|import.*app_theme\" c:/Users/gphks/Documents/MyDoc/Proj/ideadeck/my_projects/proj_1/lib/web/restaurant_analytics_screen.dart)",
       "Bash(head -20 grep -n \"_kOrange\\\\|_kOrangeBg\\\\|Color\\(0xFFF97316\\)\\\\|Color\\(0xFFFFF7ED\\)\\\\|import.*app_theme\" c:/Users/gphks/Documents/MyDoc/Proj/ideadeck/my_projects/proj_1/lib/web/cancellations_refunds_screen.dart)",
       "Bash(flutter pub:*)",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Bash(grep -l \"owner\\\\|manager\\\\|kitchen\\\\|frontDesk\" /c/Users/gphks/Documents/MyDoc/Proj/ideadeck/my_projects/proj_1/lib/models/*.dart /c/Users/gphks/Documents/MyDoc/Proj/ideadeck/my_projects/proj_1/lib/web/*.dart)",
+      "Bash(grep -E \"\\\\.dart$\")"
     ]
   }
 }

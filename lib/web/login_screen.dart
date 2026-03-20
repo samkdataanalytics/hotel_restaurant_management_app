@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider;
+import 'package:go_router/go_router.dart';
 import '../app_theme.dart';
-import '../providers/hotel_session.dart';
-import 'admin_app.dart';
+import '../providers/app_auth_provider.dart';
+import '../router.dart';
+import '../services/staff_service.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _LoginScreenState extends ConsumerState<LoginScreen>
     with SingleTickerProviderStateMixin {
   final _emailController    = TextEditingController();
   final _passwordController = TextEditingController();
@@ -45,11 +47,11 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _login() async {
-    final email    = _emailController.text.trim();
+    final input    = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Please enter your email and password');
+    if (input.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Please enter your email/username and password');
       return;
     }
 
@@ -58,23 +60,32 @@ class _LoginScreenState extends State<LoginScreen>
       _error = null;
     });
 
-    final session = context.read<HotelSession>();
-    final err = await session.signIn(email, password);
+    // If the input has no '@' it's a username — look up the synthetic email
+    String email = input;
+    if (!input.contains('@')) {
+      final resolved = await StaffService().getEmailByUsername(input);
+      if (resolved == null || resolved.isEmpty) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Username not found. Please check and try again.';
+        });
+        return;
+      }
+      email = resolved;
+    }
+
+    // Sign in via Riverpod auth notifier — GoRouter redirect handles navigation
+    final err = await ref.read(authProvider.notifier).signIn(email, password);
 
     if (!mounted) return;
 
-    if (err == null) {
-      // Success — go to the admin layout
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminLayout()),
-      );
-    } else {
+    if (err != null) {
       setState(() {
         _isLoading = false;
         _error = err;
       });
     }
+    // On success: GoRouter listens to authProvider and redirects automatically
   }
 
   @override
@@ -158,16 +169,16 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                   const SizedBox(height: 36),
 
-                  // Email
+                  // Email or Username
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Email',
+                      hintText: 'Email or Username',
                       hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
                       prefixIcon: Icon(
-                        Icons.email_outlined,
+                        Icons.person_outline_rounded,
                         color: Colors.white.withOpacity(0.4),
                       ),
                       filled: true,
@@ -263,6 +274,33 @@ class _LoginScreenState extends State<LoginScreen>
 
                   const SizedBox(height: 24),
 
+                  // Sign up link
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Don't have an account? ",
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 13,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => context.go(AppRoutes.signup),
+                        child: Text(
+                          'Create one',
+                          style: TextStyle(
+                            color: AppTheme.adminPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
                   // Login button
                   SizedBox(
                     width: double.infinity,
@@ -293,7 +331,6 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                     ),
                   ),
-
                 ],
               ),
             ),

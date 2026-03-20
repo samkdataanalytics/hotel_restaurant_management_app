@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/restaurant_order.dart';
+import '../providers/hotel_session.dart';
 import '../models/restaurant_table.dart';
 import '../app_theme.dart';
 import '../services/restaurant_service.dart';
@@ -20,7 +22,9 @@ class OrdersScreen extends StatefulWidget {
 
 class _OrdersScreenState extends State<OrdersScreen> {
   final _service = RestaurantService();
-  final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
 
   List<RestaurantOrder> _orders = [];
   List<RestaurantTable> _tables = [];
