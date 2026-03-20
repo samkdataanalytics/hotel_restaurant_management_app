@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import '../models/restaurant_order.dart';
+import '../models/staff_permission.dart';
 import '../providers/hotel_session.dart';
 import '../models/restaurant_table.dart';
 import '../app_theme.dart';
@@ -13,17 +15,17 @@ const _kOrangeBg = AppTheme.restaurantAccentBg;
 
 enum _DateFilter { today, week, all }
 
-class OrdersScreen extends StatefulWidget {
+class OrdersScreen extends ConsumerStatefulWidget {
   const OrdersScreen({super.key});
 
   @override
-  State<OrdersScreen> createState() => _OrdersScreenState();
+  ConsumerState<OrdersScreen> createState() => _OrdersScreenState();
 }
 
-class _OrdersScreenState extends State<OrdersScreen> {
+class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   final _service = RestaurantService();
   NumberFormat get _currency => NumberFormat.currency(
-      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
 
   List<RestaurantOrder> _orders = [];
@@ -786,7 +788,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
-                if (hasRefundable) ...[
+                if (hasRefundable && canEditSection(ref, 'restaurant_orders')) ...[
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
                     onPressed: () => _showRefundDialog(order),
@@ -802,7 +804,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     ),
                   ),
                 ],
-                if (canCancel) ...[
+                if (canCancel && canEditSection(ref, 'restaurant_orders')) ...[
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
                     onPressed: () => _cancelOrder(order),

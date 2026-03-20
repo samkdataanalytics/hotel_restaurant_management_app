@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
 import '../providers/hotel_session.dart';
@@ -12,6 +13,7 @@ import '../models/menu_item_cost_record.dart';
 import '../models/restaurant_table.dart';
 import '../models/restaurant_order.dart';
 import '../models/inventory_item.dart';
+import '../models/staff_permission.dart';
 import '../services/restaurant_service.dart';
 
 // ─── Color palette for restaurant sections — sourced from AppTheme ───────────
@@ -136,20 +138,20 @@ class _RestaurantManagementScreenState extends State<RestaurantManagementScreen>
 //  TAB 1 — MENU ITEMS
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _MenuTab extends StatefulWidget {
+class _MenuTab extends ConsumerStatefulWidget {
   final RestaurantService service;
   const _MenuTab({required this.service});
   @override
-  State<_MenuTab> createState() => _MenuTabState();
+  ConsumerState<_MenuTab> createState() => _MenuTabState();
 }
 
-class _MenuTabState extends State<_MenuTab> {
+class _MenuTabState extends ConsumerState<_MenuTab> {
   List<MenuItem> _items = [];
   List<Ingredient> _ingredients = [];
   Map<String, double> _currentCosts = {};
   bool _loading = true;
   NumberFormat get _currency => NumberFormat.currency(
-      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
 
   @override
@@ -238,7 +240,7 @@ class _MenuTabState extends State<_MenuTab> {
               Text('${_items.length} Menu Items',
                   style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Color(0xFF1E293B))),
               ElevatedButton.icon(
-                onPressed: () => _openDialog(),
+                onPressed: canEditSection(ref, 'restaurant_management') ? () => _openDialog() : null,
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: const Text('Add Menu Item'),
                 style: ElevatedButton.styleFrom(
@@ -341,6 +343,7 @@ class _MenuTabState extends State<_MenuTab> {
             onPressed: () => _showCostHistory(item),
             icon: Icon(Icons.history_rounded, color: Colors.grey.shade400, size: 20),
           ),
+          if (canEditSection(ref, 'restaurant_management')) ...[
           // Edit
           IconButton(
             tooltip: 'Edit',
@@ -353,6 +356,7 @@ class _MenuTabState extends State<_MenuTab> {
             onPressed: () => _delete(item),
             icon: Icon(Icons.delete_outline_rounded, color: Colors.red.shade300, size: 20),
           ),
+          ],
         ],
       ),
     );
@@ -701,7 +705,7 @@ class _CostHistoryDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sym = Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+    final sym = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
     final currency = NumberFormat.currency(symbol: sym, decimalDigits: 2);
     final dateF = DateFormat('MMM dd, yyyy HH:mm');
     return Dialog(
@@ -800,21 +804,21 @@ class _CostHistoryDialog extends StatelessWidget {
 //  TAB 2 — INGREDIENTS & COSTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _IngredientsTab extends StatefulWidget {
+class _IngredientsTab extends ConsumerStatefulWidget {
   final RestaurantService service;
   const _IngredientsTab({required this.service});
   @override
-  State<_IngredientsTab> createState() => _IngredientsTabState();
+  ConsumerState<_IngredientsTab> createState() => _IngredientsTabState();
 }
 
-class _IngredientsTabState extends State<_IngredientsTab> {
+class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
   List<Ingredient> _ingredients = [];
   Map<String, double?> _currentPrices = {};
   Ingredient? _selected;
   List<IngredientPrice> _selectedHistory = [];
   bool _loading = true;
   NumberFormat get _currency => NumberFormat.currency(
-      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 4);
   final _dateF = DateFormat('MMM dd, yyyy');
 
@@ -916,7 +920,7 @@ class _IngredientsTabState extends State<_IngredientsTab> {
                     Text('${_ingredients.length} Ingredients',
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                     ElevatedButton.icon(
-                      onPressed: _addIngredientDialog,
+                      onPressed: canEditSection(ref, 'restaurant_management') ? _addIngredientDialog : null,
                       icon: const Icon(Icons.add_rounded, size: 16),
                       label: const Text('Add'),
                       style: ElevatedButton.styleFrom(
@@ -1061,7 +1065,7 @@ class _IngredientsTabState extends State<_IngredientsTab> {
               Column(
                 children: [
                   ElevatedButton.icon(
-                    onPressed: () => _updatePriceDialog(ing),
+                    onPressed: canEditSection(ref, 'restaurant_management') ? () => _updatePriceDialog(ing) : null,
                     icon: const Icon(Icons.update_rounded, size: 16),
                     label: const Text('Update Price'),
                     style: ElevatedButton.styleFrom(
@@ -1074,7 +1078,7 @@ class _IngredientsTabState extends State<_IngredientsTab> {
                   ),
                   const SizedBox(height: 6),
                   TextButton.icon(
-                    onPressed: () => _deleteIngredient(ing),
+                    onPressed: canEditSection(ref, 'restaurant_management') ? () => _deleteIngredient(ing) : null,
                     icon: const Icon(Icons.delete_outline_rounded, size: 14),
                     label: const Text('Delete'),
                     style: TextButton.styleFrom(
@@ -1452,19 +1456,19 @@ class _UpdatePriceDialogState extends State<_UpdatePriceDialog> {
 //  TAB 3 — TABLES & OCCUPANCY
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _TablesTab extends StatefulWidget {
+class _TablesTab extends ConsumerStatefulWidget {
   final RestaurantService service;
   const _TablesTab({required this.service});
   @override
-  State<_TablesTab> createState() => _TablesTabState();
+  ConsumerState<_TablesTab> createState() => _TablesTabState();
 }
 
-class _TablesTabState extends State<_TablesTab> {
+class _TablesTabState extends ConsumerState<_TablesTab> {
   List<RestaurantTable> _tables = [];
   Map<String, List<RestaurantOrder>> _activeOrders = {};
   bool _loading = true;
   NumberFormat get _currency => NumberFormat.currency(
-      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
   Timer? _refreshTimer;
 
@@ -1568,7 +1572,7 @@ class _TablesTabState extends State<_TablesTab> {
               _statChip(Icons.people_rounded, '$occupied Occupied', _RC.occupied, _RC.occupiedLight),
               const Spacer(),
               ElevatedButton.icon(
-                onPressed: _addTableDialog,
+                onPressed: canEditSection(ref, 'restaurant_management') ? _addTableDialog : null,
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: const Text('Add Table'),
                 style: ElevatedButton.styleFrom(
@@ -1646,6 +1650,7 @@ class _TablesTabState extends State<_TablesTab> {
                           style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: statusColor)),
                     ),
                     const SizedBox(width: 4),
+                    if (canEditSection(ref, 'restaurant_management'))
                     InkWell(
                       onTap: () => _deleteTable(table),
                       child: Icon(Icons.close_rounded, size: 16, color: Colors.grey.shade400),
@@ -2163,14 +2168,14 @@ class _TableOrderDialog extends StatelessWidget {
 //  TAB 4 — INVENTORY
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _InventoryTab extends StatefulWidget {
+class _InventoryTab extends ConsumerStatefulWidget {
   final RestaurantService service;
   const _InventoryTab({required this.service});
   @override
-  State<_InventoryTab> createState() => _InventoryTabState();
+  ConsumerState<_InventoryTab> createState() => _InventoryTabState();
 }
 
-class _InventoryTabState extends State<_InventoryTab> {
+class _InventoryTabState extends ConsumerState<_InventoryTab> {
   List<Ingredient> _ingredients = [];
   List<InventoryItem> _inventory = [];
   bool _loading = true;
@@ -2293,7 +2298,7 @@ class _InventoryTabState extends State<_InventoryTab> {
             style: TextStyle(color: Colors.grey.shade400, fontSize: 13)))),
         Expanded(child: Center(child: _statusBadge(inv))),
         SizedBox(width: 90, child: Center(child: TextButton.icon(
-          onPressed: () => _adjustDialog(ing),
+          onPressed: canEditSection(ref, 'restaurant_management') ? () => _adjustDialog(ing) : null,
           icon: const Icon(Icons.tune_rounded, size: 14),
           label: const Text('Adjust', style: TextStyle(fontSize: 12)),
           style: TextButton.styleFrom(foregroundColor: _RC.accent,

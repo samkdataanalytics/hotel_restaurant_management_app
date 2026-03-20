@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import '../providers/hotel_session.dart';
 import 'package:uuid/uuid.dart';
 import 'package:collection/collection.dart';
@@ -13,22 +14,23 @@ import '../models/guest.dart';
 import '../models/expense.dart';
 import '../models/restaurant_table.dart';
 import '../services/restaurant_service.dart';
+import '../models/staff_permission.dart';
 import '../services/booking_service.dart';
 import 'restaurant_invoice_dialog.dart';
 
-class KitchenScreen extends StatefulWidget {
+class KitchenScreen extends ConsumerStatefulWidget {
   const KitchenScreen({super.key});
 
   @override
-  State<KitchenScreen> createState() => _KitchenScreenState();
+  ConsumerState<KitchenScreen> createState() => _KitchenScreenState();
 }
 
-class _KitchenScreenState extends State<KitchenScreen> {
+class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   final _restaurantService = RestaurantService();
   final _bookingService = BookingService();
   final _timeFormat = DateFormat('hh:mm a');
   NumberFormat get _currency => NumberFormat.currency(
-      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
 
   List<RestaurantOrder> _allOrders = [];
@@ -413,7 +415,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
                 )),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => _updateStatus(order, nextStatus),
+              onPressed: canEditSection(ref, 'restaurant_kitchen') ? () => _updateStatus(order, nextStatus) : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: color.shade700,
                 foregroundColor: Colors.white,
@@ -581,7 +583,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
                 Expanded(
                   flex: 2,
                   child: ElevatedButton.icon(
-                    onPressed: () => _showPaymentDialog(orderGroup),
+                    onPressed: canEditSection(ref, 'restaurant_kitchen') ? () => _showPaymentDialog(orderGroup) : null,
                     icon: const Icon(Icons.payments_rounded, size: 16),
                     label: const Text('Collect Payment',
                         style: TextStyle(fontWeight: FontWeight.bold)),
@@ -660,7 +662,7 @@ class _KitchenPaymentDialog extends StatefulWidget {
 
 class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
   NumberFormat get _currency => NumberFormat.currency(
-      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
   final _uuid = const Uuid();
 
