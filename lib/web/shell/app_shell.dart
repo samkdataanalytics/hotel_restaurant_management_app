@@ -198,6 +198,8 @@ class _AppShellState extends ConsumerState<AppShell> {
         _isPropertyManager = isManager;
         _userPermissions   = permissions;
       });
+      ref.read(isPropertyManagerProvider.notifier).state = isManager;
+      ref.read(activeSectionPermissionsProvider.notifier).state = permissions;
     }
   }
 

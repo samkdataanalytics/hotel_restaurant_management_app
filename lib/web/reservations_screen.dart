@@ -8,25 +8,27 @@ import '../models/guest.dart';
 import '../models/room.dart';
 import '../models/expense.dart';
 import '../services/booking_service.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import '../providers/hotel_session.dart';
 import '../services/invoice_service.dart';
 import 'room_expenses_dialog.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'guest_responses_dialog.dart';
+import '../models/staff_permission.dart';
 
-class ReservationsScreen extends StatefulWidget {
+class ReservationsScreen extends ConsumerStatefulWidget {
   const ReservationsScreen({super.key});
 
   @override
-  State<ReservationsScreen> createState() => _ReservationsScreenState();
+  ConsumerState<ReservationsScreen> createState() => _ReservationsScreenState();
 }
 
-class _ReservationsScreenState extends State<ReservationsScreen> {
+class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
   final _bookingService = BookingService();
   final _invoiceService = InvoiceService();
   final _dateFormat = DateFormat('MMM dd');
   final _fullDateFormat = DateFormat('MMM dd, yyyy');
-  String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   List<Map<String, dynamic>> _enrichedBookings = [];
   List<Room> _rooms = [];
@@ -289,7 +291,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh), tooltip: 'Refresh'),
             const SizedBox(width: 8),
             ElevatedButton.icon(
-              onPressed: _showAddReservationDialog,
+              onPressed: canEditSection(ref, 'hotel_reservations') ? _showAddReservationDialog : null,
               icon: const Icon(Icons.add_rounded, size: 20),
               label: const Text('Add Reservation'),
               style: ElevatedButton.styleFrom(
@@ -971,9 +973,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     if (guest != null && room != null)
                       _tileAction(icon: Icons.receipt_long_rounded, tooltip: 'Print Guest Folio', color: AppTheme.success, onTap: () => _printInvoice(booking, room, guest)),
                     const SizedBox(width: 4),
+                    if (canEditSection(ref, 'hotel_reservations')) ...[
                     _tileAction(icon: Icons.edit_outlined, tooltip: 'Edit', color: AppTheme.adminPrimary, onTap: () => _showEditReservationDialog(data)),
                     const SizedBox(width: 4),
                     _tileAction(icon: Icons.delete_outline_rounded, tooltip: 'Delete', color: AppTheme.danger, onTap: () => _deleteReservation(booking)),
+                    ],
                   ],
                 ),
               ],
@@ -1136,7 +1140,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     
     if (mounted) {
       Navigator.pop(context); // Close loading dialog
-      final sym = Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+      final sym = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
       await _invoiceService.displayInvoicePdf(
         booking: booking,
         room: room,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
 import '../providers/hotel_session.dart';
@@ -12,6 +13,7 @@ import '../models/guest.dart';
 import '../models/room.dart';
 import '../models/expense.dart';
 import '../services/restaurant_service.dart';
+import '../models/staff_permission.dart';
 import '../services/booking_service.dart';
 import 'restaurant_invoice_dialog.dart';
 
@@ -19,18 +21,18 @@ import 'restaurant_invoice_dialog.dart';
 const _kOrange = AppTheme.restaurantAccent;
 const _kOrangeBg = AppTheme.restaurantAccentBg;
 
-class PosScreen extends StatefulWidget {
+class PosScreen extends ConsumerStatefulWidget {
   const PosScreen({super.key});
 
   @override
-  State<PosScreen> createState() => _PosScreenState();
+  ConsumerState<PosScreen> createState() => _PosScreenState();
 }
 
-class _PosScreenState extends State<PosScreen> {
+class _PosScreenState extends ConsumerState<PosScreen> {
   final _restaurantService = RestaurantService();
   final _bookingService = BookingService();
   NumberFormat get _currencyFormat => NumberFormat.currency(
-      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
   final _uuid = const Uuid();
 
@@ -374,7 +376,7 @@ class _PosScreenState extends State<PosScreen> {
   Widget _buildMenuTile(MenuItem item) {
     final unavailable = !item.isAvailable;
     return GestureDetector(
-      onTap: unavailable ? null : () => _addToCart(item),
+      onTap: unavailable || !canEditSection(ref, 'restaurant_pos') ? null : () => _addToCart(item),
       child: Opacity(
         opacity: unavailable ? 0.45 : 1.0,
         child: Container(
@@ -627,7 +629,7 @@ class _PosScreenState extends State<PosScreen> {
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _cart.isEmpty ? null : () => _handleCheckout(PaymentStatus.paid),
+                  onPressed: _cart.isEmpty || !canEditSection(ref, 'restaurant_pos') ? null : () => _handleCheckout(PaymentStatus.paid),
                   icon: const Icon(Icons.attach_money_rounded, size: 18),
                   label: const Text('Cash', style: TextStyle(fontWeight: FontWeight.w700)),
                   style: ElevatedButton.styleFrom(
@@ -641,7 +643,7 @@ class _PosScreenState extends State<PosScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _cart.isEmpty ? null : () => _handleCheckout(PaymentStatus.paid),
+                  onPressed: _cart.isEmpty || !canEditSection(ref, 'restaurant_pos') ? null : () => _handleCheckout(PaymentStatus.paid),
                   icon: const Icon(Icons.credit_card_rounded, size: 18),
                   label: const Text('Card', style: TextStyle(fontWeight: FontWeight.w700)),
                   style: ElevatedButton.styleFrom(

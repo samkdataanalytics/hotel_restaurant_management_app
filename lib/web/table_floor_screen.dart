@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
 import '../providers/hotel_session.dart';
 import '../models/booking.dart';
@@ -11,6 +12,7 @@ import '../models/restaurant_order.dart';
 import '../models/restaurant_table.dart';
 import '../services/booking_service.dart';
 import '../app_theme.dart';
+import '../models/staff_permission.dart';
 import '../services/restaurant_service.dart';
 import 'restaurant_invoice_dialog.dart';
 
@@ -375,19 +377,19 @@ class _PaymentDialogState extends State<_PaymentDialog> {
 
 // ─── Table Floor Screen ───────────────────────────────────────────────────────
 
-class TableFloorScreen extends StatefulWidget {
+class TableFloorScreen extends ConsumerStatefulWidget {
   const TableFloorScreen({super.key});
 
   @override
-  State<TableFloorScreen> createState() => _TableFloorScreenState();
+  ConsumerState<TableFloorScreen> createState() => _TableFloorScreenState();
 }
 
-class _TableFloorScreenState extends State<TableFloorScreen> {
+class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
   final _service = RestaurantService();
   final _bookingService = BookingService();
   final _uuid = const Uuid();
   NumberFormat get _currency => NumberFormat.currency(
-      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
 
   // ── Data
@@ -919,7 +921,7 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
                       )),
               const SizedBox(width: 8),
               _actionBtn(Icons.payment_rounded, 'Collect Payment', _kGreen,
-                  onPressed: _isProcessing
+                  onPressed: _isProcessing || !canEditSection(ref, 'restaurant_tables')
                       ? null
                       : () => _collectPayment(openOrders, table)),
             ],
@@ -1256,7 +1258,7 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
               const SizedBox(width: 10),
               ElevatedButton.icon(
                 onPressed:
-                    cartCount > 0 && !_isProcessing ? _confirmAddItems : null,
+                    cartCount > 0 && !_isProcessing && canEditSection(ref, 'restaurant_tables') ? _confirmAddItems : null,
                 icon: _isProcessing
                     ? const SizedBox(
                         width: 14,

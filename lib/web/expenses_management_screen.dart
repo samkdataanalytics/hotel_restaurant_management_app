@@ -1,26 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import '../app_theme.dart';
 import '../providers/hotel_session.dart';
 import '../models/expense.dart';
 import '../models/room.dart';
 import '../models/booking.dart';
 import '../models/guest.dart';
+import '../models/staff_permission.dart';
 import '../services/booking_service.dart';
 import 'expense_dialog.dart';
 
-class ExpensesManagementScreen extends StatefulWidget {
+class ExpensesManagementScreen extends ConsumerStatefulWidget {
   const ExpensesManagementScreen({super.key});
 
   @override
-  State<ExpensesManagementScreen> createState() => _ExpensesManagementScreenState();
+  ConsumerState<ExpensesManagementScreen> createState() => _ExpensesManagementScreenState();
 }
 
-class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
+class _ExpensesManagementScreenState extends ConsumerState<ExpensesManagementScreen> {
   final _bookingService = BookingService();
   final _dateFormat = DateFormat('MMM dd, yyyy');
-  String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   List<Expense> _expenses = [];
   List<Room> _rooms = [];
@@ -150,7 +152,7 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
                   ],
                 ),
                 ElevatedButton.icon(
-                  onPressed: () => _openExpenseDialog(),
+                  onPressed: canEditSection(ref, 'hotel_expenses') ? () => _openExpenseDialog() : null,
                   icon: const Icon(Icons.add_rounded, size: 20, color: Colors.white),
                   label: const Text('Log Expense', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                   style: ElevatedButton.styleFrom(
@@ -345,6 +347,7 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                if (canEditSection(ref, 'hotel_expenses')) ...[
                 IconButton(
                   icon: const Icon(Icons.edit_outlined, size: 20),
                   color: AppTheme.adminPrimary,
@@ -357,6 +360,7 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
                   onPressed: () => _deleteExpense(expense),
                   tooltip: 'Delete Expense',
                 ),
+                ],
               ],
             ),
           ),

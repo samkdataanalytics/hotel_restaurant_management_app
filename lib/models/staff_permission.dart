@@ -1,3 +1,21 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+// ─── Providers (synced by AppShell on every property switch) ─────────────────
+
+/// True when the active user is a manager/owner — they always have full access.
+final isPropertyManagerProvider = StateProvider<bool>((ref) => true);
+
+/// Per-section privilege map for the current non-manager user.
+final activeSectionPermissionsProvider =
+    StateProvider<Map<String, PrivilegeLevel>>((ref) => {});
+
+/// Returns true if the current user may create/edit/delete in [sectionKey].
+bool canEditSection(WidgetRef ref, String sectionKey) {
+  if (ref.watch(isPropertyManagerProvider)) return true;
+  final perms = ref.watch(activeSectionPermissionsProvider);
+  return (perms[sectionKey] ?? PrivilegeLevel.none) == PrivilegeLevel.edit;
+}
+
 // ─── Section keys (maps to page indices in AppShell) ─────────────────────────
 
 const Map<int, String> kSectionKeyByPageIndex = {

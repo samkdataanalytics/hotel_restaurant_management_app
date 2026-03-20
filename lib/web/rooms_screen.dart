@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
 import '../providers/hotel_session.dart';
 import '../models/room.dart';
+import '../models/staff_permission.dart';
 import '../services/booking_service.dart';
 import 'room_expenses_dialog.dart';
 
-class RoomsScreen extends StatefulWidget {
+class RoomsScreen extends ConsumerStatefulWidget {
   const RoomsScreen({super.key});
 
   @override
-  State<RoomsScreen> createState() => _RoomsScreenState();
+  ConsumerState<RoomsScreen> createState() => _RoomsScreenState();
 }
 
-class _RoomsScreenState extends State<RoomsScreen> {
+class _RoomsScreenState extends ConsumerState<RoomsScreen> {
   final _bookingService = BookingService();
-  String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
   List<Room> _rooms = [];
   bool _isLoading = true;
   String _filterStatus = 'all';
@@ -264,7 +266,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
-                      onPressed: _showAddRoomDialog,
+                      onPressed: canEditSection(ref, 'hotel_rooms') ? _showAddRoomDialog : null,
                       icon: const Icon(Icons.add_rounded, size: 20),
                       label: const Text('Add Room'),
                       style: ElevatedButton.styleFrom(
@@ -396,7 +398,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => _toggleStatus(room),
+        onTap: canEditSection(ref, 'hotel_rooms') ? () => _toggleStatus(room) : null,
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -470,7 +472,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
               // Action buttons
               Row(
                 children: [
-                  if (room.status != RoomStatus.occupied)
+                  if (room.status != RoomStatus.occupied && canEditSection(ref, 'hotel_rooms'))
                     Expanded(
                       child: Text(
                         'Tap to toggle status',
@@ -483,6 +485,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     )
                   else
                     const Spacer(),
+                  if (canEditSection(ref, 'hotel_rooms')) ...[
                   _actionIconButton(
                     icon: Icons.edit_outlined,
                     tooltip: 'Edit room',
@@ -508,6 +511,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     color: AppTheme.danger,
                     onPressed: () => _showDeleteConfirmation(room),
                   ),
+                  ], // end canEdit
                 ],
               ),
             ],
