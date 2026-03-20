@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider;
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'mobile/mobile_app.dart';
-import 'web/admin_app.dart';
 import 'providers/hotel_session.dart';
+import 'router.dart';
+import 'app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,14 +17,36 @@ void main() async {
     anonKey: 'REMOVED_ANON_KEY',
   );
 
-  // Restore any existing Supabase session (web: from localStorage)
+  // Legacy HotelSession (still used by existing hotel screens)
   final session = HotelSession();
   if (kIsWeb) await session.restoreSession();
 
   runApp(
-    ChangeNotifierProvider<HotelSession>.value(
-      value: session,
-      child: kIsWeb ? const AdminApp() : const MobileApp(),
+    ProviderScope(
+      child: kIsWeb
+          ? ChangeNotifierProvider<HotelSession>.value(
+              value: session,
+              child: const _WebApp(),
+            )
+          : ChangeNotifierProvider<HotelSession>.value(
+              value: session,
+              child: const MobileApp(),
+            ),
     ),
   );
+}
+
+class _WebApp extends ConsumerWidget {
+  const _WebApp();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(routerProvider);
+    return MaterialApp.router(
+      title: 'HotRest Management',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.webTheme,
+      routerConfig: router,
+    );
+  }
 }

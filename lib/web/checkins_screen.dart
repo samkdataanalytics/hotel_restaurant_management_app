@@ -8,6 +8,8 @@ import '../models/room.dart';
 import '../models/booking.dart';
 import '../models/expense.dart';
 import '../services/booking_service.dart';
+import 'package:provider/provider.dart';
+import '../providers/hotel_session.dart';
 import '../services/invoice_service.dart';
 import 'guest_responses_dialog.dart';
 
@@ -537,11 +539,13 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
     
     if (mounted) {
       Navigator.pop(context); // Close loading dialog
+      final sym = Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
       await _invoiceService.displayInvoicePdf(
         booking: booking,
         room: room,
         guest: guest,
         expenses: expenses,
+        currencySymbol: sym,
       );
     }
   }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import '../providers/hotel_session.dart';
 import '../models/booking.dart';
 import '../models/guest.dart';
 import '../models/room.dart';
@@ -384,7 +386,9 @@ class _TableFloorScreenState extends State<TableFloorScreen> {
   final _service = RestaurantService();
   final _bookingService = BookingService();
   final _uuid = const Uuid();
-  final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
 
   // ── Data
   List<RestaurantTable> _tables = [];

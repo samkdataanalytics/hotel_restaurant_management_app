@@ -8,6 +8,8 @@ import '../models/guest.dart';
 import '../models/room.dart';
 import '../models/expense.dart';
 import '../services/booking_service.dart';
+import 'package:provider/provider.dart';
+import '../providers/hotel_session.dart';
 import '../services/invoice_service.dart';
 import 'room_expenses_dialog.dart';
 import 'guest_responses_dialog.dart';
@@ -24,6 +26,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   final _invoiceService = InvoiceService();
   final _dateFormat = DateFormat('MMM dd');
   final _fullDateFormat = DateFormat('MMM dd, yyyy');
+  String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   List<Map<String, dynamic>> _enrichedBookings = [];
   List<Room> _rooms = [];
@@ -536,7 +539,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                           height: 28,
                           alignment: Alignment.center,
                           child: Text(
-                            total > 0 ? '\$${total.toStringAsFixed(0)}' : '-',
+                            total > 0 ? '${_sym}${total.toStringAsFixed(0)}' : '-',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -752,7 +755,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     _statColumn(dayReserved.toString(), 'Booked', AppTheme.danger),
                     _statColumn(dayAvailable.toString(), 'Available', AppTheme.success),
                     _statColumn(dayMaintenance.toString(), 'Maint.', AppTheme.warning),
-                    _statColumn('\$${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
+                    _statColumn('${_sym}${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
                   ],
                 ),
               ),
@@ -807,7 +810,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                   _statColumn(dayReserved.toString(), 'Booked', AppTheme.danger),
                   _statColumn(dayAvailable.toString(), 'Available', AppTheme.success),
                   _statColumn(dayMaintenance.toString(), 'Maint.', AppTheme.warning),
-                  _statColumn('\$${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
+                  _statColumn('${_sym}${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
                 ],
               ),
             ),
@@ -939,7 +942,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                       Icon(Icons.attach_money, size: 14, color: AppTheme.success),
                       const SizedBox(width: 4),
                       Text(
-                        '\$${booking.totalAmount.toStringAsFixed(2)}',
+                        '${_sym}${booking.totalAmount.toStringAsFixed(2)}',
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.success),
                       ),
                       const SizedBox(width: 8),
@@ -1133,11 +1136,13 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     
     if (mounted) {
       Navigator.pop(context); // Close loading dialog
+      final sym = Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
       await _invoiceService.displayInvoicePdf(
         booking: booking,
         room: room,
         guest: guest,
         expenses: expenses,
+        currencySymbol: sym,
       );
     }
   }

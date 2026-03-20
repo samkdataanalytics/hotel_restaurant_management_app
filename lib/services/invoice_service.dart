@@ -10,7 +10,6 @@ import '../models/expense.dart';
 import '../models/guest.dart';
 
 class InvoiceService {
-  final _currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
   final _dateFormat = DateFormat('MMM dd, yyyy');
 
   /// Generate a PDF folio for the guest
@@ -19,7 +18,9 @@ class InvoiceService {
     required Room room,
     required Guest guest,
     required List<Expense> expenses,
+    String currencySymbol = '\$',
   }) async {
+    final _currencyFormat = NumberFormat.currency(symbol: currencySymbol, decimalDigits: 2);
     final pdf = pw.Document();
 
     // As per requirement:
@@ -199,12 +200,14 @@ class InvoiceService {
     required Room room,
     required Guest guest,
     required List<Expense> expenses,
+    String currencySymbol = '\$',
   }) async {
     final pdfBytes = await generateInvoice(
       booking: booking,
       room: room,
       guest: guest,
       expenses: expenses,
+      currencySymbol: currencySymbol,
     );
 
     await Printing.layoutPdf(

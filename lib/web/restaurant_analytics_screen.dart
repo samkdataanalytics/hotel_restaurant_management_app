@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../app_theme.dart';
+import '../providers/hotel_session.dart';
 import '../models/restaurant_order.dart';
 import '../services/restaurant_service.dart';
 
@@ -22,7 +24,10 @@ class RestaurantAnalyticsScreen extends StatefulWidget {
 class _RestaurantAnalyticsScreenState
     extends State<RestaurantAnalyticsScreen> {
   final _service = RestaurantService();
-  final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
+  String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   bool _isLoading = true;
 
@@ -399,7 +404,7 @@ class _RestaurantAnalyticsScreenState
                       showTitles: true,
                       reservedSize: 48,
                       getTitlesWidget: (value, meta) => Text(
-                        '\$${value.toInt()}',
+                        '${_sym}${value.toInt()}',
                         style: const TextStyle(
                             fontSize: 9, color: Colors.black38),
                       ),

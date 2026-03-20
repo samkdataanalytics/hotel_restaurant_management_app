@@ -175,6 +175,16 @@ class HotelSession extends ChangeNotifier {
     }
   }
 
+  // ── Set hotel id directly (used by AppShell when switching properties) ──────
+  /// Sets the active hotel context without going through signIn.
+  /// Also clears settings so they can be refreshed on demand.
+  Future<void> setHotelId(String id) async {
+    _hotelId = id;
+    _role = StaffRole.manager;
+    await _refreshSettings();
+    notifyListeners();
+  }
+
   // ── Sign out ───────────────────────────────────────────────────────────────
   Future<void> signOut() async {
     await _db.auth.signOut();

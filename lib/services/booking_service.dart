@@ -9,10 +9,14 @@ import '../models/expense.dart';
 SupabaseClient get _db => Supabase.instance.client;
 
 class BookingService {
+  static final BookingService _instance = BookingService._internal();
+  factory BookingService() => _instance;
+  BookingService._internal();
+
   final _uuid = const Uuid();
 
-  /// The hotel_id for the currently logged-in staff member.
-  /// Set this after login via [BookingService.hotelId] = session.hotelId!
+  /// The hotel_id for the currently active property.
+  /// Set via AppShell._applyActiveProperty() when the active property changes.
   String? hotelId;
 
   // ─── Row → Model mappers ───────────────────────────────────────────────────
@@ -160,9 +164,11 @@ class BookingService {
   //       e.g.  final ref = await bookingService.getNextBookingRef();
 
   Future<String> getNextBookingRef() async {
+    if (hotelId == null) return 'BK-0001';
     final rows = await _db
         .from('bookings')
         .select('booking_ref')
+        .eq('hotel_id', hotelId!)
         .order('created_at', ascending: false)
         .limit(1);
     if (rows.isEmpty) return 'BK-0001';
@@ -267,9 +273,11 @@ class BookingService {
   // ─── Enriched Data ────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getEnrichedCheckIns() async {
+    if (hotelId == null) return [];
     final rows = await _db
         .from('check_ins')
         .select('*, bookings(*), guests(*), rooms(*)')
+        .eq('hotel_id', hotelId!)
         .order('check_in_time', ascending: false);
 
     return rows.map<Map<String, dynamic>>((r) => {
@@ -287,9 +295,11 @@ class BookingService {
   }
 
   Future<List<Map<String, dynamic>>> getEnrichedBookings() async {
+    if (hotelId == null) return [];
     final rows = await _db
         .from('bookings')
         .select('*, guests(*), rooms(*)')
+        .eq('hotel_id', hotelId!)
         .order('created_at', ascending: false);
 
     return rows.map<Map<String, dynamic>>((r) => {
@@ -312,17 +322,19 @@ class BookingService {
     final endOfDay = DateTime(todayStart.year, todayStart.month, todayStart.day, 23, 59, 59)
         .toIso8601String();
 
+    if (hotelId == null) return {'todayCheckIns': 0, 'occupiedRooms': 0, 'availableRooms': 0, 'pendingArrivals': 0};
     final results = await Future.wait([
       // Today's check-ins
       _db.from('check_ins').select('id')
+          .eq('hotel_id', hotelId!)
           .gte('check_in_time', startOfDay)
           .lte('check_in_time', endOfDay),
       // Occupied rooms
-      _db.from('rooms').select('id').eq('status', 'occupied'),
+      _db.from('rooms').select('id').eq('hotel_id', hotelId!).eq('status', 'occupied'),
       // Available rooms
-      _db.from('rooms').select('id').eq('status', 'available'),
+      _db.from('rooms').select('id').eq('hotel_id', hotelId!).eq('status', 'available'),
       // Pending arrivals
-      _db.from('bookings').select('id').eq('status', 'pending'),
+      _db.from('bookings').select('id').eq('hotel_id', hotelId!).eq('status', 'pending'),
     ]);
 
     return {
@@ -336,7 +348,10 @@ class BookingService {
   // ─── Rooms ────────────────────────────────────────────────────────────────
 
   Future<List<Room>> getAllRooms() async {
-    final rows = await _db.from('rooms').select().order('room_number');
+    if (hotelId == null) return [];
+    final rows = await _db.from('rooms').select()
+        .eq('hotel_id', hotelId!)
+        .order('room_number');
     return rows.map(_roomFromRow).toList();
   }
 
@@ -425,7 +440,10 @@ class BookingService {
   // ─── Guests ───────────────────────────────────────────────────────────────
 
   Future<List<Guest>> getAllGuests() async {
-    final rows = await _db.from('guests').select().order('full_name');
+    if (hotelId == null) return [];
+    final rows = await _db.from('guests').select()
+        .eq('hotel_id', hotelId!)
+        .order('full_name');
     return rows.map(_guestFromRow).toList();
   }
 
@@ -440,9 +458,11 @@ class BookingService {
   // ─── Expenses ─────────────────────────────────────────────────────────────
 
   Future<List<Expense>> getAllExpenses() async {
+    if (hotelId == null) return [];
     final rows = await _db
         .from('expenses')
         .select()
+        .eq('hotel_id', hotelId!)
         .order('date', ascending: false);
     return rows.map(_expenseFromRow).toList();
   }

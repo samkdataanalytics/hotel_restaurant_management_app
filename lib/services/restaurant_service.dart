@@ -171,8 +171,11 @@ class RestaurantService {
   // ─── MENU ──────────────────────────────────────────────────────────────────
 
   Future<List<MenuItem>> getMenuItems() async {
-    final rows =
-        await _db.from('menu_items').select().order('category').order('name');
+    if (hotelId == null) return [];
+    final rows = await _db.from('menu_items').select()
+        .eq('hotel_id', hotelId!)
+        .order('category')
+        .order('name');
     return rows.map(_menuItemFromRow).toList();
   }
 
@@ -190,7 +193,10 @@ class RestaurantService {
   // ─── INGREDIENTS ──────────────────────────────────────────────────────────
 
   Future<List<Ingredient>> getIngredients() async {
-    final rows = await _db.from('ingredients').select().order('name');
+    if (hotelId == null) return [];
+    final rows = await _db.from('ingredients').select()
+        .eq('hotel_id', hotelId!)
+        .order('name');
     return rows.map(_ingredientFromRow).toList();
   }
 
@@ -205,9 +211,11 @@ class RestaurantService {
   // ─── INGREDIENT PRICES ────────────────────────────────────────────────────
 
   Future<List<IngredientPrice>> getIngredientPrices() async {
+    if (hotelId == null) return [];
     final rows = await _db
         .from('ingredient_prices')
         .select()
+        .eq('hotel_id', hotelId!)
         .order('date', ascending: false);
     return rows.map(_priceFromRow).toList();
   }
@@ -283,8 +291,10 @@ class RestaurantService {
   // ─── TABLES ───────────────────────────────────────────────────────────────
 
   Future<List<RestaurantTable>> getTables() async {
-    final rows =
-        await _db.from('restaurant_tables').select().order('table_number');
+    if (hotelId == null) return [];
+    final rows = await _db.from('restaurant_tables').select()
+        .eq('hotel_id', hotelId!)
+        .order('table_number');
     return rows.map(_tableFromRow).toList();
   }
 
@@ -301,9 +311,11 @@ class RestaurantService {
   // ─── ORDERS ───────────────────────────────────────────────────────────────
 
   Future<List<RestaurantOrder>> getOrders() async {
+    if (hotelId == null) return [];
     final rows = await _db
         .from('restaurant_orders')
         .select()
+        .eq('hotel_id', hotelId!)
         .order('created_at', ascending: false);
     return rows.map(_orderFromRow).toList();
   }
@@ -557,7 +569,9 @@ class RestaurantService {
   // ─── INVENTORY ────────────────────────────────────────────────────────────
 
   Future<List<InventoryItem>> getInventory() async {
-    final rows = await _db.from('inventory').select();
+    if (hotelId == null) return [];
+    final rows = await _db.from('inventory').select()
+        .eq('hotel_id', hotelId!);
     return rows.map(_inventoryFromRow).toList();
   }
 

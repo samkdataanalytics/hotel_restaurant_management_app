@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../providers/hotel_session.dart';
 import 'package:uuid/uuid.dart';
 import 'package:collection/collection.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -25,6 +27,9 @@ class _KitchenScreenState extends State<KitchenScreen> {
   final _restaurantService = RestaurantService();
   final _bookingService = BookingService();
   final _timeFormat = DateFormat('hh:mm a');
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
 
   List<RestaurantOrder> _allOrders = [];
   List<RestaurantTable> _tables = [];
@@ -425,7 +430,6 @@ class _KitchenScreenState extends State<KitchenScreen> {
 
   // ── Payment-due card (accepts 1 or more orders as a group) ──────────────────
   Widget _buildPaymentCard(List<RestaurantOrder> orderGroup) {
-    final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
     final parent = orderGroup.first;
     final isMulti = orderGroup.length > 1;
     final combinedTotal =
@@ -539,7 +543,7 @@ class _KitchenScreenState extends State<KitchenScreen> {
                 Text(isMulti ? 'Combined Total' : 'Total',
                     style: TextStyle(
                         color: Colors.grey.shade400, fontSize: 13)),
-                Text(currency.format(combinedTotal),
+                Text(_currency.format(combinedTotal),
                     style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -655,8 +659,9 @@ class _KitchenPaymentDialog extends StatefulWidget {
 }
 
 class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
-  final _currency =
-      NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
   final _uuid = const Uuid();
 
   // 'cash' | 'card' | 'room'

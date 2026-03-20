@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../app_theme.dart';
+import '../providers/hotel_session.dart';
 import '../models/expense.dart';
 import '../models/room.dart';
 import '../models/booking.dart';
@@ -18,6 +20,7 @@ class ExpensesManagementScreen extends StatefulWidget {
 class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
   final _bookingService = BookingService();
   final _dateFormat = DateFormat('MMM dd, yyyy');
+  String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   List<Expense> _expenses = [];
   List<Room> _rooms = [];
@@ -326,7 +329,7 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
             child: Align(
               alignment: Alignment.centerRight,
               child: Text(
-                '\$${expense.amount.toStringAsFixed(2)}',
+                '${_sym}${expense.amount.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   color: AppTheme.danger,

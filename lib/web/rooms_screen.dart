@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
+import '../providers/hotel_session.dart';
 import '../models/room.dart';
 import '../services/booking_service.dart';
 import 'room_expenses_dialog.dart';
@@ -14,6 +16,7 @@ class RoomsScreen extends StatefulWidget {
 
 class _RoomsScreenState extends State<RoomsScreen> {
   final _bookingService = BookingService();
+  String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
   List<Room> _rooms = [];
   bool _isLoading = true;
   String _filterStatus = 'all';
@@ -130,8 +133,18 @@ class _RoomsScreenState extends State<RoomsScreen> {
       builder: (context) => const _RoomFormDialog(title: 'Add New Room'),
     );
     if (result != null) {
-      await _bookingService.addRoom(result);
-      await _loadRooms();
+      try {
+        await _bookingService.addRoom(result);
+        await _loadRooms();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add room: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -444,7 +457,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     ),
                   ),
                   Text(
-                    '\$${room.pricePerNight.toInt()} / night',
+                    '${_sym}${room.pricePerNight.toInt()} / night',
                     style: TextStyle(
                       color: AppTheme.adminPrimary,
                       fontWeight: FontWeight.w600,

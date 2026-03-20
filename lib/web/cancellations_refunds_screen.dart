@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../models/restaurant_order.dart';
+import '../providers/hotel_session.dart';
 import '../app_theme.dart';
 import '../models/restaurant_table.dart';
 import '../services/restaurant_service.dart';
@@ -48,7 +50,9 @@ class _CancellationsRefundsScreenState
     extends State<CancellationsRefundsScreen>
     with SingleTickerProviderStateMixin {
   final _service = RestaurantService();
-  final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
   final _dateF = DateFormat('MMM d, HH:mm');
 
   bool _isLoading = true;

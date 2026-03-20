@@ -80,3 +80,30 @@ ALTER TABLE restaurant_orders
 CREATE INDEX IF NOT EXISTS restaurant_orders_parent_idx
   ON restaurant_orders(parent_order_id);
 ```
+
+---
+
+## Migration 002 — SaaS Schema
+
+Run after migration 001. Adds:
+- `profiles` table (user profile + is_superadmin flag, auto-created on signup)
+- `organizations` table (company/tenant with plan tiers)
+- `organization_members` table (user → org role)
+- `property_staff` table (user → property access for new signups)
+- Extends `hotels` with: org_id, type, city, country, phone, email, timezone, logo_url, status, address
+
+### After running migration 002
+
+1. Promote your first superadmin:
+   ```sql
+   SELECT promote_to_superadmin('your@email.com');
+   ```
+
+2. Log in as superadmin → you'll be routed to /superadmin
+
+3. For new users: signup → onboarding (company setup) → property setup → main app
+
+### Plan limits
+- free: 1 property, 5 staff
+- pro: 5 properties, 20 staff
+- enterprise: unlimited
