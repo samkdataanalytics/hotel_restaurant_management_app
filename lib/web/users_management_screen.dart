@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_theme.dart';
 import '../models/staff_permission.dart';
 import '../providers/app_auth_provider.dart';
@@ -583,20 +585,61 @@ class _AddStaffDialog extends StatefulWidget {
 }
 
 class _AddStaffDialogState extends State<_AddStaffDialog> {
-  final _formKey     = GlobalKey<FormState>();
+  final _formKey      = GlobalKey<FormState>();
   final _usernameCtrl = TextEditingController();
-  final _passCtrl    = TextEditingController();
-  final _confirmCtrl = TextEditingController();
+  final _passCtrl     = TextEditingController();
+  final _confirmCtrl  = TextEditingController();
   final _staffService = StaffService();
   final Map<String, PrivilegeLevel> _permissions = {};
-  bool _saving = false;
-  bool _obscurePass = true;
+  bool _saving         = false;
+  bool _obscurePass    = true;
   bool _obscureConfirm = true;
-  bool _success = false;
+  bool _success        = false;
   String? _createdUsername;
+
+  // ── Username preview ──────────────────────────────────────────────────────
+  Timer?  _debounce;
+  String? _previewUsername;   // what the system will actually assign
+  bool    _previewing = false; // spinner while RPC is in-flight
+
+  @override
+  void initState() {
+    super.initState();
+    _usernameCtrl.addListener(_onUsernameChanged);
+  }
+
+  void _onUsernameChanged() {
+    final raw = _usernameCtrl.text.trim();
+
+    // Clear preview immediately when field is short/empty
+    if (raw.length < 3) {
+      _debounce?.cancel();
+      setState(() { _previewUsername = null; _previewing = false; });
+      return;
+    }
+
+    // Show spinner while waiting
+    setState(() => _previewing = true);
+
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
+      final resolved = await Supabase.instance.client.rpc(
+        'resolve_staff_username',
+        params: {'p_username': raw},
+      ) as String?;
+
+      if (!mounted) return;
+      setState(() {
+        _previewUsername = resolved;
+        _previewing      = false;
+      });
+    });
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _usernameCtrl.removeListener(_onUsernameChanged);
     _usernameCtrl.dispose();
     _passCtrl.dispose();
     _confirmCtrl.dispose();
@@ -627,7 +670,8 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
       setState(() {
         _saving = false;
         _success = true;
-        _createdUsername = _usernameCtrl.text.trim().toLowerCase();
+        // Use the previewed username (already resolved); fall back to raw input
+        _createdUsername = _previewUsername ?? _usernameCtrl.text.trim().toLowerCase();
       });
     } catch (e) {
       if (!mounted) return;
@@ -710,7 +754,6 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
                           decoration: InputDecoration(
                             labelText: 'Username',
                             hintText: 'e.g. john_reception',
-                            helperText: 'Only letters, numbers and underscores. Must be unique.',
                             prefixIcon: const Icon(Icons.person_outline_rounded),
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10)),
@@ -724,6 +767,53 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
                             return null;
                           },
                         ),
+                        // ── Live username preview ─────────────────────────
+                        if (_previewing)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8, left: 4),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 12, height: 12,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                SizedBox(width: 8),
+                                Text('Checking availability…',
+                                    style: TextStyle(fontSize: 12, color: Colors.black45)),
+                              ],
+                            ),
+                          )
+                        else if (_previewUsername != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8, left: 4),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle_rounded,
+                                    size: 15, color: Color(0xFF2E7D32)),
+                                const SizedBox(width: 6),
+                                const Text('Will be assigned: ',
+                                    style: TextStyle(fontSize: 12, color: Colors.black54)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE8F5E9),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: const Color(0xFF81C784)),
+                                  ),
+                                  child: Text(
+                                    _previewUsername!,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF2E7D32),
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _passCtrl,
