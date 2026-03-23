@@ -118,6 +118,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   String? _initError;
   // Permission state for the current user on the active property
   bool _isPropertyManager = true; // assume true until loaded (safe default)
+  bool _isPropertyOwner   = true; // owner = full admin (manages team + properties)
   Map<String, PrivilegeLevel> _userPermissions = {};
 
   @override
@@ -188,16 +189,23 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   Future<void> _loadUserPermissions(String propertyId) async {
     final role = await StaffService().getMyRoleForProperty(propertyId);
-    final isManager = role == null || role == 'manager' || role == 'owner';
+    // owner  = created the property (hotel_users) — full admin including team mgmt
+    // manager = promoted staff member — full operational access, no team mgmt
+    // staff   = limited to their assigned permissions
+    // null    = not found in any table → treat as owner (e.g. during onboarding)
+    final isOwner   = role == null || role == 'owner';
+    final isManager = isOwner || role == 'manager';
     Map<String, PrivilegeLevel> permissions = {};
     if (!isManager) {
       permissions = await StaffService().getMyPermissions(propertyId);
     }
     if (mounted) {
       setState(() {
+        _isPropertyOwner   = isOwner;
         _isPropertyManager = isManager;
         _userPermissions   = permissions;
       });
+      ref.read(isPropertyOwnerProvider.notifier).state   = isOwner;
       ref.read(isPropertyManagerProvider.notifier).state = isManager;
       ref.read(activeSectionPermissionsProvider.notifier).state = permissions;
     }
@@ -225,7 +233,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       rawSections = [_hotelSection];
     }
 
-    // Managers see everything + team section
+    // Managers and owners see all operational sections + team members
     if (_isPropertyManager) {
       return [...rawSections, _teamSection];
     }
@@ -500,17 +508,20 @@ class _AppShellState extends ConsumerState<AppShell> {
               ),
             );
           }),
-          const PopupMenuDivider(),
-          const PopupMenuItem<String>(
-            value: '__manage__',
-            child: Row(
-              children: [
-                Icon(Icons.settings_rounded, size: 18, color: Color(0xFF64748B)),
-                SizedBox(width: 10),
-                Text('Manage Properties', style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
-              ],
+          // Only owners can manage (rename, deactivate) properties
+          if (_isPropertyOwner) ...[
+            const PopupMenuDivider(),
+            const PopupMenuItem<String>(
+              value: '__manage__',
+              child: Row(
+                children: [
+                  Icon(Icons.settings_rounded, size: 18, color: Color(0xFF64748B)),
+                  SizedBox(width: 10),
+                  Text('Manage Properties', style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+                ],
+              ),
             ),
-          ),
+          ],
         ],
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -662,8 +673,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       children: [
         const Divider(color: Colors.white10, height: 1),
 
-        // Add Property button — hidden for staff (non-managers)
-        if (_isPropertyManager) Padding(
+        // Add Property button — only for owners
+        if (_isPropertyOwner) Padding(
           padding: EdgeInsets.symmetric(
             horizontal: _sidebarExpanded ? 10 : 8,
             vertical: 4,
@@ -876,7 +887,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
           const Spacer(),
 
-          // Current user email
+          // Current user — show username for staff accounts, email otherwise
           if (authState?.email != null)
             Row(
               children: [
@@ -887,7 +898,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  authState!.email!,
+                  (authState?.isStaffAccount ?? false)
+                      ? authState!.email!.split('@').first
+                      : authState!.email!,
                   style: const TextStyle(
                     fontSize: 13,
                     color: Color(0xFF64748B),

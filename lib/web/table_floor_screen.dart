@@ -27,8 +27,15 @@ class _PaymentResult {
   final PaymentStatus paymentStatus;
   final String? bookingId;
   final String? roomId;
-  const _PaymentResult(
-      {required this.paymentStatus, this.bookingId, this.roomId});
+  final String? discountType;   // 'percentage' | 'flat' | null
+  final double  discountAmount;
+  const _PaymentResult({
+    required this.paymentStatus,
+    this.bookingId,
+    this.roomId,
+    this.discountType,
+    this.discountAmount = 0.0,
+  });
 }
 
 // ─── Payment Dialog ───────────────────────────────────────────────────────────
@@ -56,10 +63,21 @@ class _PaymentDialogState extends State<_PaymentDialog> {
   bool _loadingGuests = false;
   Map<String, dynamic>? _selectedGuest; // the chosen entry {booking, guest, room}
 
+  // Discount
+  String _discountType   = 'percentage';
+  double _discountAmount = 0.0;
+  final  _discountCtrl   = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _loadCheckedInGuests();
+  }
+
+  @override
+  void dispose() {
+    _discountCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCheckedInGuests() async {
@@ -98,9 +116,37 @@ class _PaymentDialogState extends State<_PaymentDialog> {
     Navigator.pop(
         context,
         _PaymentResult(
-            paymentStatus: status,
-            bookingId: bookingId,
-            roomId: roomId));
+            paymentStatus:  status,
+            bookingId:      bookingId,
+            roomId:         roomId,
+            discountType:   _discountAmount > 0 ? _discountType : null,
+            discountAmount: _discountAmount));
+  }
+
+  Widget _discountToggleBtn(String label, String value) {
+    final active = _discountType == value;
+    return GestureDetector(
+      onTap: () => setState(() {
+        _discountType = value;
+        _discountAmount = double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+      }),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: active ? _kOrange : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: active ? Colors.white : Colors.grey.shade600,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _methodTile(IconData icon, String label, String value, Color color) {
@@ -140,11 +186,21 @@ class _PaymentDialogState extends State<_PaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final subtotal = widget.orders.fold(0.0, (s, o) => s + o.totalAmount);
-    final tax = subtotal * 0.08;
-    final total = subtotal + tax;
-    final orderNumbers =
-        widget.orders.map((o) => '#${o.orderNumber}').join(' + ');
+    final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+    final taxRate           = settings?.taxRate           ?? 0.08;
+    final serviceChargeRate = settings?.serviceChargeRate ?? 0.0; // always dine-in here
+
+    final itemsTotal = widget.orders.fold(0.0, (s, o) => s + o.itemsTotal);
+    final discountValue = _discountAmount <= 0
+        ? 0.0
+        : _discountType == 'percentage'
+            ? itemsTotal * (_discountAmount / 100)
+            : _discountAmount;
+    final subtotal      = (itemsTotal - discountValue).clamp(0.0, double.infinity);
+    final tax           = subtotal * taxRate;
+    final serviceCharge = subtotal * serviceChargeRate;
+    final total         = subtotal + tax + serviceCharge;
+    final orderNumbers  = widget.orders.map((o) => '#${o.orderNumber}').join(' + ');
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -184,7 +240,60 @@ class _PaymentDialogState extends State<_PaymentDialog> {
               ),
               const SizedBox(height: 16),
 
-              // Amount summary
+              // ── Discount input ──────────────────────────────────────
+              const Text('Apply Discount',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black45)),
+              const SizedBox(height: 8),
+              Row(children: [
+                // % / Flat toggle
+                Container(
+                  height: 38,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    _discountToggleBtn('%',    'percentage'),
+                    _discountToggleBtn('Flat', 'flat'),
+                  ]),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SizedBox(
+                    height: 38,
+                    child: TextField(
+                      controller: _discountCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: _discountType == 'percentage' ? 'Discount %' : 'Discount amount',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        isDense: true,
+                        suffixText: _discountType == 'percentage' ? '%' : null,
+                      ),
+                      onChanged: (v) => setState(() {
+                        _discountAmount = double.tryParse(v.trim()) ?? 0.0;
+                      }),
+                    ),
+                  ),
+                ),
+                if (_discountAmount > 0) ...[
+                  const SizedBox(width: 6),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18, color: Colors.red),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: () => setState(() {
+                      _discountAmount = 0.0;
+                      _discountCtrl.clear();
+                    }),
+                  ),
+                ],
+              ]),
+              const SizedBox(height: 16),
+
+              // ── Amount summary ───────────────────────────────────────────
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
@@ -198,13 +307,18 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                            'Subtotal   ${widget.currency.format(subtotal)}',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade600)),
-                        Text('Tax (8%)   ${widget.currency.format(tax)}',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade500)),
+                        Text('Items   ${widget.currency.format(itemsTotal)}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                        if (discountValue > 0)
+                          Text(
+                            'Discount   − ${widget.currency.format(discountValue)}',
+                            style: const TextStyle(fontSize: 12, color: Colors.green),
+                          ),
+                        Text('Tax (${(taxRate * 100).toStringAsFixed(0)}%)   ${widget.currency.format(tax)}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                        if (serviceChargeRate > 0)
+                          Text('Service   ${widget.currency.format(serviceCharge)}',
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                       ],
                     ),
                     Column(
@@ -534,6 +648,24 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
 
     setState(() => _isProcessing = true);
     try {
+      // Apply discount to the first (parent) order if one was entered
+      List<RestaurantOrder> updatedOrders = List.from(openOrders);
+      if (result.discountType != null && result.discountAmount > 0) {
+        final first = openOrders.first;
+        await _service.updateOrderDiscount(
+          orderId: first.id,
+          discountType: result.discountType!,
+          discountAmount: result.discountAmount,
+        );
+        updatedOrders = [
+          first.copyWith(
+            discountType:   result.discountType,
+            discountAmount: result.discountAmount,
+          ),
+          ...openOrders.skip(1),
+        ];
+      }
+
       final settledOrders = await _service.settleAllTableOrders(
         tableId: table.id,
         paymentStatus: result.paymentStatus,
@@ -542,14 +674,14 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
       );
 
       if (!mounted) return;
-      // Show combined invoice using openOrders (already in memory, guaranteed complete)
-      if (openOrders.isNotEmpty) {
+      // Show combined invoice — use updatedOrders so discount is reflected
+      if (updatedOrders.isNotEmpty) {
         await showDialog(
           context: context,
           builder: (_) => RestaurantInvoiceDialog(
-            order: openOrders.first,
+            order: updatedOrders.first,
             table: table,
-            allOrders: openOrders.length > 1 ? openOrders : null,
+            allOrders: updatedOrders.length > 1 ? updatedOrders : null,
           ),
         );
       }
@@ -853,9 +985,13 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
   // ─── Order view ───────────────────────────────────────
 
   Widget _buildOrderPanel(List<RestaurantOrder> openOrders, RestaurantTable table) {
+    final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+    final taxRate = settings?.taxRate ?? 0.0;
+    final serviceChargeRate = settings?.serviceChargeRate ?? 0.0;
     final subtotal = openOrders.fold(0.0, (s, o) => s + o.totalAmount);
-    final tax = subtotal * 0.08;
-    final total = subtotal + tax;
+    final tax = subtotal * taxRate;
+    final serviceCharge = subtotal * serviceChargeRate;
+    final total = subtotal + tax + serviceCharge;
     final totalItems = openOrders.fold(
         0, (s, o) => s + o.items.fold(0, (s2, i) => s2 + i.activeQuantity));
     final elapsed = DateTime.now().difference(openOrders.first.createdAt);
@@ -949,8 +1085,14 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
           child: Column(
             children: [
               _totalRow('Subtotal', _currency.format(subtotal)),
-              const SizedBox(height: 5),
-              _totalRow('Tax (8%)', _currency.format(tax), muted: true),
+              if (taxRate > 0) ...[
+                const SizedBox(height: 5),
+                _totalRow('Tax (${(taxRate * 100).toStringAsFixed(0)}%)', _currency.format(tax), muted: true),
+              ],
+              if (serviceChargeRate > 0) ...[
+                const SizedBox(height: 5),
+                _totalRow('Service (${(serviceChargeRate * 100).toStringAsFixed(0)}%)', _currency.format(serviceCharge), muted: true),
+              ],
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.symmetric(

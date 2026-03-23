@@ -264,40 +264,50 @@ class OrganizationService {
   // ── Properties ──────────────────────────────────────────────────────────────
 
   /// Returns all properties the current user has access to (via property_staff
-  /// or org membership as owner/admin).
+  /// or hotel_users legacy system).
+  ///
+  /// Uses a two-step approach: first collect IDs, then fetch hotel rows.
+  /// This avoids relying on PostgREST FK-join (hotels(*)) which can silently
+  /// return null when the schema cache is stale after a migration.
   Future<List<OrgProperty>> getMyProperties() async {
     final userId = _db.auth.currentUser?.id;
     if (userId == null) return [];
 
-    // Get properties via property_staff
-    final staffRows = await _db
-        .from('property_staff')
-        .select('property_id, hotels(*)')
-        .eq('user_id', userId);
+    final ids = <String>{};
 
-    // Also get via hotel_users (existing system)
-    final hotelRows = await _db
-        .from('hotel_users')
-        .select('hotel_id, hotels(*)')
-        .eq('user_id', userId);
-
-    final seen = <String>{};
-    final result = <OrgProperty>[];
-
-    for (final row in staffRows) {
-      final h = row['hotels'] as Map<String, dynamic>?;
-      if (h != null && seen.add(h['id'] as String)) {
-        result.add(OrgProperty.fromRow(h));
+    // 1. property_staff (new system — one row per assigned property)
+    try {
+      final rows = await _db
+          .from('property_staff')
+          .select('property_id')
+          .eq('user_id', userId);
+      for (final r in rows) {
+        final id = r['property_id'] as String?;
+        if (id != null) ids.add(id);
       }
-    }
-    for (final row in hotelRows) {
-      final h = row['hotels'] as Map<String, dynamic>?;
-      if (h != null && seen.add(h['id'] as String)) {
-        result.add(OrgProperty.fromRow(h));
-      }
-    }
+    } catch (_) {}
 
-    return result;
+    // 2. hotel_users (legacy system)
+    try {
+      final rows = await _db
+          .from('hotel_users')
+          .select('hotel_id')
+          .eq('user_id', userId);
+      for (final r in rows) {
+        final id = r['hotel_id'] as String?;
+        if (id != null) ids.add(id);
+      }
+    } catch (_) {}
+
+    if (ids.isEmpty) return [];
+
+    // 3. Fetch hotel details for all collected IDs in one query
+    final hotels = await _db
+        .from('hotels')
+        .select()
+        .inFilter('id', ids.toList());
+
+    return hotels.map((h) => OrgProperty.fromRow(h)).toList();
   }
 
   Future<OrgProperty> addProperty({

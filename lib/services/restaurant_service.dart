@@ -81,6 +81,8 @@ class RestaurantService {
         'items': r['items'] ?? [],
         'inventoryRestored': r['inventory_restored'] ?? false,
         'parentOrderId': r['parent_order_id'],
+        'discountType': r['discount_type'],
+        'discountAmount': r['discount_amount'],
       });
 
   Map<String, dynamic> _orderToRow(RestaurantOrder o) => {
@@ -95,8 +97,41 @@ class RestaurantService {
         'items': o.items.map((e) => e.toMap()).toList(),
         'inventory_restored': o.inventoryRestored,
         'parent_order_id': o.parentOrderId,
+        'discount_type': o.discountType,
+        'discount_amount': o.discountAmount,
         if (hotelId != null) 'hotel_id': hotelId,
       };
+
+  // ─── SETTINGS ─────────────────────────────────────────────────────────────
+
+  /// Fetches tax rate and service charge rate for the current property.
+  Future<({double taxRate, double serviceChargeRate})> getChargeSettings() async {
+    if (hotelId == null) return (taxRate: 0.08, serviceChargeRate: 0.0);
+    final rows = await _db
+        .from('hotel_settings')
+        .select('tax_rate, service_charge_rate')
+        .eq('hotel_id', hotelId!)
+        .limit(1);
+    if (rows.isEmpty) return (taxRate: 0.08, serviceChargeRate: 0.0);
+    final r = rows.first;
+    return (
+      taxRate:           (r['tax_rate']            as num?)?.toDouble() ?? 0.08,
+      serviceChargeRate: (r['service_charge_rate'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  /// Saves tax rate and service charge rate for the current property.
+  Future<void> saveChargeSettings({
+    required double taxRate,
+    required double serviceChargeRate,
+  }) async {
+    if (hotelId == null) return;
+    await _db.from('hotel_settings').upsert({
+      'hotel_id':            hotelId,
+      'tax_rate':            taxRate,
+      'service_charge_rate': serviceChargeRate,
+    }, onConflict: 'hotel_id');
+  }
 
   static Ingredient _ingredientFromRow(Map<String, dynamic> r) =>
       Ingredient.fromMap({
@@ -474,6 +509,18 @@ class RestaurantService {
     }
 
     return updatedOrder;
+  }
+
+  /// Applies (or clears) a discount on a single order.
+  Future<void> updateOrderDiscount({
+    required String orderId,
+    String? discountType,
+    double discountAmount = 0.0,
+  }) async {
+    await _db.from('restaurant_orders').update({
+      'discount_type':   discountType,
+      'discount_amount': discountAmount,
+    }).eq('id', orderId);
   }
 
   /// Returns ALL open (non-cancelled, non-paid) orders for a table, oldest first.

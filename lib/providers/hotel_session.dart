@@ -25,6 +25,7 @@ class HotelSettings {
   final String email;
   final String currencySymbol;
   final double taxRate;
+  final double serviceChargeRate;
   final String logoUrl;
 
   const HotelSettings({
@@ -35,18 +36,20 @@ class HotelSettings {
     required this.email,
     required this.currencySymbol,
     required this.taxRate,
+    required this.serviceChargeRate,
     required this.logoUrl,
   });
 
   factory HotelSettings.fromRow(Map<String, dynamic> r) => HotelSettings(
-        hotelId:        r['hotel_id']         as String,
-        displayName:    r['display_name']     as String? ?? '',
-        address:        r['address']          as String? ?? '',
-        phone:          r['phone']            as String? ?? '',
-        email:          r['email']            as String? ?? '',
-        currencySymbol: r['currency_symbol']  as String? ?? '\$',
-        taxRate:        (r['tax_rate'] as num?)?.toDouble() ?? 0.08,
-        logoUrl:        r['logo_url']         as String? ?? '',
+        hotelId:           r['hotel_id']             as String,
+        displayName:       r['display_name']         as String? ?? '',
+        address:           r['address']              as String? ?? '',
+        phone:             r['phone']                as String? ?? '',
+        email:             r['email']                as String? ?? '',
+        currencySymbol:    r['currency_symbol']      as String? ?? '\$',
+        taxRate:           (r['tax_rate']            as num?)?.toDouble() ?? 0.08,
+        serviceChargeRate: (r['service_charge_rate'] as num?)?.toDouble() ?? 0.00,
+        logoUrl:           r['logo_url']             as String? ?? '',
       );
 }
 

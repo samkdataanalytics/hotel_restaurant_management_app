@@ -673,10 +673,27 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
   List<Map<String, dynamic>> _checkedInGuests = [];
   Map<String, dynamic>? _selectedGuest;
 
+  // Discount
+  String _discountType   = 'percentage';
+  double _discountAmount = 0.0;
+  final  _discountCtrl   = TextEditingController();
+
+  double _discountValue(double itemsTotal) {
+    if (_discountAmount <= 0) return 0.0;
+    if (_discountType == 'percentage') return itemsTotal * (_discountAmount / 100);
+    return _discountAmount;
+  }
+
   @override
   void initState() {
     super.initState();
     _loadGuests();
+  }
+
+  @override
+  void dispose() {
+    _discountCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadGuests() async {
@@ -690,30 +707,16 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
 
   Future<void> _collectPaid() async {
     setState(() => _loading = true);
-    final parent = widget.orderGroup.first;
-    if (parent.tableId != null) {
-      // Settle all open orders for this table at once
-      await widget.restaurantService.settleAllTableOrders(
-        tableId: parent.tableId!,
-        paymentStatus: PaymentStatus.paid,
-      );
-    } else {
-      // Takeaway / no table — settle each order individually
-      for (final o in widget.orderGroup) {
-        await widget.restaurantService.collectTablePayment(
-          orderId: o.id,
-          paymentStatus: PaymentStatus.paid,
-        );
-      }
-    }
+    final updatedOrders = await _applyDiscountAndSettle(
+      paymentStatus: PaymentStatus.paid,
+    );
     if (!mounted) return;
-    // Show invoice before dismissing
     await showDialog(
       context: context,
       builder: (_) => RestaurantInvoiceDialog(
-        order: widget.orderGroup.first,
+        order: updatedOrders.first,
         table: widget.table,
-        allOrders: widget.orderGroup.length > 1 ? widget.orderGroup : null,
+        allOrders: updatedOrders.length > 1 ? updatedOrders : null,
       ),
     );
     widget.onComplete();
@@ -723,58 +726,95 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
     if (_selectedGuest == null) return;
     final b = _selectedGuest!['booking'] as Booking;
     setState(() => _loading = true);
-    final parent = widget.orderGroup.first;
-
-    if (parent.tableId != null) {
-      // Settle all open orders for this table at once (creates one combined expense)
-      await widget.restaurantService.settleAllTableOrders(
-        tableId: parent.tableId!,
-        paymentStatus: PaymentStatus.chargedToRoom,
-        bookingId: b.id,
-        roomId: b.roomId,
-      );
-    } else {
-      final combinedAmount =
-          widget.orderGroup.fold(0.0, (s, o) => s + o.totalAmount);
-      final nums = widget.orderGroup.map((o) => '#${o.orderNumber}').join(', ');
-      for (final o in widget.orderGroup) {
-        await widget.restaurantService.collectTablePayment(
-          orderId: o.id,
-          paymentStatus: PaymentStatus.chargedToRoom,
-          bookingId: b.id,
-          roomId: b.roomId,
-        );
-      }
-      await widget.bookingService.addExpense(Expense(
-        id: _uuid.v4(),
-        description: 'Restaurant Orders $nums',
-        amount: combinedAmount,
-        date: DateTime.now(),
-        category: ExpenseCategory.restaurant,
-        isBillable: true,
-        bookingId: b.id,
-        roomId: b.roomId,
-        isPaid: false,
-      ));
-    }
-
+    final updatedOrders = await _applyDiscountAndSettle(
+      paymentStatus: PaymentStatus.chargedToRoom,
+      bookingId: b.id,
+      roomId: b.roomId,
+    );
     if (!mounted) return;
-    // Show invoice before dismissing
     await showDialog(
       context: context,
       builder: (_) => RestaurantInvoiceDialog(
-        order: widget.orderGroup.first,
+        order: updatedOrders.first,
         table: widget.table,
-        allOrders: widget.orderGroup.length > 1 ? widget.orderGroup : null,
+        allOrders: updatedOrders.length > 1 ? updatedOrders : null,
       ),
     );
     widget.onComplete();
   }
 
+  /// Applies the discount to the first order, then settles all orders.
+  /// Returns the order group with the first order updated to carry the discount.
+  Future<List<RestaurantOrder>> _applyDiscountAndSettle({
+    required PaymentStatus paymentStatus,
+    String? bookingId,
+    String? roomId,
+  }) async {
+    final parent = widget.orderGroup.first;
+    final itemsTotal = widget.orderGroup.fold(0.0, (s, o) => s + o.itemsTotal);
+    final dv = _discountValue(itemsTotal);
+    final String? dType  = dv > 0 ? _discountType : null;
+    final double  dAmt   = _discountAmount;
+
+    // Apply discount to first order in DB
+    if (dType != null) {
+      await widget.restaurantService.updateOrderDiscount(
+        orderId:        parent.id,
+        discountType:   dType,
+        discountAmount: dAmt,
+      );
+    }
+
+    if (parent.tableId != null) {
+      await widget.restaurantService.settleAllTableOrders(
+        tableId: parent.tableId!,
+        paymentStatus: paymentStatus,
+        bookingId: bookingId,
+        roomId: roomId,
+      );
+    } else {
+      final nums = widget.orderGroup.map((o) => '#${o.orderNumber}').join(', ');
+      for (final o in widget.orderGroup) {
+        await widget.restaurantService.collectTablePayment(
+          orderId: o.id,
+          paymentStatus: paymentStatus,
+          bookingId: bookingId,
+          roomId: roomId,
+        );
+      }
+      if (paymentStatus == PaymentStatus.chargedToRoom && bookingId != null) {
+        final subtotal = (itemsTotal - dv).clamp(0.0, double.infinity);
+        await widget.bookingService.addExpense(Expense(
+          id: _uuid.v4(),
+          description: 'Restaurant Orders $nums',
+          amount: subtotal,
+          date: DateTime.now(),
+          category: ExpenseCategory.restaurant,
+          isBillable: true,
+          bookingId: bookingId,
+          roomId: roomId,
+          isPaid: false,
+        ));
+      }
+    }
+
+    // Return updated orders with discount reflected in first order
+    final updatedFirst = parent.copyWith(discountType: dType, discountAmount: dAmt);
+    return [updatedFirst, ...widget.orderGroup.skip(1)];
+  }
+
   @override
   Widget build(BuildContext context) {
     final orders = widget.orderGroup;
-    final combinedTotal = orders.fold(0.0, (s, o) => s + o.totalAmount);
+    final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+    final taxRate           = settings?.taxRate           ?? 0.0;
+    final serviceChargeRate = settings?.serviceChargeRate ?? 0.0;
+    final itemsTotal = orders.fold(0.0, (s, o) => s + o.itemsTotal);
+    final dv       = _discountValue(itemsTotal);
+    final subtotal = (itemsTotal - dv).clamp(0.0, double.infinity);
+    final tax      = subtotal * taxRate;
+    final svc      = subtotal * serviceChargeRate;
+    final total    = subtotal + tax + svc;
     final titleText = orders.length == 1
         ? 'Collect Payment — #${orders.first.orderNumber}'
         : 'Collect Payment — ${orders.map((o) => "#${o.orderNumber}").join(" + ")}';
@@ -805,6 +845,46 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ── Discount row ─────────────────────────────────────────
+                  Row(
+                    children: [
+                      _discountToggle('%', 'percentage'),
+                      const SizedBox(width: 4),
+                      _discountToggle('Flat', 'flat'),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _discountCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          style: const TextStyle(fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText: _discountType == 'percentage' ? 'Discount %' : 'Discount amount',
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            isDense: true,
+                            suffixText: _discountType == 'percentage' ? '%' : null,
+                          ),
+                          onChanged: (v) => setState(() {
+                            _discountAmount = double.tryParse(v.trim()) ?? 0.0;
+                          }),
+                        ),
+                      ),
+                      if (_discountAmount > 0) ...[
+                        const SizedBox(width: 6),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 18, color: Colors.red),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          onPressed: () => setState(() {
+                            _discountAmount = 0.0;
+                            _discountCtrl.clear();
+                          }),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
                   // Amount due
                   Container(
                     width: double.infinity,
@@ -815,11 +895,52 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
                     ),
                     child: Column(
                       children: [
-                        const Text('Amount Due',
-                            style: TextStyle(
-                                color: Colors.black54, fontSize: 12)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Items', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                            Text(_currency.format(itemsTotal), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                          ],
+                        ),
+                        if (dv > 0) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                _discountType == 'percentage'
+                                    ? 'Discount (${_discountAmount.toStringAsFixed(0)}%)'
+                                    : 'Discount',
+                                style: const TextStyle(fontSize: 12, color: Colors.green),
+                              ),
+                              Text('− ${_currency.format(dv)}', style: const TextStyle(fontSize: 12, color: Colors.green)),
+                            ],
+                          ),
+                        ],
+                        if (taxRate > 0) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Tax (${(taxRate * 100).toStringAsFixed(0)}%)', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                              Text(_currency.format(tax), style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                            ],
+                          ),
+                        ],
+                        if (svc > 0) ...[
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Service (${(serviceChargeRate * 100).toStringAsFixed(0)}%)', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                              Text(_currency.format(svc), style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                            ],
+                          ),
+                        ],
+                        const Divider(height: 12),
+                        const Text('TOTAL DUE', style: TextStyle(color: Colors.black54, fontSize: 12)),
                         const SizedBox(height: 4),
-                        Text(_currency.format(combinedTotal),
+                        Text(_currency.format(total),
                             style: const TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.w800,
@@ -979,6 +1100,29 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
                 ),
               ),
             ],
+    );
+  }
+
+  Widget _discountToggle(String label, String value) {
+    final active = _discountType == value;
+    return GestureDetector(
+      onTap: () => setState(() {
+        _discountType   = value;
+        _discountAmount = double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+      }),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: active ? Colors.purple.shade700 : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: active ? Colors.white : Colors.black54)),
+      ),
     );
   }
 

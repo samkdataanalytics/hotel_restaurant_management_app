@@ -95,6 +95,12 @@ class RestaurantOrder {
   /// non-null = this is a child add-on order; value is the parent order's id.
   final String? parentOrderId;
 
+  /// Discount applied at checkout. null = no discount.
+  /// 'percentage' → discountAmount is 0-100 (e.g. 10 = 10%).
+  /// 'flat'        → discountAmount is a currency value (e.g. 5.00).
+  final String? discountType;
+  final double  discountAmount;
+
   RestaurantOrder({
     required this.id,
     required this.orderNumber,
@@ -107,9 +113,23 @@ class RestaurantOrder {
     required this.items,
     this.inventoryRestored = false,
     this.parentOrderId,
+    this.discountType,
+    this.discountAmount = 0.0,
   });
 
-  double get totalAmount => items.fold(0.0, (sum, item) => sum + item.subtotal);
+  double get itemsTotal => items.fold(0.0, (sum, item) => sum + item.subtotal);
+
+  /// Computed discount value in currency units.
+  double get discountValue {
+    if (discountType == null || discountAmount <= 0) return 0.0;
+    if (discountType == 'percentage') return itemsTotal * (discountAmount / 100);
+    return discountAmount; // flat
+  }
+
+  double get totalAmount => (itemsTotal - discountValue).clamp(0.0, double.infinity);
+
+  /// Sentinel to distinguish "caller passed null" from "caller did not pass the field".
+  static const _unset = Object();
 
   RestaurantOrder copyWith({
     String? id,
@@ -123,6 +143,8 @@ class RestaurantOrder {
     List<OrderItem>? items,
     bool? inventoryRestored,
     String? parentOrderId,
+    Object? discountType = _unset, // use Object? so null can be explicitly passed
+    double? discountAmount,
   }) {
     return RestaurantOrder(
       id: id ?? this.id,
@@ -136,6 +158,8 @@ class RestaurantOrder {
       items: items ?? this.items,
       inventoryRestored: inventoryRestored ?? this.inventoryRestored,
       parentOrderId: parentOrderId ?? this.parentOrderId,
+      discountType: identical(discountType, _unset) ? this.discountType : discountType as String?,
+      discountAmount: discountAmount ?? this.discountAmount,
     );
   }
 
@@ -152,6 +176,8 @@ class RestaurantOrder {
       'items': items.map((x) => x.toMap()).toList(),
       'inventoryRestored': inventoryRestored,
       'parentOrderId': parentOrderId,
+      'discountType': discountType,
+      'discountAmount': discountAmount,
     };
   }
 
@@ -177,6 +203,8 @@ class RestaurantOrder {
       items: List<OrderItem>.from(map['items']?.map((x) => OrderItem.fromMap(x)) ?? []),
       inventoryRestored: map['inventoryRestored'] as bool? ?? false,
       parentOrderId: map['parentOrderId'],
+      discountType: map['discountType'] as String?,
+      discountAmount: (map['discountAmount'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }
