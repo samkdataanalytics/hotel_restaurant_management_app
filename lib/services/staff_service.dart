@@ -46,15 +46,28 @@ class StaffService {
           parsePrivilege(row['privilege'] as String?);
     }
 
+    // 4. Fetch hotel owners so managers can be hidden from the list
+    final ownerRows = await _db
+        .from('hotel_users')
+        .select('user_id')
+        .eq('hotel_id', propertyId)
+        .eq('role', 'owner')
+        .onError((_, __) => []);
+
+    final ownerIds = {
+      for (final r in ownerRows) r['user_id'] as String,
+    };
+
     return staffRows.map((row) {
       final uid     = row['user_id'] as String;
       final profile = profileByUid[uid];
       return PropertyStaffMember(
-        userId:      uid,
-        fullName:    profile?['full_name'] as String? ?? '',
-        email:       profile?['email']     as String? ?? '',
-        role:        row['role']           as String? ?? 'staff',
-        permissions: permsByUser[uid]      ?? {},
+        userId:          uid,
+        fullName:        profile?['full_name'] as String? ?? '',
+        email:           profile?['email']     as String? ?? '',
+        role:            row['role']           as String? ?? 'staff',
+        permissions:     permsByUser[uid]      ?? {},
+        isPropertyOwner: ownerIds.contains(uid),
       );
     }).toList();
   }
@@ -144,25 +157,28 @@ class StaffService {
   // Calls the create-staff-account Edge Function which uses the service role
   // key so the admin session is NOT interrupted.
 
+  /// [propertyAssignments] is a list of
+  /// `{ 'propertyId': String, 'permissions': Map<String,String> }`.
+  /// The first entry whose propertyId == [primaryPropertyId] becomes the
+  /// primary property (passed to create_staff_member); the rest call
+  /// add_staff_to_property in the edge function.
   Future<void> createStaffAccount({
     required String username,
     required String password,
-    required String propertyId,
+    required String primaryPropertyId,
     required String orgId,
-    required Map<String, PrivilegeLevel> permissions,
+    String role = 'staff',
+    required List<Map<String, dynamic>> propertyAssignments,
   }) async {
-    final permissionsJson = {
-      for (final e in permissions.entries) e.key: e.value.value,
-    };
-
     final response = await _db.functions.invoke(
       'create-staff-account',
       body: {
-        'username':    username,
-        'password':    password,
-        'propertyId':  propertyId,
-        'orgId':       orgId,
-        'permissions': permissionsJson,
+        'username':            username,
+        'password':            password,
+        'primaryPropertyId':   primaryPropertyId,
+        'orgId':               orgId,
+        'role':                role,
+        'propertyAssignments': propertyAssignments,
       },
     );
 
@@ -199,6 +215,20 @@ class StaffService {
       params: {'p_username': username},
     );
     return result as String?;
+  }
+
+  // ── Change a staff member's role ──────────────────────────────────────────
+
+  Future<void> setStaffRole(
+    String propertyId,
+    String userId,
+    String role, // 'staff' | 'manager'
+  ) async {
+    await _db.rpc('set_staff_role', params: {
+      'p_property_id': propertyId,
+      'p_user_id':     userId,
+      'p_role':        role,
+    });
   }
 
   // ── Remove a staff member from a property ─────────────────────────────────
@@ -262,7 +292,8 @@ class StaffService {
 
     if (hotelRows.isNotEmpty) {
       final role = hotelRows.first['role'] as String?;
-      if (role == 'owner' || role == 'manager') return 'manager';
+      if (role == 'owner') return 'owner';
+      if (role == 'manager') return 'manager';
     }
 
     return null;

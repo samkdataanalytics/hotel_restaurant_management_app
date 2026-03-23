@@ -31,7 +31,8 @@ class RestaurantInvoiceDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sym = Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+    final settings = Provider.of<HotelSession>(context, listen: false).settings;
+    final sym = settings?.currencySymbol ?? '\$';
     final currency = NumberFormat.currency(symbol: sym, decimalDigits: 2);
     final dateF = DateFormat('MMM dd, yyyy  HH:mm');
     final isPreview = order.id == 'preview';
@@ -40,11 +41,22 @@ class RestaurantInvoiceDialog extends StatelessWidget {
         ? allOrders!
         : [order];
     final isMultiTicket = ordersToRender.length > 1;
-    final subtotal =
-        ordersToRender.fold(0.0, (s, o) => s + o.totalAmount);
-    const taxRate = 0.08; // 8%
-    final tax = subtotal * taxRate;
-    final grandTotal = subtotal + tax;
+
+    // Items subtotal (before any discounts)
+    final itemsTotal = ordersToRender.fold(0.0, (s, o) => s + o.itemsTotal);
+
+    // Aggregate discounts across all tickets
+    final totalDiscount = ordersToRender.fold(0.0, (s, o) => s + o.discountValue);
+    final subtotal = itemsTotal - totalDiscount; // post-discount subtotal
+
+    // Tax & service charge from property settings
+    // Service charge only applies to dine-in orders (not takeaway)
+    final isDineIn = ordersToRender.any((o) => o.type == OrderType.dineIn);
+    final taxRate           = settings?.taxRate           ?? 0.08;
+    final serviceChargeRate = isDineIn ? (settings?.serviceChargeRate ?? 0.0) : 0.0;
+    final tax           = subtotal * taxRate;
+    final serviceCharge = subtotal * serviceChargeRate;
+    final grandTotal = subtotal + tax + serviceCharge;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -260,9 +272,30 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                     const SizedBox(height: 8),
 
                     // Totals
-                    _totalRow('Subtotal', currency.format(subtotal)),
-                    const SizedBox(height: 4),
-                    _totalRow('Tax (8%)', currency.format(tax), muted: true),
+                    _totalRow('Items Total', currency.format(itemsTotal)),
+                    if (totalDiscount > 0) ...[
+                      const SizedBox(height: 4),
+                      _totalRow('Discount', '− ${currency.format(totalDiscount)}',
+                          color: Colors.green.shade700),
+                      const SizedBox(height: 4),
+                      _totalRow('Subtotal', currency.format(subtotal)),
+                    ],
+                    if (taxRate > 0) ...[
+                      const SizedBox(height: 4),
+                      _totalRow(
+                        'Tax (${(taxRate * 100).toStringAsFixed(0)}%)',
+                        currency.format(tax),
+                        muted: true,
+                      ),
+                    ],
+                    if (serviceChargeRate > 0) ...[
+                      const SizedBox(height: 4),
+                      _totalRow(
+                        'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(0)}%)',
+                        currency.format(serviceCharge),
+                        muted: true,
+                      ),
+                    ],
                     const SizedBox(height: 10),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -358,7 +391,8 @@ class RestaurantInvoiceDialog extends StatelessWidget {
         style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black45, letterSpacing: 0.5));
   }
 
-  Widget _totalRow(String label, String value, {bool muted = false}) {
+  Widget _totalRow(String label, String value, {bool muted = false, Color? color}) {
+    final textColor = color ?? (muted ? Colors.black38 : Colors.black87);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -367,7 +401,7 @@ class RestaurantInvoiceDialog extends StatelessWidget {
             style: TextStyle(
                 fontSize: 13,
                 fontWeight: muted ? FontWeight.w400 : FontWeight.w600,
-                color: muted ? Colors.black38 : Colors.black87)),
+                color: textColor)),
       ],
     );
   }

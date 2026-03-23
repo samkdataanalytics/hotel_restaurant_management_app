@@ -46,7 +46,7 @@ class _RestaurantManagementScreenState extends State<RestaurantManagementScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -72,6 +72,7 @@ class _RestaurantManagementScreenState extends State<RestaurantManagementScreen>
                 _IngredientsTab(service: _service),
                 _TablesTab(service: _service),
                 _InventoryTab(service: _service),
+                _SettingsTab(service: _service),
               ],
             ),
           ),
@@ -128,6 +129,7 @@ class _RestaurantManagementScreenState extends State<RestaurantManagementScreen>
           Tab(icon: Icon(Icons.eco_rounded, size: 18), text: 'Ingredients & Costs'),
           Tab(icon: Icon(Icons.table_restaurant_rounded, size: 18), text: 'Tables & Occupancy'),
           Tab(icon: Icon(Icons.inventory_2_rounded, size: 18), text: 'Inventory'),
+          Tab(icon: Icon(Icons.tune_rounded, size: 18), text: 'Tax & Charges'),
         ],
       ),
     );
@@ -2480,6 +2482,240 @@ class _StockAdjustDialogState extends State<_StockAdjustDialog> {
             style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13,
                 color: sel ? c : Colors.grey.shade500))),
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  TAB 5 — TAX & CHARGES SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SettingsTab extends StatefulWidget {
+  final RestaurantService service;
+  const _SettingsTab({required this.service});
+
+  @override
+  State<_SettingsTab> createState() => _SettingsTabState();
+}
+
+class _SettingsTabState extends State<_SettingsTab> {
+  final _taxController           = TextEditingController();
+  final _serviceChargeController = TextEditingController();
+  bool _isLoading = true;
+  bool _isSaving  = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _taxController.dispose();
+    _serviceChargeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final s = await widget.service.getChargeSettings();
+    if (!mounted) return;
+    setState(() {
+      _taxController.text           = (s.taxRate * 100).toStringAsFixed(2);
+      _serviceChargeController.text = (s.serviceChargeRate * 100).toStringAsFixed(2);
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _save() async {
+    final tax = double.tryParse(_taxController.text.trim());
+    final sc  = double.tryParse(_serviceChargeController.text.trim());
+    if (tax == null || sc == null || tax < 0 || sc < 0 || tax > 100 || sc > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter valid percentages (0–100)'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      await widget.service.saveChargeSettings(
+        taxRate:           tax / 100,
+        serviceChargeRate: sc / 100,
+      );
+      // Reload HotelSession so invoices immediately use the new rates
+      if (!mounted) return;
+      await pkg_provider.Provider.of<HotelSession>(context, listen: false)
+          .reloadSettings();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Settings saved'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Header ──────────────────────────────────────────────────
+              Row(children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: _RC.accentLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.tune_rounded, color: _RC.accent, size: 20),
+                ),
+                const SizedBox(width: 14),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Tax & Charges',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  Text('Applied to all restaurant orders',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                ]),
+              ]),
+              const SizedBox(height: 28),
+
+              // ── Card ────────────────────────────────────────────────────
+              Card(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+                color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _PercentField(
+                        label: 'Tax Rate',
+                        hint: 'e.g. 8',
+                        icon: Icons.receipt_long_rounded,
+                        controller: _taxController,
+                        description: 'Added to subtotal on every order invoice.',
+                      ),
+                      const SizedBox(height: 20),
+                      _PercentField(
+                        label: 'Service Charge',
+                        hint: 'e.g. 5',
+                        icon: Icons.room_service_rounded,
+                        controller: _serviceChargeController,
+                        description: 'Optional charge for table service. Set to 0 to disable.',
+                      ),
+                      const SizedBox(height: 28),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 46,
+                        child: ElevatedButton.icon(
+                          onPressed: _isSaving ? null : _save,
+                          icon: _isSaving
+                              ? const SizedBox(
+                                  width: 16, height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.save_rounded, size: 18),
+                          label: Text(_isSaving ? 'Saving…' : 'Save Settings'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _RC.accent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF7ED),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFED7AA)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 16, color: Color(0xFFF97316)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Tax and service charge are displayed on invoices and included in the order total. '
+                        'Changes apply to new orders only.',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PercentField extends StatelessWidget {
+  final String label;
+  final String hint;
+  final IconData icon;
+  final TextEditingController controller;
+  final String description;
+
+  const _PercentField({
+    required this.label,
+    required this.hint,
+    required this.icon,
+    required this.controller,
+    required this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+        const SizedBox(height: 6),
+        Row(children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                hintText: hint,
+                prefixIcon: Icon(icon, size: 18, color: _RC.accent),
+                suffixText: '%',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              ),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 4),
+        Text(description,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+      ],
     );
   }
 }

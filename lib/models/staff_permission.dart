@@ -5,6 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// True when the active user is a manager/owner — they always have full access.
 final isPropertyManagerProvider = StateProvider<bool>((ref) => true);
 
+/// True when the active user is a property owner (not just a manager).
+/// Only owners can manage team members, add/remove properties.
+final isPropertyOwnerProvider = StateProvider<bool>((ref) => true);
+
 /// Per-section privilege map for the current non-manager user.
 final activeSectionPermissionsProvider =
     StateProvider<Map<String, PrivilegeLevel>>((ref) => {});
@@ -107,6 +111,7 @@ class PropertyStaffMember {
   final String email;
   final String role; // 'manager' | 'staff'
   final Map<String, PrivilegeLevel> permissions;
+  final bool isPropertyOwner; // true if this member is the hotel owner
 
   const PropertyStaffMember({
     required this.userId,
@@ -114,6 +119,7 @@ class PropertyStaffMember {
     required this.email,
     required this.role,
     required this.permissions,
+    this.isPropertyOwner = false,
   });
 
   bool get isManager => role == 'manager';

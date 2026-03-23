@@ -6,6 +6,11 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
+interface PropertyAssignment {
+  propertyId: string
+  permissions: Record<string, string> // sectionKey → privilege ('none'|'view'|'edit')
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -13,13 +18,31 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json()
-    const { username, password, propertyId, orgId, permissions } = body
+    const {
+      username,
+      password,
+      primaryPropertyId,
+      orgId,
+      role = 'staff',
+      propertyAssignments = [],
+    }: {
+      username: string
+      password: string
+      primaryPropertyId: string
+      orgId: string
+      role?: string
+      propertyAssignments?: PropertyAssignment[]
+    } = body
 
-    if (!username || !password || !propertyId || !orgId) {
-      return json({ error: 'Missing required fields: username, password, propertyId, orgId' }, 400)
+    if (!username || !password || !primaryPropertyId || !orgId) {
+      return json({ error: 'Missing required fields: username, password, primaryPropertyId, orgId' }, 400)
     }
     if (password.length < 6) {
       return json({ error: 'Password must be at least 6 characters' }, 400)
+    }
+    const validRoles = ['staff', 'manager']
+    if (!validRoles.includes(role)) {
+      return json({ error: `Invalid role "${role}". Must be one of: ${validRoles.join(', ')}` }, 400)
     }
 
     const authHeader = req.headers.get('Authorization')
@@ -29,12 +52,12 @@ Deno.serve(async (req: Request) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const anonKey        = Deno.env.get('SUPABASE_ANON_KEY')!
 
-    // Admin client — service role, used for auth.admin operations and SECURITY DEFINER RPCs
+    // Admin client — service role for auth.admin operations + SECURITY DEFINER RPCs
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    // User client — verifies the caller's identity and authorization
+    // User client — verifies caller's identity and authorization
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
       auth:   { autoRefreshToken: false, persistSession: false },
@@ -43,11 +66,11 @@ Deno.serve(async (req: Request) => {
     const { data: { user: caller }, error: callerErr } = await userClient.auth.getUser()
     if (!caller || callerErr) return json({ error: 'Not authenticated' }, 401)
 
-    // Verify caller is a manager/owner for this property
+    // Verify caller is a manager/owner for the primary property
     const { data: staffRow } = await userClient.from('property_staff').select('role')
-      .eq('property_id', propertyId).eq('user_id', caller.id).maybeSingle()
+      .eq('property_id', primaryPropertyId).eq('user_id', caller.id).maybeSingle()
     const { data: hotelRow } = await userClient.from('hotel_users').select('role')
-      .eq('hotel_id', propertyId).eq('user_id', caller.id).maybeSingle()
+      .eq('hotel_id', primaryPropertyId).eq('user_id', caller.id).maybeSingle()
 
     const isManager =
       (staffRow && staffRow.role === 'manager') ||
@@ -57,18 +80,15 @@ Deno.serve(async (req: Request) => {
       return json({ error: 'Not authorized. Only property managers can create staff accounts.' }, 403)
     }
 
-    // ── Step 1: Pre-compute the final username (read-only, no insert) ──────────
-    // Usernames are globally unique. The suffix format is _01, _02, etc.
+    // ── Step 1: Pre-compute globally unique username ───────────────────────────
     const { data: finalUsername, error: resolveErr } = await adminClient.rpc(
       'resolve_staff_username',
       { p_username: username },
     )
-
     if (resolveErr || !finalUsername) {
       return json({ error: `Could not resolve username: ${resolveErr?.message ?? 'unknown error'}` }, 500)
     }
 
-    // Simple global synthetic email — safe because final_username is globally unique.
     const syntheticEmail = `${finalUsername}@staff.internal`
 
     // ── Step 2: Create the Supabase auth user ─────────────────────────────────
@@ -78,35 +98,51 @@ Deno.serve(async (req: Request) => {
       email_confirm: true,
       user_metadata: { full_name: finalUsername },
     })
-
     if (createError || !newUser?.user) {
-      const msg = createError?.message ?? 'Failed to create account'
-      return json({ error: msg }, 400)
+      return json({ error: createError?.message ?? 'Failed to create account' }, 400)
     }
 
     const userId = newUser.user.id
 
-    // ── Step 3: Set up profile + org + property + username registry ───────────
-    // create_staff_member inserts into property_staff_usernames (trigger fires),
-    // then populates profiles / org_members / property_staff / permissions.
-    // Returns the final_username (TEXT) — should match what we resolved above.
+    // ── Step 3: Primary property setup via create_staff_member ────────────────
+    // Find the primary assignment's permissions (empty = full access for manager)
+    const primaryAssignment = (propertyAssignments as PropertyAssignment[])
+      .find((a) => a.propertyId === primaryPropertyId)
+    const primaryPerms = primaryAssignment?.permissions ?? {}
+
     const { data: confirmedUsername, error: setupErr } = await adminClient.rpc(
       'create_staff_member',
       {
         p_user_id:     userId,
-        p_username:    username,        // pass original; trigger re-resolves
+        p_username:    username,
         p_email:       syntheticEmail,
-        p_property_id: propertyId,
+        p_property_id: primaryPropertyId,
         p_org_id:      orgId,
-        p_permissions: permissions ?? {},
+        p_permissions: primaryPerms,
+        p_role:        role,
       },
     )
 
     if (setupErr) {
-      // Roll back: remove the orphaned auth user
       await adminClient.auth.admin.deleteUser(userId)
       console.error('create_staff_member rpc error:', setupErr.message)
       return json({ error: `Failed to set up staff member: ${setupErr.message}` }, 500)
+    }
+
+    // ── Step 4: Assign to additional properties ────────────────────────────────
+    const additionalAssignments = (propertyAssignments as PropertyAssignment[])
+      .filter((a) => a.propertyId !== primaryPropertyId)
+
+    for (const assignment of additionalAssignments) {
+      const { error: addErr } = await adminClient.rpc('add_staff_to_property', {
+        p_user_id:     userId,
+        p_property_id: assignment.propertyId,
+        p_role:        role,
+        p_permissions: assignment.permissions ?? {},
+      })
+      if (addErr) {
+        console.error(`add_staff_to_property failed for ${assignment.propertyId}:`, addErr.message)
+      }
     }
 
     return json({ userId, username: confirmedUsername ?? finalUsername }, 200)

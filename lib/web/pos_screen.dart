@@ -45,6 +45,11 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   String? _selectedTableId;
   String? _selectedBookingId;
 
+  // Discount applied to the current cart before checkout
+  String  _discountType   = 'percentage'; // 'percentage' | 'flat'
+  double  _discountAmount = 0.0;
+  final   _discountController = TextEditingController();
+
   bool _isLoading = true;
   /// All open (non-cancelled, non-paid) orders per table, sorted oldest→newest.
   Map<String, List<RestaurantOrder>> _allTableOrders = {};
@@ -53,6 +58,12 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _discountController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -99,7 +110,15 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     return _menuItems.where((e) => e.category == _selectedCategory).toList();
   }
 
-  double get _cartTotal => _cart.fold(0.0, (s, i) => s + i.subtotal);
+  double get _cartItemsTotal => _cart.fold(0.0, (s, i) => s + i.subtotal);
+
+  double get _discountValue {
+    if (_discountAmount <= 0) return 0.0;
+    if (_discountType == 'percentage') return _cartItemsTotal * (_discountAmount / 100);
+    return _discountAmount; // flat
+  }
+
+  double get _cartTotal => (_cartItemsTotal - _discountValue).clamp(0.0, double.infinity);
 
   void _addToCart(MenuItem item) {
     if (!item.isAvailable) return;
@@ -149,6 +168,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       bookingId: bookingId,
       createdAt: DateTime.now(),
       items: List.from(_cart),
+      discountType:   _discountAmount > 0 ? _discountType : null,
+      discountAmount: _discountAmount,
     );
 
     await _restaurantService.saveOrder(order); // also deducts inventory
@@ -172,6 +193,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       // Keep _selectedTableId so the next order can be placed immediately
       // for the same table (e.g. dessert after mains).
       _selectedBookingId = null;
+      _discountAmount = 0.0;
+      _discountController.clear();
       _isLoading = false;
     });
 
@@ -184,21 +207,15 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   Future<void> _handleCheckout(PaymentStatus status, {String? bookingId, String? roomId}) async {
     final order = await _checkout(paymentStatus: status, bookingId: bookingId, roomId: roomId);
     if (order == null || !mounted) return;
-    // Clear any queued snackbars (e.g. previous "Order placed!" still visible)
-    // before showing the new one so messages never stack invisibly.
+    // Show invoice immediately after checkout
+    await _showInvoiceDialog(order);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Order #${order.orderNumber} placed!'),
         backgroundColor: AppTheme.success,
-        duration: const Duration(seconds: 4),
-        action: SnackBarAction(
-          label: 'Print Invoice',
-          textColor: Colors.white,
-          onPressed: () {
-            if (mounted) _showInvoiceDialog(order);
-          },
-        ),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -270,11 +287,11 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     );
   }
 
-  void _showInvoiceDialog(RestaurantOrder order, {List<RestaurantOrder>? allOrders}) {
+  Future<void> _showInvoiceDialog(RestaurantOrder order, {List<RestaurantOrder>? allOrders}) {
     final table = order.tableId != null
         ? _tables.firstWhere((t) => t.id == order.tableId, orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0))
         : null;
-    showDialog(
+    return showDialog(
       context: context,
       builder: (_) => RestaurantInvoiceDialog(order: order, table: table, allOrders: allOrders ?? (openOrdersAvailable(order) ? _allTableOrders[order.tableId!] : null)),
     );
@@ -614,7 +631,81 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       ),
       child: Column(
         children: [
-          // Subtotal row
+          // ── Discount row ─────────────────────────────────────────────
+          if (_cart.isNotEmpty) ...[
+            Row(children: [
+              // Type toggle: % / flat
+              _DiscountTypeToggle(
+                selected: _discountType,
+                onChanged: (t) => setState(() {
+                  _discountType = t;
+                  _discountAmount = double.tryParse(_discountController.text.trim()) ?? 0.0;
+                }),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SizedBox(
+                  height: 38,
+                  child: TextField(
+                    controller: _discountController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: _discountType == 'percentage' ? 'Discount %' : 'Discount amount',
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      isDense: true,
+                      suffixText: _discountType == 'percentage' ? '%' : null,
+                    ),
+                    onChanged: (v) => setState(() {
+                      _discountAmount = double.tryParse(v.trim()) ?? 0.0;
+                    }),
+                  ),
+                ),
+              ),
+              if (_discountAmount > 0) ...[
+                const SizedBox(width: 6),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18, color: Colors.red),
+                  tooltip: 'Remove discount',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  onPressed: () => setState(() {
+                    _discountAmount = 0.0;
+                    _discountController.clear();
+                  }),
+                ),
+              ],
+            ]),
+            const SizedBox(height: 10),
+          ],
+
+          // ── Subtotal / Discount / Total rows ─────────────────────────
+          if (_discountAmount > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Subtotal', style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                Text(_currencyFormat.format(_cartItemsTotal),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _discountType == 'percentage'
+                      ? 'Discount (${_discountAmount.toStringAsFixed(0)}%)'
+                      : 'Discount',
+                  style: const TextStyle(fontSize: 13, color: Colors.green),
+                ),
+                Text('− ${_currencyFormat.format(_discountValue)}',
+                    style: const TextStyle(fontSize: 13, color: Colors.green, fontWeight: FontWeight.w600)),
+              ],
+            ),
+            const Divider(height: 12),
+          ],
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -722,6 +813,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                       paymentStatus: PaymentStatus.unpaid,
                       createdAt: DateTime.now(),
                       items: List.from(_cart),
+                      discountType:   _discountAmount > 0 ? _discountType : null,
+                      discountAmount: _discountAmount,
                     );
                     _showInvoiceDialog(previewOrder);
                   },
@@ -939,7 +1032,12 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     final tableId = openOrders.first.tableId!;
     final table = _tables.firstWhere((t) => t.id == tableId,
         orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0));
-    final combinedTotal = openOrders.fold(0.0, (s, o) => s + o.totalAmount);
+    // itemsTotal = sum of each order's items before individual discounts
+    final itemsTotal = openOrders.fold(0.0, (s, o) => s + o.itemsTotal);
+
+    final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+    final taxRate           = settings?.taxRate           ?? 0.08;
+    final serviceChargeRate = settings?.serviceChargeRate ?? 0.0;
 
     final result = await showDialog<_PosPaymentResult>(
       context: context,
@@ -949,7 +1047,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         table: table,
         bookingService: _bookingService,
         currency: _currencyFormat,
-        combinedTotal: combinedTotal,
+        itemsTotal: itemsTotal,
+        taxRate: taxRate,
+        serviceChargeRate: serviceChargeRate,
         orderCount: openOrders.length,
       ),
     );
@@ -957,20 +1057,34 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final settled = await _restaurantService.settleAllTableOrders(
+      // Apply discount to the first (parent) order before settling
+      if (result.discountAmount > 0 || result.discountType != null) {
+        await _restaurantService.updateOrderDiscount(
+          orderId:        openOrders.first.id,
+          discountType:   result.discountType,
+          discountAmount: result.discountAmount,
+        );
+      }
+      await _restaurantService.settleAllTableOrders(
         tableId: tableId,
         paymentStatus: result.paymentStatus,
         bookingId: result.bookingId,
         roomId: result.roomId,
       );
       if (!mounted) return;
-      // Show combined invoice using openOrders (already in memory, guaranteed complete)
+      // Build updated orders list — first order carries the discount
+      final updatedFirst = openOrders.first.copyWith(
+        discountType:   result.discountType,
+        discountAmount: result.discountAmount,
+      );
+      final updatedOrders = [updatedFirst, ...openOrders.skip(1)];
+      // Show combined invoice
       await showDialog(
         context: context,
         builder: (_) => RestaurantInvoiceDialog(
-          order: openOrders.first,
+          order: updatedOrders.first,
           table: table,
-          allOrders: openOrders.length > 1 ? openOrders : null,
+          allOrders: updatedOrders.length > 1 ? updatedOrders : null,
         ),
       );
       setState(() {
@@ -1092,8 +1206,15 @@ class _PosPaymentResult {
   final PaymentStatus paymentStatus;
   final String? bookingId;
   final String? roomId;
-  const _PosPaymentResult(
-      {required this.paymentStatus, this.bookingId, this.roomId});
+  final String? discountType;
+  final double discountAmount;
+  const _PosPaymentResult({
+    required this.paymentStatus,
+    this.bookingId,
+    this.roomId,
+    this.discountType,
+    this.discountAmount = 0.0,
+  });
 }
 
 class _PosPaymentDialog extends StatefulWidget {
@@ -1101,7 +1222,9 @@ class _PosPaymentDialog extends StatefulWidget {
   final RestaurantTable table;
   final BookingService bookingService;
   final NumberFormat currency;
-  final double? combinedTotal; // override when multiple orders
+  final double itemsTotal; // pre-discount total from all open orders
+  final double taxRate;
+  final double serviceChargeRate;
   final int orderCount;
 
   const _PosPaymentDialog({
@@ -1109,7 +1232,9 @@ class _PosPaymentDialog extends StatefulWidget {
     required this.table,
     required this.bookingService,
     required this.currency,
-    this.combinedTotal,
+    required this.itemsTotal,
+    required this.taxRate,
+    required this.serviceChargeRate,
     this.orderCount = 1,
   });
 
@@ -1123,14 +1248,34 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
   bool _loadingGuests = false;
   Map<String, dynamic>? _selectedGuest;
 
+  String _discountType   = 'percentage';
+  double _discountAmount = 0.0;
+  final  _discountController = TextEditingController();
+
   static const _kPurple = Color(0xFF8B5CF6);
   static const _kGreen = Color(0xFF22C55E);
   static const _kGreenBg = Color(0xFFF0FFF4);
+
+  double get _discountValue {
+    if (_discountAmount <= 0) return 0.0;
+    if (_discountType == 'percentage') return widget.itemsTotal * (_discountAmount / 100);
+    return _discountAmount;
+  }
+  double get _subtotal => (widget.itemsTotal - _discountValue).clamp(0.0, double.infinity);
+  double get _tax => _subtotal * widget.taxRate;
+  double get _serviceCharge => _subtotal * widget.serviceChargeRate;
+  double get _total => _subtotal + _tax + _serviceCharge;
 
   @override
   void initState() {
     super.initState();
     _loadCheckedInGuests();
+  }
+
+  @override
+  void dispose() {
+    _discountController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCheckedInGuests() async {
@@ -1165,8 +1310,13 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
     } else {
       status = PaymentStatus.paid;
     }
-    Navigator.pop(context,
-        _PosPaymentResult(paymentStatus: status, bookingId: bookingId, roomId: roomId));
+    Navigator.pop(context, _PosPaymentResult(
+      paymentStatus: status,
+      bookingId: bookingId,
+      roomId: roomId,
+      discountType:   _discountAmount > 0 ? _discountType : null,
+      discountAmount: _discountAmount,
+    ));
   }
 
   Widget _methodTile(IconData icon, String label, String value, Color color) {
@@ -1206,10 +1356,6 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final subtotal = widget.combinedTotal ?? widget.displayOrder.totalAmount;
-    final tax = subtotal * 0.08;
-    final total = subtotal + tax;
-
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: SizedBox(
@@ -1247,6 +1393,50 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
               ),
               const SizedBox(height: 16),
 
+              // ── Discount row ──────────────────────────────────────────────
+              Row(
+                children: [
+                  _DiscountTypeToggle(
+                    selected: _discountType,
+                    onChanged: (t) => setState(() {
+                      _discountType   = t;
+                      _discountAmount = double.tryParse(_discountController.text.trim()) ?? 0.0;
+                    }),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _discountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: _discountType == 'percentage' ? 'Discount %' : 'Discount amount',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        isDense: true,
+                        suffixText: _discountType == 'percentage' ? '%' : null,
+                      ),
+                      onChanged: (v) => setState(() {
+                        _discountAmount = double.tryParse(v.trim()) ?? 0.0;
+                      }),
+                    ),
+                  ),
+                  if (_discountAmount > 0) ...[
+                    const SizedBox(width: 6),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18, color: Colors.red),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                      onPressed: () => setState(() {
+                        _discountAmount = 0.0;
+                        _discountController.clear();
+                      }),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 12),
+
               // Amount summary
               Container(
                 width: double.infinity,
@@ -1261,10 +1451,24 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Subtotal   ${widget.currency.format(subtotal)}',
+                        Text('Items   ${widget.currency.format(widget.itemsTotal)}',
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                        Text('Tax (8%)   ${widget.currency.format(tax)}',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                        if (_discountAmount > 0)
+                          Text(
+                            _discountType == 'percentage'
+                                ? 'Discount (${_discountAmount.toStringAsFixed(0)}%)   − ${widget.currency.format(_discountValue)}'
+                                : 'Discount   − ${widget.currency.format(_discountValue)}',
+                            style: const TextStyle(fontSize: 12, color: Colors.green),
+                          ),
+                        Text(
+                          'Tax (${(widget.taxRate * 100).toStringAsFixed(0)}%)   ${widget.currency.format(_tax)}',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                        ),
+                        if (widget.serviceChargeRate > 0)
+                          Text(
+                            'Service (${(widget.serviceChargeRate * 100).toStringAsFixed(0)}%)   ${widget.currency.format(_serviceCharge)}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                          ),
                       ],
                     ),
                     Column(
@@ -1275,7 +1479,7 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
                                 color: Colors.black38)),
-                        Text(widget.currency.format(total),
+                        Text(widget.currency.format(_total),
                             style: const TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w800,
@@ -1405,6 +1609,54 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Discount type toggle (%  /  flat) ────────────────────────────────────────
+
+class _DiscountTypeToggle extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  const _DiscountTypeToggle({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 38,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        _btn('%',    'percentage'),
+        _btn('Flat', 'flat'),
+      ]),
+    );
+  }
+
+  Widget _btn(String label, String value) {
+    final active = selected == value;
+    return GestureDetector(
+      onTap: () => onChanged(value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: active ? _kOrange : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: active ? Colors.white : Colors.grey.shade600,
           ),
         ),
       ),

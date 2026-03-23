@@ -6,6 +6,7 @@ import '../app_theme.dart';
 import '../models/staff_permission.dart';
 import '../providers/app_auth_provider.dart';
 import '../services/staff_service.dart';
+import '../services/organization_service.dart';
 
 class UsersManagementScreen extends ConsumerStatefulWidget {
   const UsersManagementScreen({super.key});
@@ -56,10 +57,11 @@ class _UsersManagementScreenState
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => _AddStaffDialog(
-        propertyId: property.id,
-        orgId: authState!.organization!.id,
-        isHotel: _isHotel,
-        isRestaurant: _isRestaurant,
+        propertyId:    property.id,
+        orgId:         authState!.organization!.id,
+        isHotel:       _isHotel,
+        isRestaurant:  _isRestaurant,
+        orgProperties: authState.properties,
       ),
     );
     if (result == true) _loadData();
@@ -132,6 +134,53 @@ class _UsersManagementScreenState
     }
   }
 
+  Future<void> _changeRole(PropertyStaffMember member) async {
+    final property = ref.read(activePropertyProvider);
+    if (property == null) return;
+
+    final newRole = member.isManager ? 'staff' : 'manager';
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(
+          member.isManager ? 'Demote to Staff?' : 'Promote to Manager?',
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+        content: Text(
+          member.isManager
+              ? '"${member.fullName}" will lose full access and revert to staff-level permissions.'
+              : '"${member.fullName}" will get full access to all sections and team management.',
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: member.isManager ? AppTheme.warning : AppTheme.adminPrimary,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(member.isManager ? 'Demote' : 'Promote'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+    try {
+      await _staffService.setStaffRole(property.id, member.userId, newRole);
+      _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to change role: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   Future<void> _revokeAllAccess(PropertyStaffMember member) async {
     final property = ref.read(activePropertyProvider);
     if (property == null) return;
@@ -190,6 +239,12 @@ class _UsersManagementScreenState
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
+
+    final isOwner = ref.watch(isPropertyOwnerProvider);
+    // Managers don't see the hotel owner in the team list
+    final visibleStaff = isOwner
+        ? _staff
+        : _staff.where((m) => !m.isPropertyOwner).toList();
 
     return Container(
       color: const Color(0xFFF8FAFC),
@@ -271,7 +326,7 @@ class _UsersManagementScreenState
                       ),
                     ),
 
-                    if (_staff.isEmpty)
+                    if (visibleStaff.isEmpty)
                       Padding(
                         padding: const EdgeInsets.all(48),
                         child: Center(
@@ -297,7 +352,7 @@ class _UsersManagementScreenState
                         ),
                       )
                     else
-                      ..._staff.map((m) => _buildMemberRow(m)),
+                      ...visibleStaff.map((m) => _buildMemberRow(m, isOwner: isOwner)),
                   ],
                 ),
               ),
@@ -308,7 +363,7 @@ class _UsersManagementScreenState
     );
   }
 
-  Widget _buildMemberRow(PropertyStaffMember member) {
+  Widget _buildMemberRow(PropertyStaffMember member, {required bool isOwner}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
       decoration: BoxDecoration(
@@ -414,78 +469,109 @@ class _UsersManagementScreenState
                       ),
           ),
 
-          // Actions
+          // Actions — available for all members
           SizedBox(
             width: 48,
-            child: member.isManager
-                ? const SizedBox()
-                : PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert_rounded,
-                        size: 20, color: Color(0xFF94A3B8)),
-                    tooltip: 'Actions',
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    offset: const Offset(-120, 8),
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'edit':
-                          _editPermissions(member);
-                          break;
-                        case 'reset':
-                          _resetPassword(member);
-                          break;
-                        case 'revoke':
-                          _revokeAllAccess(member);
-                          break;
-                        case 'remove':
-                          _removeMember(member);
-                          break;
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: 'edit',
-                        child: Row(children: [
-                          Icon(Icons.tune_rounded,
-                              size: 17, color: AppTheme.adminPrimary),
-                          const SizedBox(width: 10),
-                          const Text('Edit Permissions'),
-                        ]),
+            child: PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded,
+                  size: 20, color: Color(0xFF94A3B8)),
+              tooltip: 'Actions',
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              offset: const Offset(-160, 8),
+              onSelected: (value) {
+                switch (value) {
+                  case 'role':
+                    _changeRole(member);
+                    break;
+                  case 'edit':
+                    _editPermissions(member);
+                    break;
+                  case 'reset':
+                    _resetPassword(member);
+                    break;
+                  case 'revoke':
+                    _revokeAllAccess(member);
+                    break;
+                  case 'remove':
+                    _removeMember(member);
+                    break;
+                }
+              },
+              itemBuilder: (_) => [
+                // Change role — owner only
+                if (isOwner) ...[
+                  PopupMenuItem(
+                    value: 'role',
+                    child: Row(children: [
+                      Icon(
+                        member.isManager
+                            ? Icons.arrow_downward_rounded
+                            : Icons.shield_rounded,
+                        size: 17,
+                        color: member.isManager
+                            ? AppTheme.warning
+                            : AppTheme.goldPrimary,
                       ),
-                      PopupMenuItem(
-                        value: 'reset',
-                        child: Row(children: [
-                          Icon(Icons.lock_reset_rounded,
-                              size: 17, color: AppTheme.adminPrimary),
-                          const SizedBox(width: 10),
-                          const Text('Reset Password'),
-                        ]),
+                      const SizedBox(width: 10),
+                      Text(
+                        member.isManager
+                            ? 'Demote to Staff'
+                            : 'Promote to Manager',
+                        style: TextStyle(
+                          color: member.isManager
+                              ? AppTheme.warning
+                              : AppTheme.goldPrimary,
+                        ),
                       ),
-                      PopupMenuItem(
-                        value: 'revoke',
-                        child: Row(children: [
-                          Icon(Icons.block_rounded,
-                              size: 17, color: AppTheme.warning),
-                          const SizedBox(width: 10),
-                          Text('Revoke All Access',
-                              style:
-                                  TextStyle(color: AppTheme.warning)),
-                        ]),
-                      ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: 'remove',
-                        child: Row(children: [
-                          Icon(Icons.person_remove_outlined,
-                              size: 17, color: AppTheme.danger),
-                          const SizedBox(width: 10),
-                          Text('Remove from Property',
-                              style:
-                                  TextStyle(color: AppTheme.danger)),
-                        ]),
-                      ),
-                    ],
+                    ]),
                   ),
+                  const PopupMenuDivider(),
+                ],
+                // Staff-only actions
+                if (!member.isManager) ...[
+                  PopupMenuItem(
+                    value: 'edit',
+                    child: Row(children: [
+                      Icon(Icons.tune_rounded,
+                          size: 17, color: AppTheme.adminPrimary),
+                      const SizedBox(width: 10),
+                      const Text('Edit Permissions'),
+                    ]),
+                  ),
+                  PopupMenuItem(
+                    value: 'revoke',
+                    child: Row(children: [
+                      Icon(Icons.block_rounded,
+                          size: 17, color: AppTheme.warning),
+                      const SizedBox(width: 10),
+                      Text('Revoke All Access',
+                          style: TextStyle(color: AppTheme.warning)),
+                    ]),
+                  ),
+                ],
+                PopupMenuItem(
+                  value: 'reset',
+                  child: Row(children: [
+                    Icon(Icons.lock_reset_rounded,
+                        size: 17, color: AppTheme.adminPrimary),
+                    const SizedBox(width: 10),
+                    const Text('Reset Password'),
+                  ]),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'remove',
+                  child: Row(children: [
+                    Icon(Icons.person_remove_outlined,
+                        size: 17, color: AppTheme.danger),
+                    const SizedBox(width: 10),
+                    Text('Remove from Property',
+                        style: TextStyle(color: AppTheme.danger)),
+                  ]),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -565,6 +651,85 @@ class _Chip extends StatelessWidget {
   }
 }
 
+// ─── Role chip (Staff / Manager selector) ────────────────────────────────────
+
+class _RoleChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  final String description;
+  final Color accentColor;
+
+  const _RoleChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+    required this.description,
+    this.accentColor = const Color(0xFF3B82F6), // AppTheme.adminPrimary
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? accentColor.withValues(alpha: 0.08)
+                : Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected
+                  ? accentColor.withValues(alpha: 0.4)
+                  : Colors.grey.shade300,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon,
+                  size: 18,
+                  color: selected ? accentColor : Colors.grey.shade400),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: selected ? accentColor : Colors.black54,
+                      ),
+                    ),
+                    Text(
+                      description,
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: selected
+                              ? accentColor.withValues(alpha: 0.7)
+                              : Colors.black38),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                Icon(Icons.check_circle_rounded,
+                    size: 16, color: accentColor),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Add staff dialog (username + password) ───────────────────────────────────
 
 class _AddStaffDialog extends StatefulWidget {
@@ -572,12 +737,14 @@ class _AddStaffDialog extends StatefulWidget {
   final String orgId;
   final bool isHotel;
   final bool isRestaurant;
+  final List<OrgProperty> orgProperties;
 
   const _AddStaffDialog({
     required this.propertyId,
     required this.orgId,
     required this.isHotel,
     required this.isRestaurant,
+    required this.orgProperties,
   });
 
   @override
@@ -590,12 +757,19 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
   final _passCtrl     = TextEditingController();
   final _confirmCtrl  = TextEditingController();
   final _staffService = StaffService();
-  final Map<String, PrivilegeLevel> _permissions = {};
+  // propertyId → { sectionKey → PrivilegeLevel }
+  final Map<String, Map<String, PrivilegeLevel>> _propertyPerms = {};
   bool _saving         = false;
   bool _obscurePass    = true;
   bool _obscureConfirm = true;
   bool _success        = false;
   String? _createdUsername;
+
+  // ── Role ──────────────────────────────────────────────────────────────────
+  String _role = 'staff'; // 'staff' | 'manager'
+
+  // ── Property selection (multi-property) ───────────────────────────────────
+  late Set<String> _selectedPropertyIds;
 
   // ── Username preview ──────────────────────────────────────────────────────
   Timer?  _debounce;
@@ -605,6 +779,10 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
   @override
   void initState() {
     super.initState();
+    // Pre-select the current (active) property; it cannot be deselected
+    _selectedPropertyIds = {widget.propertyId};
+    // Initialise an empty permissions map for the primary property
+    _propertyPerms[widget.propertyId] = {};
     _usernameCtrl.addListener(_onUsernameChanged);
   }
 
@@ -650,20 +828,35 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
-      final allKeys = [
-        if (widget.isHotel) ...kHotelSectionKeys,
-        if (widget.isRestaurant) ...kRestaurantSectionKeys,
-      ];
-      final fullPerms = {
-        for (final k in allKeys) k: _permissions[k] ?? PrivilegeLevel.none,
-      };
+      // Build per-property assignments list.
+      // Managers get empty permissions (full access granted by role alone).
+      final assignments = _selectedPropertyIds.map((id) {
+        final prop = widget.orgProperties.firstWhere(
+          (p) => p.id == id,
+          orElse: () => widget.orgProperties.first,
+        );
+        Map<String, String> permsJson = {};
+        if (_role == 'staff') {
+          final allKeys = [
+            if (prop.isHotel) ...kHotelSectionKeys,
+            if (prop.isRestaurant) ...kRestaurantSectionKeys,
+          ];
+          final perms = _propertyPerms[id] ?? {};
+          permsJson = {
+            for (final k in allKeys)
+              k: (perms[k] ?? PrivilegeLevel.none).value,
+          };
+        }
+        return {'propertyId': id, 'permissions': permsJson};
+      }).toList();
 
       await _staffService.createStaffAccount(
-        username:   _usernameCtrl.text.trim(),
-        password:   _passCtrl.text,
-        propertyId: widget.propertyId,
-        orgId:      widget.orgId,
-        permissions: fullPerms,
+        username:            _usernameCtrl.text.trim(),
+        password:            _passCtrl.text,
+        primaryPropertyId:   widget.propertyId,
+        orgId:               widget.orgId,
+        role:                _role,
+        propertyAssignments: assignments,
       );
 
       if (!mounted) return;
@@ -688,7 +881,7 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-            maxWidth: 640, maxHeight: _success ? 340 : 680),
+            maxWidth: 640, maxHeight: _success ? 340 : 740),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -749,6 +942,116 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
                           ),
                         ),
                         const SizedBox(height: 20),
+
+                        // ── Role selector ─────────────────────────────────
+                        const Text(
+                          'Role',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF64748B),
+                              letterSpacing: 0.8),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            _RoleChip(
+                              label: 'Staff',
+                              icon: Icons.badge_outlined,
+                              selected: _role == 'staff',
+                              onTap: () => setState(() => _role = 'staff'),
+                              description: 'Per-section access control',
+                            ),
+                            const SizedBox(width: 10),
+                            _RoleChip(
+                              label: 'Manager',
+                              icon: Icons.shield_rounded,
+                              selected: _role == 'manager',
+                              onTap: () => setState(() => _role = 'manager'),
+                              description: 'Full access + team management',
+                              accentColor: AppTheme.goldPrimary,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+
+                        // ── Property assignment ───────────────────────────
+                        // Only shown when the org has more than one property
+                        if (widget.orgProperties.length > 1) ...[
+                          const Text(
+                            'Assign to Properties',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF64748B),
+                                letterSpacing: 0.8),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: widget.orgProperties.map((p) {
+                              final isPrimary = p.id == widget.propertyId;
+                              final isSelected = _selectedPropertyIds.contains(p.id);
+                              return FilterChip(
+                                label: Text(p.name),
+                                selected: isSelected,
+                                onSelected: isPrimary
+                                    ? null // primary property cannot be deselected
+                                    : (v) => setState(() {
+                                          if (v) {
+                                            _selectedPropertyIds.add(p.id);
+                                            _propertyPerms[p.id] = {};
+                                          } else {
+                                            _selectedPropertyIds.remove(p.id);
+                                            _propertyPerms.remove(p.id);
+                                          }
+                                        }),
+                                avatar: Icon(
+                                  p.isHotel && p.isRestaurant
+                                      ? Icons.business_rounded
+                                      : p.isRestaurant
+                                          ? Icons.restaurant_rounded
+                                          : Icons.hotel_rounded,
+                                  size: 14,
+                                  color: isSelected
+                                      ? AppTheme.adminPrimary
+                                      : Colors.grey,
+                                ),
+                                selectedColor: AppTheme.adminPrimary.withValues(alpha: 0.1),
+                                checkmarkColor: AppTheme.adminPrimary,
+                                labelStyle: TextStyle(
+                                  fontSize: 12,
+                                  color: isSelected
+                                      ? AppTheme.adminPrimary
+                                      : Colors.black54,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                ),
+                                side: BorderSide(
+                                  color: isPrimary
+                                      ? AppTheme.adminPrimary.withValues(alpha: 0.5)
+                                      : isSelected
+                                          ? AppTheme.adminPrimary.withValues(alpha: 0.3)
+                                          : Colors.grey.shade300,
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          if (_selectedPropertyIds.length > 1)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                'Account will have access to ${_selectedPropertyIds.length} properties.',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppTheme.adminPrimary),
+                              ),
+                            ),
+                          const SizedBox(height: 20),
+                        ],
+
                         TextFormField(
                           controller: _usernameCtrl,
                           decoration: InputDecoration(
@@ -857,13 +1160,116 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
                               : null,
                         ),
                         const SizedBox(height: 24),
-                        _PrivilegeMatrix(
-                          permissions:  _permissions,
-                          isHotel:      widget.isHotel,
-                          isRestaurant: widget.isRestaurant,
-                          onChanged:    (key, val) =>
-                              setState(() => _permissions[key] = val),
-                        ),
+                        if (_role == 'manager')
+                          // Manager banner — no per-section config needed
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.goldPrimary.withValues(alpha: 0.07),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color: AppTheme.goldPrimary.withValues(alpha: 0.25)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.shield_rounded,
+                                    size: 16, color: AppTheme.goldPrimary),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Managers have full access to all sections and can manage the team.',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppTheme.goldPrimary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          // ── Per-property permission matrices ──────────────
+                          // Single property: no header, single matrix.
+                          // Multiple properties: one header + matrix each.
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: () {
+                              final orderedIds = [
+                                widget.propertyId,
+                                ..._selectedPropertyIds.where(
+                                    (id) => id != widget.propertyId),
+                              ];
+                              final List<Widget> sections = [];
+                              for (var i = 0; i < orderedIds.length; i++) {
+                                final id = orderedIds[i];
+                                final prop = widget.orgProperties.firstWhere(
+                                  (p) => p.id == id,
+                                  orElse: () => widget.orgProperties.first,
+                                );
+                                final perms =
+                                    _propertyPerms.putIfAbsent(id, () => {});
+
+                                if (orderedIds.length > 1) {
+                                  // Show property header when multiple selected
+                                  if (i > 0) sections.add(const Divider(height: 32));
+                                  sections.add(
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 10),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            prop.isHotel && prop.isRestaurant
+                                                ? Icons.business_rounded
+                                                : prop.isRestaurant
+                                                    ? Icons.restaurant_rounded
+                                                    : Icons.hotel_rounded,
+                                            size: 15,
+                                            color: AppTheme.adminPrimary,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            prop.name,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          if (id == widget.propertyId) ...[
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                  horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.adminPrimary
+                                                    .withValues(alpha: 0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'Current',
+                                                style: TextStyle(
+                                                    fontSize: 10,
+                                                    color: AppTheme.adminPrimary,
+                                                    fontWeight: FontWeight.w600),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                sections.add(_PrivilegeMatrix(
+                                  permissions:  perms,
+                                  isHotel:      prop.isHotel,
+                                  isRestaurant: prop.isRestaurant,
+                                  onChanged:    (key, val) =>
+                                      setState(() => perms[key] = val),
+                                ));
+                              }
+                              return sections;
+                            }(),
+                          ),
                         const SizedBox(height: 8),
                       ],
                     ),
@@ -943,9 +1349,11 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
           const Icon(Icons.check_circle_rounded,
               size: 48, color: Color(0xFF22C55E)),
           const SizedBox(height: 12),
-          const Text(
-            'Staff account created successfully!',
-            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          Text(
+            _role == 'manager'
+                ? 'Manager account created successfully!'
+                : 'Staff account created successfully!',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
