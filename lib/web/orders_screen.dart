@@ -42,15 +42,23 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
-    final orders = await _service.getOrders();
-    final tables = await _service.getTables();
-    if (!mounted) return;
-    orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    setState(() {
-      _orders = orders;
-      _tables = tables;
-      _isLoading = false;
-    });
+    try {
+      final orders = await _service.getOrders();
+      final tables = await _service.getTables();
+      if (!mounted) return;
+      orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      setState(() {
+        _orders = orders;
+        _tables = tables;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load orders: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   List<RestaurantOrder> get _filtered {
@@ -58,9 +66,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     return _orders.where((o) {
       bool dateOk = true;
       if (_dateFilter == _DateFilter.today) {
-        dateOk = o.createdAt.year == now.year &&
-            o.createdAt.month == now.month &&
-            o.createdAt.day == now.day;
+        dateOk = DateUtils.isSameDay(o.createdAt, now);
       } else if (_dateFilter == _DateFilter.week) {
         dateOk = now.difference(o.createdAt).inDays < 7;
       }
@@ -144,7 +150,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) {
           final totalRefund = refundable.fold(0.0, (sum, item) {
-            return sum + item.menuItem.price * (refundQtys[item.id] ?? 0);
+            return sum + item.menuItem.price * order.discountFactor * (refundQtys[item.id] ?? 0);
           });
           final anySelected = refundQtys.values.any((q) => q > 0);
 
@@ -173,7 +179,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                   ...refundable.map((item) {
                     final qty = refundQtys[item.id] ?? 0;
                     final max = item.activeQuantity;
-                    final lineRefund = item.menuItem.price * qty;
+                    final lineRefund = item.menuItem.price * order.discountFactor * qty;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Row(
@@ -187,7 +193,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600)),
                                 Text(
-                                  '${_currency.format(item.menuItem.price)} each'
+                                  '${_currency.format(item.menuItem.price * order.discountFactor)} each'
                                   ' · ${item.activeQuantity} available',
                                   style: TextStyle(
                                       fontSize: 11,
@@ -588,10 +594,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 const SizedBox(width: 8),
               ],
               _chip('${children.length} ADD-ON${children.length == 1 ? "" : "S"}',
-                  Colors.teal.shade700),
+                  Colors.teal.shade700, icon: Icons.add_circle_outline_rounded),
               const SizedBox(width: 6),
               _chip(_paymentLbl(parent.paymentStatus),
-                  _paymentColor(parent.paymentStatus)),
+                  _paymentColor(parent.paymentStatus),
+                  icon: _paymentIcon(parent.paymentStatus)),
               const Spacer(),
               Text(
                 DateFormat('MMM d, HH:mm').format(parent.createdAt),
@@ -633,7 +640,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     final canCancel = !isCancelled && !isServed;
     final hasRefundable = isServed && order.items.any((i) => !i.isFullyRefunded);
     final totalRefunded = order.items.fold(
-        0.0, (s, i) => s + i.menuItem.price * i.refundedQuantity);
+        0.0, (s, i) => s + i.menuItem.price * order.discountFactor * i.refundedQuantity);
 
     return Container(
       margin: nested ? EdgeInsets.zero : const EdgeInsets.only(bottom: 12),
@@ -674,10 +681,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                _chip(_statusLbl(order.status), _statusColor(order.status)),
+                _chip(_statusLbl(order.status), _statusColor(order.status),
+                    icon: _statusIcon(order.status)),
                 const SizedBox(width: 6),
                 _chip(_paymentLbl(order.paymentStatus),
-                    _paymentColor(order.paymentStatus)),
+                    _paymentColor(order.paymentStatus),
+                    icon: _paymentIcon(order.paymentStatus)),
                 const Spacer(),
                 Text(
                   DateFormat('MMM d, HH:mm').format(order.createdAt),
@@ -831,16 +840,43 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
 
   // ─── Helpers ─────────────────────────────────────────
 
-  Widget _chip(String label, Color color) {
+  Widget _chip(String label, Color color, {IconData? icon}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(6)),
-      child: Text(label,
-          style: TextStyle(
-              fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 10, color: color),
+            const SizedBox(width: 3),
+          ],
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+        ],
+      ),
     );
+  }
+
+  IconData _statusIcon(OrderStatus s) {
+    switch (s) {
+      case OrderStatus.pending:    return Icons.schedule_rounded;
+      case OrderStatus.preparing:  return Icons.local_fire_department_rounded;
+      case OrderStatus.ready:      return Icons.check_circle_rounded;
+      case OrderStatus.served:     return Icons.done_all_rounded;
+      case OrderStatus.cancelled:  return Icons.cancel_rounded;
+    }
+  }
+
+  IconData _paymentIcon(PaymentStatus s) {
+    switch (s) {
+      case PaymentStatus.paid:          return Icons.check_circle_rounded;
+      case PaymentStatus.chargedToRoom: return Icons.hotel_rounded;
+      case PaymentStatus.unpaid:        return Icons.error_outline_rounded;
+    }
   }
 
   Widget _metaIcon(IconData icon, String label) {

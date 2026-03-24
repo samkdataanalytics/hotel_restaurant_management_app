@@ -350,18 +350,18 @@ class OrganizationService {
 
     final property = OrgProperty.fromRow(row);
 
-    // Add creator to property_staff
+    // Add creator to property_staff as owner
     await _db.from('property_staff').insert({
       'property_id': property.id,
       'user_id':     userId,
-      'role':        'manager',
+      'role':        'owner',
     });
 
     // Also add to hotel_users for backward compat with existing screens
     await _db.from('hotel_users').insert({
       'hotel_id': property.id,
       'user_id':  userId,
-      'role':     'manager',
+      'role':     'owner',
     }).onError((_, __) => []);  // ignore if already exists
 
     // Seed hotel_settings for existing screens

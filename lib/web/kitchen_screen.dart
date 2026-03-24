@@ -66,23 +66,31 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
 
   Future<void> _loadData({bool silent = false}) async {
     if (!silent) setState(() => _isLoading = true);
-    final ordersFuture = _restaurantService.getOrders();
-    final tablesFuture = _restaurantService.getTables();
-    final orders = await ordersFuture;
-    final tables = await tablesFuture;
-    final now = DateTime.now();
-    final todayOrders = orders.where((o) =>
-        o.createdAt.year == now.year &&
-        o.createdAt.month == now.month &&
-        o.createdAt.day == now.day &&
-        o.status != OrderStatus.cancelled).toList();
-    todayOrders.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    if (!mounted) return;
-    setState(() {
-      _allOrders = todayOrders;
-      _tables = tables;
-      _isLoading = false;
-    });
+    try {
+      final ordersFuture = _restaurantService.getOrders();
+      final tablesFuture = _restaurantService.getTables();
+      final orders = await ordersFuture;
+      final tables = await tablesFuture;
+      final now = DateTime.now();
+      final todayOrders = orders.where((o) =>
+          o.createdAt.year == now.year &&
+          o.createdAt.month == now.month &&
+          o.createdAt.day == now.day &&
+          o.status != OrderStatus.cancelled).toList();
+      todayOrders.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      if (!mounted) return;
+      setState(() {
+        _allOrders = todayOrders;
+        _tables = tables;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load kitchen data: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   /// Returns the display name for a table ID, e.g. "Table 3".
@@ -93,6 +101,25 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     } catch (_) {
       return 'Table ?';
     }
+  }
+
+  // ── Age-based urgency helpers ────────────────────────────────────────────────
+
+  /// Card background colour escalates with age.
+  Color _cardBgColor(DateTime createdAt) {
+    final minutes = DateTime.now().difference(createdAt).inMinutes;
+    if (minutes >= 15) return const Color(0xFF321515); // dark red tint
+    if (minutes >= 8)  return const Color(0xFF2D2610); // dark amber tint
+    return const Color(0xFF334155);                    // default slate
+  }
+
+  /// Border colour based on age; isNew overrides to orange.
+  BorderSide _cardBorderSide(DateTime createdAt, bool isNew) {
+    if (isNew) return BorderSide(color: Colors.orange.shade300, width: 2);
+    final minutes = DateTime.now().difference(createdAt).inMinutes;
+    if (minutes >= 15) return BorderSide(color: Colors.red.shade400,   width: 2.0);
+    if (minutes >= 8)  return BorderSide(color: Colors.amber.shade600, width: 1.5);
+    return BorderSide.none;
   }
 
   /// Returns how many open (non-cancelled, unpaid) orders exist for a table today.
@@ -150,11 +177,20 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildColumn('Pending', _pendingOrders,
-              nextStatus: OrderStatus.preparing, color: Colors.orange),
+              nextStatus: OrderStatus.preparing,
+              color: Colors.orange,
+              bgTint: Colors.orange.withOpacity(0.04),
+              emptyLabel: 'No pending orders'),
           _buildColumn('Preparing', _preparingOrders,
-              nextStatus: OrderStatus.ready, color: Colors.blue),
+              nextStatus: OrderStatus.ready,
+              color: Colors.blue,
+              bgTint: Colors.blue.withOpacity(0.04),
+              emptyLabel: 'Nothing in progress'),
           _buildColumn('Ready to Serve', _readyOrders,
-              nextStatus: OrderStatus.served, color: Colors.green),
+              nextStatus: OrderStatus.served,
+              color: Colors.green,
+              bgTint: Colors.green.withOpacity(0.05),
+              emptyLabel: 'All caught up!'),
           _buildPaymentColumn(),
         ],
       ),
@@ -167,24 +203,44 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     List<RestaurantOrder> orders, {
     required OrderStatus nextStatus,
     required MaterialColor color,
+    Color? bgTint,
+    String emptyLabel = 'No orders',
   }) {
     return Expanded(
       child: Container(
         margin: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A).withOpacity(0.5),
+          color: bgTint != null
+              ? Color.alphaBlend(bgTint, const Color(0xFF0F172A).withOpacity(0.5))
+              : const Color(0xFF0F172A).withOpacity(0.5),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
           children: [
             _columnHeader(title, orders.length, color),
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(12),
-                itemCount: orders.length,
-                itemBuilder: (_, i) =>
-                    _buildOrderCard(orders[i], nextStatus, color),
-              ),
+              child: orders.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle_outline,
+                              color: color.withOpacity(0.25), size: 40),
+                          const SizedBox(height: 8),
+                          Text(emptyLabel,
+                              style: TextStyle(
+                                  color: color.withOpacity(0.45),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: orders.length,
+                      itemBuilder: (_, i) =>
+                          _buildOrderCard(orders[i], nextStatus, color),
+                    ),
             ),
           ],
         ),
@@ -328,22 +384,15 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   // ── Order card (Pending / Preparing / Ready) ─────────────────────────────────
   Widget _buildOrderCard(
       RestaurantOrder order, OrderStatus nextStatus, MaterialColor color) {
-    final age = DateTime.now().difference(order.createdAt);
-    final minutes = age.inMinutes;
-    final isUrgent =
-        order.status == OrderStatus.pending && minutes > 15;
-    final isNew = order.status == OrderStatus.pending && age.inSeconds < 30;
+    final age    = DateTime.now().difference(order.createdAt);
+    final isNew  = order.status == OrderStatus.pending && age.inSeconds < 30;
     final isAddon = order.parentOrderId != null;
 
     return Card(
-      color: const Color(0xFF334155),
+      color: _cardBgColor(order.createdAt),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: isNew
-            ? BorderSide(color: Colors.orange.shade300, width: 2)
-            : isUrgent
-                ? BorderSide(color: Colors.red.shade400, width: 2)
-                : BorderSide.none,
+        side: _cardBorderSide(order.createdAt, isNew),
       ),
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -385,13 +434,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                     ],
                   ),
                 ),
-                if (minutes > 0)
-                  Text('${minutes}m',
-                      style: TextStyle(
-                          color: isUrgent
-                              ? Colors.red.shade300
-                              : Colors.grey.shade400,
-                          fontWeight: FontWeight.bold)),
+                _ElapsedTimerBadge(createdAt: order.createdAt),
               ],
             ),
             const Divider(color: Colors.white24, height: 24),
@@ -407,9 +450,27 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                               fontSize: 16)),
                       const SizedBox(width: 12),
                       Expanded(
-                          child: Text(item.menuItem.name,
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 16))),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item.menuItem.name,
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 16)),
+                            if (item.notes.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  '⚠ ${item.notes}',
+                                  style: TextStyle(
+                                    color: Colors.orange.shade300,
+                                    fontSize: 12,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 )),
@@ -632,6 +693,76 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
           _loadData(silent: true);
         },
       ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Live elapsed-time badge — rebuilds itself every second independently
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _ElapsedTimerBadge extends StatefulWidget {
+  final DateTime createdAt;
+  const _ElapsedTimerBadge({required this.createdAt});
+
+  @override
+  State<_ElapsedTimerBadge> createState() => _ElapsedTimerBadgeState();
+}
+
+class _ElapsedTimerBadgeState extends State<_ElapsedTimerBadge> {
+  late Timer _timer;
+  late Duration _elapsed;
+
+  @override
+  void initState() {
+    super.initState();
+    _elapsed = DateTime.now().difference(widget.createdAt);
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() => _elapsed = DateTime.now().difference(widget.createdAt));
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final minutes = _elapsed.inMinutes;
+    final seconds = _elapsed.inSeconds % 60;
+
+    final Color color;
+    final IconData icon;
+    if (minutes >= 15) {
+      color = Colors.red.shade300;
+      icon  = Icons.warning_amber_rounded;
+    } else if (minutes >= 8) {
+      color = Colors.amber.shade400;
+      icon  = Icons.timer_outlined;
+    } else {
+      color = Colors.grey.shade500;
+      icon  = Icons.timer_outlined;
+    }
+
+    final label = minutes > 0
+        ? '${minutes}m ${seconds.toString().padLeft(2, '0')}s'
+        : '${seconds}s';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 3),
+        Text(label,
+            style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 13)),
+      ],
     );
   }
 }
@@ -865,7 +996,11 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
                             suffixText: _discountType == 'percentage' ? '%' : null,
                           ),
                           onChanged: (v) => setState(() {
-                            _discountAmount = double.tryParse(v.trim()) ?? 0.0;
+                            final raw = double.tryParse(v.trim()) ?? 0.0;
+                            final total = widget.orderGroup.fold(0.0, (s, o) => s + o.itemsTotal);
+                            _discountAmount = _discountType == 'percentage'
+                                ? raw.clamp(0.0, 100.0)
+                                : raw.clamp(0.0, total);
                           }),
                         ),
                       ),
@@ -1108,7 +1243,11 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
     return GestureDetector(
       onTap: () => setState(() {
         _discountType   = value;
-        _discountAmount = double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+        final raw = double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+        final total = widget.orderGroup.fold(0.0, (s, o) => s + o.itemsTotal);
+        _discountAmount = value == 'percentage'
+            ? raw.clamp(0.0, 100.0)
+            : raw.clamp(0.0, total);
       }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),

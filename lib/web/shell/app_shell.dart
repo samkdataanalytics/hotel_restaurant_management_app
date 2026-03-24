@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,8 @@ import '../../services/organization_service.dart';
 import '../../services/booking_service.dart';
 import '../../services/restaurant_service.dart';
 import '../../models/staff_permission.dart';
+import '../../models/booking.dart';
+import '../../models/restaurant_order.dart';
 import '../../services/staff_service.dart';
 import '../dashboard_screen.dart';
 import '../checkins_screen.dart';
@@ -120,11 +123,25 @@ class _AppShellState extends ConsumerState<AppShell> {
   bool _isPropertyManager = true; // assume true until loaded (safe default)
   bool _isPropertyOwner   = true; // owner = full admin (manages team + properties)
   Map<String, PrivilegeLevel> _userPermissions = {};
+  // Badge counts: pageIndex → count (only populated for actionable items)
+  Map<int, int> _badgeCounts = {};
+  Timer? _badgeRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
+    // Refresh badge counts every 30 seconds in the background
+    _badgeRefreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _loadBadgeCounts(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _badgeRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _initialize() async {
@@ -185,6 +202,8 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     // Load current user's role + permissions for this property
     await _loadUserPermissions(property.id);
+    // Refresh badge counts now that services are pointed at the new property
+    _loadBadgeCounts();
   }
 
   Future<void> _loadUserPermissions(String propertyId) async {
@@ -208,6 +227,45 @@ class _AppShellState extends ConsumerState<AppShell> {
       ref.read(isPropertyOwnerProvider.notifier).state   = isOwner;
       ref.read(isPropertyManagerProvider.notifier).state = isManager;
       ref.read(activeSectionPermissionsProvider.notifier).state = permissions;
+    }
+  }
+
+  /// Fetches counts for nav items that need attention badges.
+  /// Runs silently — failures are swallowed so they never break the shell.
+  Future<void> _loadBadgeCounts() async {
+    if (!mounted) return;
+    try {
+      final results = await Future.wait([
+        BookingService().getEnrichedBookings(),
+        RestaurantService().getOrders(),
+      ]);
+
+      final bookings = results[0] as List<Map<String, dynamic>>;
+      final orders   = results[1] as List<RestaurantOrder>;
+      final today    = DateTime.now();
+
+      // Check-Ins (page 1): guests arriving today still awaiting check-in
+      final pendingArrivals = bookings.where((d) {
+        final b = d['booking'] as Booking;
+        return b.status == BookingStatus.pending &&
+            DateUtils.isSameDay(b.checkInDate, today);
+      }).length;
+
+      // Kitchen (page 8): orders pending or in preparation today
+      final activeKitchen = orders.where((o) =>
+          (o.status == OrderStatus.pending ||
+              o.status == OrderStatus.preparing) &&
+          DateUtils.isSameDay(o.createdAt, today)).length;
+
+      if (!mounted) return;
+      setState(() {
+        _badgeCounts = {
+          if (pendingArrivals > 0) 1: pendingArrivals,
+          if (activeKitchen   > 0) 8: activeKitchen,
+        };
+      });
+    } catch (_) {
+      // Non-critical — badge counts are best-effort
     }
   }
 
@@ -260,6 +318,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget build(BuildContext context) {
     final activeProperty = ref.watch(activePropertyProvider);
     final authState = ref.watch(authProvider).valueOrNull;
+    final isMobile = MediaQuery.of(context).size.width < 768;
 
     // When the active property changes (e.g. after adding a new property),
     // re-apply it so HotelSession, BookingService, RestaurantService update.
@@ -312,13 +371,14 @@ class _AppShellState extends ConsumerState<AppShell> {
     final sections = _activeSections(activeProperty);
 
     return Scaffold(
+      drawer: isMobile ? Drawer(child: _buildSidebar(activeProperty, authState, sections, isDrawer: true)) : null,
       body: Row(
         children: [
-          _buildSidebar(activeProperty, authState, sections),
+          if (!isMobile) _buildSidebar(activeProperty, authState, sections),
           Expanded(
             child: Column(
               children: [
-                _buildTopBar(activeProperty, authState),
+                _buildTopBar(activeProperty, authState, isMobile),
                 Expanded(
                   key: ValueKey(activeProperty?.id ?? 'none'),
                   child: activeProperty?.status == 'inactive'
@@ -352,11 +412,13 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget _buildSidebar(
     OrgProperty? activeProperty,
     AppAuthState? authState,
-    List<_NavSection> sections,
-  ) {
+    List<_NavSection> sections, {
+    bool isDrawer = false,
+  }) {
+    final expanded = isDrawer ? true : _sidebarExpanded;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
-      width: _sidebarExpanded ? 240 : 72,
+      width: expanded ? 240 : 72,
       decoration: BoxDecoration(
         color: AppTheme.sidebarDark,
         boxShadow: [
@@ -369,33 +431,33 @@ class _AppShellState extends ConsumerState<AppShell> {
       ),
       child: Column(
         children: [
-          _buildSidebarLogo(activeProperty),
+          _buildSidebarLogo(activeProperty, expanded),
           const Divider(color: Colors.white10, height: 1),
-          if (_sidebarExpanded)
+          if (expanded)
             _buildPropertySwitcher(authState, activeProperty),
-          if (_sidebarExpanded)
+          if (expanded)
             const Divider(color: Colors.white10, height: 1),
           const SizedBox(height: 8),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 children: sections
-                    .map((section) => _buildSection(section))
+                    .map((section) => _buildSection(section, expanded))
                     .toList(),
               ),
             ),
           ),
-          _buildSidebarFooter(authState),
+          _buildSidebarFooter(authState, expanded),
         ],
       ),
     );
   }
 
-  Widget _buildSidebarLogo(OrgProperty? property) {
+  Widget _buildSidebarLogo(OrgProperty? property, bool expanded) {
     return Container(
       height: 72,
       padding: EdgeInsets.symmetric(
-        horizontal: _sidebarExpanded ? 20 : 12,
+        horizontal: expanded ? 20 : 12,
       ),
       alignment: Alignment.centerLeft,
       child: Row(
@@ -415,7 +477,7 @@ class _AppShellState extends ConsumerState<AppShell> {
               size: 22,
             ),
           ),
-          if (_sidebarExpanded) ...[
+          if (expanded) ...[
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -551,11 +613,11 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  Widget _buildSection(_NavSection section) {
+  Widget _buildSection(_NavSection section, bool expanded) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_sidebarExpanded)
+        if (expanded)
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
             child: Row(
@@ -592,18 +654,19 @@ class _AppShellState extends ConsumerState<AppShell> {
               ),
             ),
           ),
-        ...section.items.map((item) => _buildNavItem(item, section)),
+        ...section.items.map((item) => _buildNavItem(item, section, expanded)),
         const SizedBox(height: 4),
       ],
     );
   }
 
-  Widget _buildNavItem(_NavItem item, _NavSection section) {
+  Widget _buildNavItem(_NavItem item, _NavSection section, bool expanded) {
     final isSelected = _selectedIndex == item.pageIndex;
+    final count      = _badgeCounts[item.pageIndex] ?? 0;
 
     return Padding(
       padding: EdgeInsets.symmetric(
-        horizontal: _sidebarExpanded ? 10 : 8,
+        horizontal: expanded ? 10 : 8,
         vertical: 2,
       ),
       child: Material(
@@ -615,7 +678,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             padding: EdgeInsets.symmetric(
-              horizontal: _sidebarExpanded ? 12 : 0,
+              horizontal: expanded ? 12 : 0,
               vertical: 11,
             ),
             decoration: BoxDecoration(
@@ -627,16 +690,37 @@ class _AppShellState extends ConsumerState<AppShell> {
                   : null,
             ),
             child: Row(
-              mainAxisAlignment: _sidebarExpanded
+              mainAxisAlignment: (expanded || MediaQuery.of(context).size.width < 768)
                   ? MainAxisAlignment.start
                   : MainAxisAlignment.center,
               children: [
-                Icon(
-                  item.icon,
-                  size: 20,
-                  color: isSelected ? section.accent : Colors.white38,
-                ),
-                if (_sidebarExpanded) ...[
+                // Icon — with a small dot overlay when collapsed and count > 0
+                expanded
+                    ? Icon(item.icon, size: 20,
+                          color: isSelected ? section.accent : Colors.white38)
+                    : Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Icon(item.icon, size: 20,
+                              color: isSelected ? section.accent : Colors.white38),
+                          if (count > 0)
+                            Positioned(
+                              top: -4,
+                              right: -4,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.danger,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: AppTheme.sidebarDark, width: 1.5),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                if (expanded) ...[
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -644,13 +728,29 @@ class _AppShellState extends ConsumerState<AppShell> {
                       style: TextStyle(
                         color: isSelected ? Colors.white : Colors.white54,
                         fontSize: 13,
-                        fontWeight: isSelected
-                            ? FontWeight.w600
-                            : FontWeight.w400,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),
                   ),
-                  if (isSelected)
+                  if (count > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.danger,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        count > 99 ? '99+' : '$count',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                  else if (isSelected)
                     Container(
                       width: 6,
                       height: 6,
@@ -668,7 +768,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
-  Widget _buildSidebarFooter(AppAuthState? authState) {
+  Widget _buildSidebarFooter(AppAuthState? authState, bool expanded) {
     return Column(
       children: [
         const Divider(color: Colors.white10, height: 1),
@@ -676,7 +776,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         // Add Property button — only for owners
         if (_isPropertyOwner) Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: _sidebarExpanded ? 10 : 8,
+            horizontal: expanded ? 10 : 8,
             vertical: 4,
           ),
           child: Material(
@@ -687,11 +787,11 @@ class _AppShellState extends ConsumerState<AppShell> {
               onTap: () => _onAddProperty(authState),
               child: Container(
                 padding: EdgeInsets.symmetric(
-                  horizontal: _sidebarExpanded ? 12 : 0,
+                  horizontal: expanded ? 12 : 0,
                   vertical: 10,
                 ),
                 child: Row(
-                  mainAxisAlignment: _sidebarExpanded
+                  mainAxisAlignment: expanded
                       ? MainAxisAlignment.start
                       : MainAxisAlignment.center,
                   children: [
@@ -708,7 +808,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                         color: Color(0xFF60A5FA),
                       ),
                     ),
-                    if (_sidebarExpanded) ...[
+                    if (expanded) ...[
                       const SizedBox(width: 10),
                       const Text(
                         'Add Property',
@@ -727,15 +827,16 @@ class _AppShellState extends ConsumerState<AppShell> {
         ),
 
         // Sidebar collapse toggle
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            child: InkWell(
+        if (MediaQuery.of(context).size.width >= 768)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            child: Material(
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(10),
-              onTap: () =>
-                  setState(() => _sidebarExpanded = !_sidebarExpanded),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () =>
+                    setState(() => _sidebarExpanded = !_sidebarExpanded),
               child: Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: _sidebarExpanded ? 12 : 0,
@@ -770,7 +871,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         // Logout
         Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: _sidebarExpanded ? 10 : 8,
+            horizontal: expanded ? 10 : 8,
             vertical: 4,
           ),
           child: Material(
@@ -781,11 +882,11 @@ class _AppShellState extends ConsumerState<AppShell> {
               onTap: _signOut,
               child: Container(
                 padding: EdgeInsets.symmetric(
-                  horizontal: _sidebarExpanded ? 12 : 0,
+                  horizontal: expanded ? 12 : 0,
                   vertical: 10,
                 ),
                 child: Row(
-                  mainAxisAlignment: _sidebarExpanded
+                  mainAxisAlignment: expanded
                       ? MainAxisAlignment.start
                       : MainAxisAlignment.center,
                   children: [
@@ -794,7 +895,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                       size: 20,
                       color: Colors.white24,
                     ),
-                    if (_sidebarExpanded) ...[
+                    if (expanded) ...[
                       const SizedBox(width: 12),
                       const Text(
                         'Logout',
@@ -815,7 +916,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   // ─── Top bar ──────────────────────────────────────────────────────────────
 
-  Widget _buildTopBar(OrgProperty? property, AppAuthState? authState) {
+  Widget _buildTopBar(OrgProperty? property, AppAuthState? authState, bool isMobile) {
     String typeBadgeLabel = '';
     Color typeBadgeColor = AppTheme.adminPrimary;
 
@@ -848,14 +949,25 @@ class _AppShellState extends ConsumerState<AppShell> {
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
+          if (isMobile)
+            Builder(
+              builder: (ctx) => IconButton(
+                icon: const Icon(Icons.menu_rounded, color: Color(0xFF1E293B)),
+                onPressed: () => Scaffold.of(ctx).openDrawer(),
+              ),
+            ),
+          if (isMobile) const SizedBox(width: 8),
           // Property name
           if (property != null) ...[
-            Text(
-              property.name,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF1E293B),
+            Expanded(
+              child: Text(
+                property.name,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E293B),
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 10),

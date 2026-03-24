@@ -122,15 +122,31 @@ class AppTheme {
       ),
       textTheme: GoogleFonts.interTextTheme(
         TextTheme(
-          displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: _adminTextDark),
-          displayMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: _adminTextDark),
-          headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: _adminTextDark),
+          // displayLarge / displayMedium are overridden below with DM Serif Display.
+          // Defining them here first so interTextTheme gets the right sizes before copyWith.
+          displayLarge:  TextStyle(fontSize: 32, fontWeight: FontWeight.w400, color: _adminTextDark),
+          displayMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.w400, color: _adminTextDark),
+          headlineLarge:  TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: _adminTextDark),
           headlineMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: _adminTextDark),
-          titleLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: _adminTextDark),
+          titleLarge:  TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: _adminTextDark),
           titleMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: _adminTextDark),
-          bodyLarge: TextStyle(fontSize: 15, fontWeight: FontWeight.w400, color: _adminTextDark),
-          bodyMedium: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: _adminTextMuted),
-          labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _adminPrimary),
+          bodyLarge:   TextStyle(fontSize: 15, fontWeight: FontWeight.w400, color: _adminTextDark),
+          bodyMedium:  TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: _adminTextMuted),
+          labelLarge:  TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _adminPrimary),
+        ),
+      ).copyWith(
+        // DM Serif Display — elegant serif for page-level headings only.
+        // Inter is preserved for all other levels (headline → label).
+        displayLarge:  GoogleFonts.dmSerifDisplay(
+          fontSize: 32,
+          fontWeight: FontWeight.w400,
+          color: _adminTextDark,
+          letterSpacing: -0.3,
+        ),
+        displayMedium: GoogleFonts.dmSerifDisplay(
+          fontSize: 24,
+          fontWeight: FontWeight.w400,
+          color: _adminTextDark,
         ),
       ),
       cardTheme: CardThemeData(
@@ -179,6 +195,43 @@ class AppTheme {
       ),
     );
   }
+
+  // ─── DM Serif Display helpers ────────────────────────────────────────────────
+
+  /// H1 — large page display titles (32 px).
+  static TextStyle get serifDisplayLarge => GoogleFonts.dmSerifDisplay(
+        fontSize: 32,
+        fontWeight: FontWeight.w400,
+        color: _adminTextDark,
+        letterSpacing: -0.3,
+      );
+
+  /// H2 — page-level section titles and prominent dialog headings (24 px).
+  static TextStyle get serifDisplayMedium => GoogleFonts.dmSerifDisplay(
+        fontSize: 24,
+        fontWeight: FontWeight.w400,
+        color: _adminTextDark,
+      );
+
+  /// H3 — card headings and secondary dialog titles (20 px).
+  static TextStyle get serifHeadingLarge => GoogleFonts.dmSerifDisplay(
+        fontSize: 20,
+        fontWeight: FontWeight.w400,
+        color: _adminTextDark,
+      );
+
+  /// Utility — DM Serif at any size / color, for one-off uses.
+  static TextStyle dmSerif({
+    double fontSize = 18,
+    Color? color,
+    double? letterSpacing,
+  }) =>
+      GoogleFonts.dmSerifDisplay(
+        fontSize: fontSize,
+        fontWeight: FontWeight.w400,
+        color: color ?? _adminTextDark,
+        letterSpacing: letterSpacing,
+      );
 
   // ─── Shared Design Tokens (used by all web screens) ─────────────────────────
 

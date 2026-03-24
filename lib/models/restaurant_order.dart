@@ -128,6 +128,18 @@ class RestaurantOrder {
 
   double get totalAmount => (itemsTotal - discountValue).clamp(0.0, double.infinity);
 
+  /// Fraction of the original item price that was actually paid after the
+  /// order-level discount.  Used for computing per-item refund amounts.
+  /// e.g.  10 % off  →  0.90;   $5 flat off a $20 order  →  0.75
+  double get discountFactor {
+    if (discountType == null || discountAmount <= 0 || itemsTotal <= 0) return 1.0;
+    if (discountType == 'percentage') {
+      return (1.0 - discountAmount / 100).clamp(0.0, 1.0);
+    }
+    // flat: distribute proportionally across all items
+    return (1.0 - discountAmount / itemsTotal).clamp(0.0, 1.0);
+  }
+
   /// Sentinel to distinguish "caller passed null" from "caller did not pass the field".
   static const _unset = Object();
 

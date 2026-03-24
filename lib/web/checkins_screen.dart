@@ -362,35 +362,47 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
   }
 
   Widget _statusBadge(String label, BookingStatus status) {
-    Color color;
+    final Color color;
+    final IconData icon;
     switch (status) {
       case BookingStatus.pending:
         color = AppTheme.warning;
+        icon  = Icons.schedule_rounded;
         break;
       case BookingStatus.checkedIn:
         color = AppTheme.success;
+        icon  = Icons.login_rounded;
         break;
       case BookingStatus.checkedOut:
         color = AppTheme.adminTextMuted;
+        icon  = Icons.logout_rounded;
         break;
       case BookingStatus.cancelled:
         color = AppTheme.danger;
+        icon  = Icons.cancel_rounded;
         break;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }
