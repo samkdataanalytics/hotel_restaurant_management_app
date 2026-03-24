@@ -222,8 +222,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen>
                 const SizedBox(height: 12),
                 Text(
                   "You're invited!",
-                  style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.w700),
+                  style: AppTheme.dmSerif(fontSize: 22),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 6),

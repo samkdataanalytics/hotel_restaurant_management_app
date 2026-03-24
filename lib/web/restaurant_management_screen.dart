@@ -100,8 +100,8 @@ class _RestaurantManagementScreenState extends State<RestaurantManagementScreen>
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Restaurant Management',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Color(0xFF1E293B))),
+              Text('Restaurant Management',
+                  style: AppTheme.dmSerif(fontSize: 22)),
               Text('Menu • Ingredients • Tables',
                   style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
             ],
@@ -473,7 +473,7 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
                   const Icon(Icons.menu_book_rounded, color: _RC.accent, size: 22),
                   const SizedBox(width: 12),
                   Text(isEdit ? 'Edit Menu Item' : 'Add Menu Item',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                      style: AppTheme.dmSerif(fontSize: 18)),
                   const Spacer(),
                   IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
                 ],
@@ -2585,8 +2585,8 @@ class _SettingsTabState extends State<_SettingsTab> {
                 ),
                 const SizedBox(width: 14),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Tax & Charges',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                  Text('Tax & Charges',
+                      style: AppTheme.dmSerif(fontSize: 18)),
                   Text('Applied to all restaurant orders',
                       style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
                 ]),

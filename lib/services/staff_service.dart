@@ -46,28 +46,37 @@ class StaffService {
           parsePrivilege(row['privilege'] as String?);
     }
 
-    // 4. Fetch hotel owners so managers can be hidden from the list
-    final ownerRows = await _db
+    // 4. Collect owner IDs from both tables so the owner is always hidden from managers
+    final ownerFromHotelUsers = await _db
         .from('hotel_users')
         .select('user_id')
         .eq('hotel_id', propertyId)
         .eq('role', 'owner')
         .onError((_, __) => []);
 
+    final ownerFromPropertyStaff = await _db
+        .from('property_staff')
+        .select('user_id')
+        .eq('property_id', propertyId)
+        .eq('role', 'owner')
+        .onError((_, __) => []);
+
     final ownerIds = {
-      for (final r in ownerRows) r['user_id'] as String,
+      for (final r in ownerFromHotelUsers)  r['user_id'] as String,
+      for (final r in ownerFromPropertyStaff) r['user_id'] as String,
     };
 
     return staffRows.map((row) {
       final uid     = row['user_id'] as String;
       final profile = profileByUid[uid];
+      final role    = row['role'] as String? ?? 'staff';
       return PropertyStaffMember(
         userId:          uid,
         fullName:        profile?['full_name'] as String? ?? '',
         email:           profile?['email']     as String? ?? '',
-        role:            row['role']           as String? ?? 'staff',
+        role:            role,
         permissions:     permsByUser[uid]      ?? {},
-        isPropertyOwner: ownerIds.contains(uid),
+        isPropertyOwner: ownerIds.contains(uid) || role == 'owner',
       );
     }).toList();
   }
@@ -231,6 +240,45 @@ class StaffService {
     });
   }
 
+  // ── Get all properties a user is assigned to ──────────────────────────────
+
+  Future<List<String>> getStaffProperties(String userId) async {
+    final rows = await _db
+        .from('property_staff')
+        .select('property_id')
+        .eq('user_id', userId);
+    return rows.map((r) => r['property_id'] as String).toList();
+  }
+
+  // ── Assign an existing user to another property ────────────────────────────
+
+  Future<void> assignStaffToProperty({
+    required String propertyId,
+    required String userId,
+    required String role, // 'staff' | 'manager'
+    Map<String, PrivilegeLevel> permissions = const {},
+  }) async {
+    await _db.from('property_staff').upsert({
+      'property_id': propertyId,
+      'user_id':     userId,
+      'role':        role,
+    }, onConflict: 'property_id,user_id');
+
+    if (permissions.isNotEmpty) {
+      await _savePermissions(propertyId, userId, permissions);
+    }
+  }
+
+  // ── Revoke all permissions for a user on a property ───────────────────────
+
+  Future<void> revokeAllPermissions(String propertyId, String userId) async {
+    await _db
+        .from('property_staff_permissions')
+        .delete()
+        .eq('property_id', propertyId)
+        .eq('user_id', userId);
+  }
+
   // ── Remove a staff member from a property ─────────────────────────────────
 
   Future<void> removeStaffMember(String propertyId, String userId) async {
@@ -268,34 +316,37 @@ class StaffService {
 
   // ── Current user's role for a property ────────────────────────────────────
 
-  /// Returns 'manager', 'staff', or null if not a member.
+  /// Returns 'owner', 'manager', 'staff', or null if not a member.
+  /// Checks both property_staff and hotel_users and returns the highest role.
   Future<String?> getMyRoleForProperty(String propertyId) async {
     final userId = _db.auth.currentUser?.id;
     if (userId == null) return null;
 
-    final rows = await _db
+    final staffFuture = _db
         .from('property_staff')
         .select('role')
         .eq('property_id', propertyId)
         .eq('user_id', userId)
         .limit(1);
 
-    if (rows.isNotEmpty) return rows.first['role'] as String?;
-
-    // Fallback: check hotel_users (legacy system)
-    final hotelRows = await _db
+    final hotelFuture = _db
         .from('hotel_users')
         .select('role')
         .eq('hotel_id', propertyId)
         .eq('user_id', userId)
         .limit(1);
 
-    if (hotelRows.isNotEmpty) {
-      final role = hotelRows.first['role'] as String?;
-      if (role == 'owner') return 'owner';
-      if (role == 'manager') return 'manager';
-    }
+    final results = await Future.wait([staffFuture, hotelFuture]);
+    final staffRows = results[0] as List;
+    final hotelRows = results[1] as List;
 
+    final staffRole = staffRows.isNotEmpty ? staffRows.first['role'] as String? : null;
+    final hotelRole = hotelRows.isNotEmpty ? hotelRows.first['role'] as String? : null;
+
+    // Return highest privilege: owner > manager > staff
+    if (staffRole == 'owner' || hotelRole == 'owner') return 'owner';
+    if (staffRole == 'manager' || hotelRole == 'manager') return 'manager';
+    if (staffRole != null) return staffRole;
     return null;
   }
 }

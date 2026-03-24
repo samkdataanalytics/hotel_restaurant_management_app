@@ -47,7 +47,7 @@ class HotelSettings {
         phone:             r['phone']                as String? ?? '',
         email:             r['email']                as String? ?? '',
         currencySymbol:    r['currency_symbol']      as String? ?? '\$',
-        taxRate:           (r['tax_rate']            as num?)?.toDouble() ?? 0.08,
+        taxRate:           (r['tax_rate']            as num?)?.toDouble() ?? 0.0,
         serviceChargeRate: (r['service_charge_rate'] as num?)?.toDouble() ?? 0.00,
         logoUrl:           r['logo_url']             as String? ?? '',
       );

@@ -52,7 +52,7 @@ class RestaurantInvoiceDialog extends StatelessWidget {
     // Tax & service charge from property settings
     // Service charge only applies to dine-in orders (not takeaway)
     final isDineIn = ordersToRender.any((o) => o.type == OrderType.dineIn);
-    final taxRate           = settings?.taxRate           ?? 0.08;
+    final taxRate           = settings?.taxRate           ?? 0.0;
     final serviceChargeRate = isDineIn ? (settings?.serviceChargeRate ?? 0.0) : 0.0;
     final tax           = subtotal * taxRate;
     final serviceCharge = subtotal * serviceChargeRate;
@@ -110,11 +110,21 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                             child: const Icon(Icons.restaurant_rounded, color: _kOrange, size: 28),
                           ),
                           const SizedBox(height: 10),
-                          const Text('HotRest Management',
-                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                          Text(
+                              settings?.displayName.isNotEmpty == true
+                                  ? settings!.displayName
+                                  : 'Restaurant',
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
                           const SizedBox(height: 4),
-                          Text('123 Luxury Ave • Tel: +1 (555) 000-1234',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                          if (settings?.address.isNotEmpty == true || settings?.phone.isNotEmpty == true)
+                            Text(
+                              [
+                                if (settings?.address.isNotEmpty == true) settings!.address,
+                                if (settings?.phone.isNotEmpty == true) 'Tel: ${settings!.phone}',
+                              ].join(' • '),
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                              textAlign: TextAlign.center,
+                            ),
                         ],
                       ),
                     ),

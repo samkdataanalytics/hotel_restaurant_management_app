@@ -69,7 +69,7 @@ class _RestaurantAnalyticsScreenState
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-
+    try {
     final allOrders = await _service.getOrders();
     final valid = allOrders
         .where((o) => o.status != OrderStatus.cancelled)
@@ -135,7 +135,7 @@ class _RestaurantAnalyticsScreenState
     _refundedOrdersCount = 0;
     for (final o in valid) {
       final refundedInOrder = o.items.fold(
-          0.0, (s, i) => s + i.menuItem.price * i.refundedQuantity);
+          0.0, (s, i) => s + i.menuItem.price * o.discountFactor * i.refundedQuantity);
       if (refundedInOrder > 0) {
         _totalRefundedAmount += refundedInOrder;
         _refundedOrdersCount++;
@@ -184,6 +184,13 @@ class _RestaurantAnalyticsScreenState
     _foodCostData = foodCostList;
 
     if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load analytics: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   // ─── Build ───────────────────────────────────────────

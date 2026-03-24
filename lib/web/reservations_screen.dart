@@ -744,7 +744,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_fullDateFormat.format(date), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              Text(_fullDateFormat.format(date), style: AppTheme.dmSerif(fontSize: 18)),
               const SizedBox(height: 4),
               Text('Room ${room.roomNumber} — ${room.typeLabel}', style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 13)),
               const SizedBox(height: 16),
@@ -1395,7 +1395,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                       const SizedBox(width: 14),
                       Text(
                         _isEditing ? 'Edit Reservation' : 'Add Reservation',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                        style: AppTheme.serifHeadingLarge,
                       ),
                       const Spacer(),
                       IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, size: 20), splashRadius: 18),

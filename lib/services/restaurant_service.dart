@@ -106,16 +106,16 @@ class RestaurantService {
 
   /// Fetches tax rate and service charge rate for the current property.
   Future<({double taxRate, double serviceChargeRate})> getChargeSettings() async {
-    if (hotelId == null) return (taxRate: 0.08, serviceChargeRate: 0.0);
+    if (hotelId == null) return (taxRate: 0.0, serviceChargeRate: 0.0);
     final rows = await _db
         .from('hotel_settings')
         .select('tax_rate, service_charge_rate')
         .eq('hotel_id', hotelId!)
         .limit(1);
-    if (rows.isEmpty) return (taxRate: 0.08, serviceChargeRate: 0.0);
+    if (rows.isEmpty) return (taxRate: 0.0, serviceChargeRate: 0.0);
     final r = rows.first;
     return (
-      taxRate:           (r['tax_rate']            as num?)?.toDouble() ?? 0.08,
+      taxRate:           (r['tax_rate']            as num?)?.toDouble() ?? 0.0,
       serviceChargeRate: (r['service_charge_rate'] as num?)?.toDouble() ?? 0.0,
     );
   }

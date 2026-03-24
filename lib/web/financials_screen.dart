@@ -1,3 +1,4 @@
+import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -43,16 +44,24 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
   }
 
   Future<void> _loadData() async {
-    final bookings = await _bookingService.getEnrichedBookings();
-    final rooms = await _bookingService.getAllRooms();
-    final expenses = await _bookingService.getAllExpenses();
-    if (!mounted) return;
-    setState(() {
-      _enrichedBookings = bookings;
-      _rooms = rooms;
-      _cachedExpenses = expenses;
-      _isLoading = false;
-    });
+    try {
+      final bookings = await _bookingService.getEnrichedBookings();
+      final rooms = await _bookingService.getAllRooms();
+      final expenses = await _bookingService.getAllExpenses();
+      if (!mounted) return;
+      setState(() {
+        _enrichedBookings = bookings;
+        _rooms = rooms;
+        _cachedExpenses = expenses;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load financials: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _selectDateRange() async {
@@ -270,7 +279,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                   child: _buildSummaryCard(
                     title: 'Gross Revenue',
                     subtitle: 'Up to today',
-                    value: '${_sym}${materializedRevenue.toStringAsFixed(0)}',
+                    value: _fmtAmt(materializedRevenue),
                     icon: Icons.account_balance_wallet_rounded,
                     color: AppTheme.success,
                   ),
@@ -280,7 +289,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                   child: _buildSummaryCard(
                     title: 'Total Costs',
                     subtitle: 'Room expenses up to today',
-                    value: '${_sym}${totalExpenses.toStringAsFixed(0)}',
+                    value: _fmtAmt(totalExpenses),
                     icon: Icons.money_off_csred_rounded,
                     color: AppTheme.danger,
                   ),
@@ -289,8 +298,8 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     title: 'Net Profit',
-                    subtitle: 'Gross Revenue - Costs',
-                    value: '${_sym}${(materializedRevenue - totalExpenses).toStringAsFixed(0)}',
+                    subtitle: 'Revenue minus costs',
+                    value: _fmtAmt(materializedRevenue - totalExpenses),
                     icon: Icons.payments_rounded,
                     color: AppTheme.warning,
                   ),
@@ -299,8 +308,8 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                 Expanded(
                   child: _buildSummaryCard(
                     title: 'Future & Potential',
-                    subtitle: 'Expected + ${_sym}${potentialRevenue.toStringAsFixed(0)} possible',
-                    value: '${_sym}${futureRevenue.toStringAsFixed(0)}',
+                    subtitle: '+ ${_fmtAmt(potentialRevenue)} possible',
+                    value: _fmtAmt(futureRevenue),
                     icon: Icons.event_available_rounded,
                     color: AppTheme.adminPrimary,
                   ),
@@ -359,7 +368,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Daily Revenue by Source', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          Text('Daily Revenue by Source', style: AppTheme.dmSerif(fontSize: 16)),
                           const SizedBox(height: 24),
                           SizedBox(
                             height: 300,
@@ -380,7 +389,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Active Reservations', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                          Text('Active Reservations', style: AppTheme.dmSerif(fontSize: 16)),
                           const SizedBox(height: 24),
                           SizedBox(
                             height: 300,
@@ -396,7 +405,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
             const SizedBox(height: 32),
 
             // Data Table
-            const Text('Daily Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Text('Daily Breakdown', style: AppTheme.dmSerif(fontSize: 18)),
             const SizedBox(height: 16),
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -478,18 +487,19 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                             ),
                             Expanded(
                               flex: 2,
-                              child: Text(activeBookings.toString(), style: const TextStyle(fontWeight: FontWeight.w500)),
+                              child: Text(
+                                activeBookings.toString(),
+                                style: _numStyle(fontWeight: FontWeight.w500),
+                              ),
                             ),
                             Expanded(
                               flex: 2,
                               child: Align(
                                 alignment: Alignment.centerRight,
                                 child: Text(
-                                  '${_sym}${revenue.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                  _fmtAmt(revenue, decimals: true),
+                                  style: _numStyle(
                                     color: revenue > 0 ? AppTheme.success : AppTheme.adminTextMuted,
-                                    fontSize: 14,
                                   ),
                                 ),
                               ),
@@ -499,11 +509,9 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                               child: Align(
                                 alignment: Alignment.centerRight,
                                 child: Text(
-                                  '${_sym}${expenses.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                  _fmtAmt(expenses, decimals: true),
+                                  style: _numStyle(
                                     color: expenses > 0 ? AppTheme.danger : AppTheme.adminTextMuted,
-                                    fontSize: 14,
                                   ),
                                 ),
                               ),
@@ -513,11 +521,13 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                               child: Align(
                                 alignment: Alignment.centerRight,
                                 child: Text(
-                                  profit < 0 ? '-${_sym}${profit.abs().toStringAsFixed(2)}' : '${_sym}${profit.toStringAsFixed(2)}',
-                                  style: TextStyle(
+                                  profit < 0
+                                      ? '-${_fmtAmt(profit.abs(), decimals: true)}'
+                                      : _fmtAmt(profit, decimals: true),
+                                  style: _numStyle(
                                     fontWeight: FontWeight.w700,
+                                    fontSize: 15,
                                     color: profit > 0 ? AppTheme.success : (profit < 0 ? AppTheme.danger : AppTheme.adminTextMuted),
-                                    fontSize: 16,
                                   ),
                                 ),
                               ),
@@ -559,8 +569,12 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
             tooltipMargin: 8,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               return BarTooltipItem(
-                '${_shortDateFormat.format(days[group.x.toInt()])}\n${_sym}${rod.toY.toStringAsFixed(0)}',
-                const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                '${_shortDateFormat.format(days[group.x.toInt()])}\n${_fmtAmt(rod.toY)}',
+                const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
               );
             },
           ),
@@ -592,7 +606,14 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
               reservedSize: 40,
               getTitlesWidget: (value, meta) {
                 if (value == 0 || value == maxRevenue) return const SizedBox.shrink();
-                return Text('${_sym}${value.toInt()}', style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 10));
+                return Text(
+                  _fmtAmt(value),
+                  style: TextStyle(
+                    color: AppTheme.adminTextMuted,
+                    fontSize: 10,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                );
               },
             ),
           ),
@@ -730,6 +751,28 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
     );
   }
 
+  /// Formats a monetary amount with thousand separators and the property currency symbol.
+  /// [decimals] true → two decimal places (table rows); false → whole number (KPI cards).
+  String _fmtAmt(double amount, {bool decimals = false}) {
+    final fmt = NumberFormat(decimals ? '#,##0.00' : '#,##0');
+    return '$_sym${fmt.format(amount)}';
+  }
+
+  /// Text style for all numeric values — enables tabular (fixed-width) figures
+  /// so digits align perfectly in columns regardless of their value.
+  TextStyle _numStyle({
+    double fontSize = 14,
+    FontWeight fontWeight = FontWeight.w600,
+    Color? color,
+  }) {
+    return TextStyle(
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+  }
+
   Widget _buildSummaryCard({
     required String title,
     required String subtitle,
@@ -774,10 +817,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                     children: [
                       Text(
                         value,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: _numStyle(fontSize: 28, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(width: 8),
                       Padding(

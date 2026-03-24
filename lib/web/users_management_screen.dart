@@ -181,6 +181,36 @@ class _UsersManagementScreenState
     }
   }
 
+  Future<void> _assignToProperty(PropertyStaffMember member) async {
+    final property = ref.read(activePropertyProvider);
+    final authState = ref.read(authProvider).valueOrNull;
+    if (property == null) return;
+
+    final otherProperties = (authState?.properties ?? [])
+        .where((p) => p.id != property.id)
+        .toList();
+
+    if (otherProperties.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No other properties in your organization.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => _AssignToPropertyDialog(
+        member:          member,
+        currentPropertyId: property.id,
+        otherProperties: otherProperties,
+      ),
+    );
+    if (result == true) _loadData();
+  }
+
   Future<void> _revokeAllAccess(PropertyStaffMember member) async {
     final property = ref.read(activePropertyProvider);
     if (property == null) return;
@@ -493,6 +523,9 @@ class _UsersManagementScreenState
                   case 'revoke':
                     _revokeAllAccess(member);
                     break;
+                  case 'assign':
+                    _assignToProperty(member);
+                    break;
                   case 'remove':
                     _removeMember(member);
                     break;
@@ -559,6 +592,19 @@ class _UsersManagementScreenState
                     const Text('Reset Password'),
                   ]),
                 ),
+                // Assign / Transfer to another property — owner only
+                if (isOwner) ...[
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: 'assign',
+                    child: Row(children: [
+                      Icon(Icons.swap_horiz_rounded,
+                          size: 17, color: AppTheme.adminPrimary),
+                      const SizedBox(width: 10),
+                      const Text('Assign / Transfer Property'),
+                    ]),
+                  ),
+                ],
                 const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'remove',
@@ -894,8 +940,7 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
                   Expanded(
                     child: Text(
                       _success ? 'Account Created' : 'Add Team Member',
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.w700),
+                      style: AppTheme.dmSerif(fontSize: 18),
                     ),
                   ),
                   IconButton(
@@ -1461,8 +1506,8 @@ class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
         const Icon(Icons.lock_reset_rounded,
             size: 48, color: Color(0xFF22C55E)),
         const SizedBox(height: 12),
-        const Text('Password Reset',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        Text('Password Reset',
+            style: AppTheme.dmSerif(fontSize: 18)),
         const SizedBox(height: 8),
         Text(
           'Password for "${widget.member.fullName}" has been updated.',
@@ -1979,6 +2024,409 @@ class _PrivilegeToggle extends StatelessWidget {
             fontSize: 12,
             fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
             color: isSelected ? color : Colors.grey.shade500,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Assign / Transfer to Property Dialog ─────────────────────────────────────
+
+class _AssignToPropertyDialog extends StatefulWidget {
+  final PropertyStaffMember member;
+  final String              currentPropertyId;
+  final List<OrgProperty>   otherProperties;
+
+  const _AssignToPropertyDialog({
+    required this.member,
+    required this.currentPropertyId,
+    required this.otherProperties,
+  });
+
+  @override
+  State<_AssignToPropertyDialog> createState() =>
+      _AssignToPropertyDialogState();
+}
+
+class _AssignToPropertyDialogState extends State<_AssignToPropertyDialog> {
+  final _staffService = StaffService();
+
+  bool          _loading         = true;
+  bool          _saving          = false;
+  Set<String>   _alreadyAssigned = {};   // propertyIds the member is already on
+
+  // Selection
+  String? _targetPropertyId;
+  String  _role                  = 'staff'; // 'staff' | 'manager'
+  bool    _revokeFromCurrent     = false;   // transfer mode
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAssignments();
+  }
+
+  Future<void> _loadAssignments() async {
+    final ids = await _staffService.getStaffProperties(widget.member.userId);
+    if (!mounted) return;
+    setState(() {
+      _alreadyAssigned = ids.toSet();
+      _loading         = false;
+    });
+  }
+
+  Future<void> _confirm() async {
+    if (_targetPropertyId == null) return;
+    setState(() => _saving = true);
+    try {
+      // 1. Assign to target property
+      await _staffService.assignStaffToProperty(
+        propertyId: _targetPropertyId!,
+        userId:     widget.member.userId,
+        role:       _role,
+      );
+
+      // 2. Optionally revoke all permissions from current property (transfer)
+      if (_revokeFromCurrent) {
+        await _staffService.revokeAllPermissions(
+            widget.currentPropertyId, widget.member.userId);
+      }
+
+      if (!mounted) return;
+      Navigator.pop(context, true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _revokeFromCurrent
+                ? '${widget.member.fullName.isEmpty ? "Staff member" : widget.member.fullName} transferred successfully.'
+                : '${widget.member.fullName.isEmpty ? "Staff member" : widget.member.fullName} assigned to new property.',
+          ),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = widget.member.fullName.isNotEmpty
+        ? widget.member.fullName
+        : widget.member.email;
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          Icon(Icons.swap_horiz_rounded, color: AppTheme.adminPrimary, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Assign / Transfer Property',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                Text(displayName,
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: AppTheme.adminTextMuted)),
+              ],
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 480,
+        child: _loading
+            ? const SizedBox(
+                height: 120,
+                child: Center(child: CircularProgressIndicator()))
+            : _saving
+                ? const SizedBox(
+                    height: 120,
+                    child: Center(child: CircularProgressIndicator()))
+                : SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // ── Target property selector ─────────────────────────
+                        const Text('Select target property',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black54)),
+                        const SizedBox(height: 8),
+                        ...widget.otherProperties.map((p) {
+                          final alreadyOn = _alreadyAssigned.contains(p.id);
+                          final isSelected = _targetPropertyId == p.id;
+                          return GestureDetector(
+                            onTap: alreadyOn
+                                ? null
+                                : () => setState(
+                                    () => _targetPropertyId = p.id),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              margin: const EdgeInsets.only(bottom: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: alreadyOn
+                                    ? Colors.grey.shade50
+                                    : isSelected
+                                        ? AppTheme.adminPrimary
+                                            .withOpacity(0.07)
+                                        : Colors.white,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppTheme.adminPrimary
+                                      : Colors.grey.shade200,
+                                  width: isSelected ? 1.5 : 1,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    p.isHotel && p.isRestaurant
+                                        ? Icons.business_rounded
+                                        : p.isRestaurant
+                                            ? Icons.restaurant_rounded
+                                            : Icons.hotel_rounded,
+                                    size: 18,
+                                    color: alreadyOn
+                                        ? Colors.grey.shade400
+                                        : isSelected
+                                            ? AppTheme.adminPrimary
+                                            : Colors.grey.shade500,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      p.name,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w600
+                                            : FontWeight.w400,
+                                        color: alreadyOn
+                                            ? Colors.grey.shade400
+                                            : Colors.black87,
+                                      ),
+                                    ),
+                                  ),
+                                  if (alreadyOn)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius:
+                                            BorderRadius.circular(4),
+                                      ),
+                                      child: Text('Already assigned',
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.grey.shade500)),
+                                    )
+                                  else if (isSelected)
+                                    Icon(Icons.check_circle_rounded,
+                                        size: 16,
+                                        color: AppTheme.adminPrimary),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+
+                        if (_targetPropertyId != null) ...[
+                          const SizedBox(height: 16),
+                          // ── Role selector ──────────────────────────────────
+                          const Text('Role in new property',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black54)),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            _roleOption(
+                              label: 'Staff',
+                              icon: Icons.person_rounded,
+                              description: 'Limited — assign sections separately',
+                              selected: _role == 'staff',
+                              onTap: () => setState(() => _role = 'staff'),
+                            ),
+                            const SizedBox(width: 8),
+                            _roleOption(
+                              label: 'Manager',
+                              icon: Icons.shield_rounded,
+                              description: 'Full access to all sections',
+                              selected: _role == 'manager',
+                              onTap: () => setState(() => _role = 'manager'),
+                              color: AppTheme.goldPrimary,
+                            ),
+                          ]),
+                        ],
+
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 8),
+
+                        // ── Transfer toggle ────────────────────────────────
+                        InkWell(
+                          onTap: () => setState(
+                              () => _revokeFromCurrent = !_revokeFromCurrent),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: _revokeFromCurrent
+                                  ? AppTheme.warning.withOpacity(0.06)
+                                  : Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: _revokeFromCurrent
+                                    ? AppTheme.warning.withOpacity(0.4)
+                                    : Colors.grey.shade200,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _revokeFromCurrent
+                                      ? Icons.check_box_rounded
+                                      : Icons.check_box_outline_blank_rounded,
+                                  color: _revokeFromCurrent
+                                      ? AppTheme.warning
+                                      : Colors.grey.shade400,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Transfer mode — revoke access from current property',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: _revokeFromCurrent
+                                              ? AppTheme.warning
+                                              : Colors.black54,
+                                        ),
+                                      ),
+                                      Text(
+                                        'All section permissions will be cleared from the current property.',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey.shade500),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context, false),
+          child: const Text('Cancel',
+              style: TextStyle(color: Colors.black54)),
+        ),
+        ElevatedButton.icon(
+          onPressed: (_targetPropertyId == null || _saving)
+              ? null
+              : _confirm,
+          icon: Icon(
+            _revokeFromCurrent
+                ? Icons.swap_horiz_rounded
+                : Icons.add_link_rounded,
+            size: 16,
+            color: Colors.white,
+          ),
+          label: Text(
+            _revokeFromCurrent ? 'Transfer' : 'Assign',
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _revokeFromCurrent
+                ? AppTheme.warning
+                : AppTheme.adminPrimary,
+            disabledBackgroundColor: Colors.grey.shade200,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _roleOption({
+    required String   label,
+    required IconData icon,
+    required String   description,
+    required bool     selected,
+    required VoidCallback onTap,
+    Color?            color,
+  }) {
+    final effectiveColor = color ?? AppTheme.adminPrimary;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: selected ? effectiveColor.withOpacity(0.07) : Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? effectiveColor : Colors.grey.shade200,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon,
+                  size: 16,
+                  color: selected ? effectiveColor : Colors.grey.shade400),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color:
+                                selected ? effectiveColor : Colors.black54)),
+                    Text(description,
+                        style: TextStyle(
+                            fontSize: 10, color: Colors.grey.shade500)),
+                  ],
+                ),
+              ),
+              if (selected)
+                Icon(Icons.check_circle_rounded,
+                    size: 14, color: effectiveColor),
+            ],
           ),
         ),
       ),

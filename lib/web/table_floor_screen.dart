@@ -128,7 +128,11 @@ class _PaymentDialogState extends State<_PaymentDialog> {
     return GestureDetector(
       onTap: () => setState(() {
         _discountType = value;
-        _discountAmount = double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+        final raw = double.tryParse(_discountCtrl.text.trim()) ?? 0.0;
+        final total = widget.orders.fold(0.0, (s, o) => s + o.itemsTotal);
+        _discountAmount = value == 'percentage'
+            ? raw.clamp(0.0, 100.0)
+            : raw.clamp(0.0, total);
       }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
@@ -187,8 +191,8 @@ class _PaymentDialogState extends State<_PaymentDialog> {
   @override
   Widget build(BuildContext context) {
     final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
-    final taxRate           = settings?.taxRate           ?? 0.08;
-    final serviceChargeRate = settings?.serviceChargeRate ?? 0.0; // always dine-in here
+    final taxRate           = settings?.taxRate           ?? 0.0;
+    final serviceChargeRate = settings?.serviceChargeRate ?? 0.0;
 
     final itemsTotal = widget.orders.fold(0.0, (s, o) => s + o.itemsTotal);
     final discountValue = _discountAmount <= 0
@@ -273,7 +277,11 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                         suffixText: _discountType == 'percentage' ? '%' : null,
                       ),
                       onChanged: (v) => setState(() {
-                        _discountAmount = double.tryParse(v.trim()) ?? 0.0;
+                        final raw = double.tryParse(v.trim()) ?? 0.0;
+                        final total = widget.orders.fold(0.0, (s, o) => s + o.itemsTotal);
+                        _discountAmount = _discountType == 'percentage'
+                            ? raw.clamp(0.0, 100.0)
+                            : raw.clamp(0.0, total);
                       }),
                     ),
                   ),
@@ -808,17 +816,36 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
               style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
         ),
         Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 0.95,
-            ),
-            itemCount: _tables.length,
-            itemBuilder: (_, i) => _buildTableCard(_tables[i]),
-          ),
+          child: _tables.isEmpty
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.table_restaurant_rounded,
+                          color: Colors.grey, size: 48),
+                      SizedBox(height: 12),
+                      Text('No tables configured',
+                          style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600)),
+                      SizedBox(height: 4),
+                      Text('Add tables in Restaurant Management',
+                          style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    ],
+                  ),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 0.95,
+                  ),
+                  itemCount: _tables.length,
+                  itemBuilder: (_, i) => _buildTableCard(_tables[i]),
+                ),
         ),
       ],
     );

@@ -12,6 +12,7 @@ import '../models/booking.dart';
 import '../models/guest.dart';
 import '../models/room.dart';
 import '../models/expense.dart';
+import '../models/inventory_item.dart';
 import '../services/restaurant_service.dart';
 import '../models/staff_permission.dart';
 import '../services/booking_service.dart';
@@ -38,6 +39,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
   List<MenuItem> _menuItems = [];
   List<RestaurantTable> _tables = [];
+  List<InventoryItem> _inventoryItems = [];
   String _selectedCategory = 'All';
 
   List<OrderItem> _cart = [];
@@ -70,10 +72,16 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     final items = await _restaurantService.getMenuItems();
     final tables = await _restaurantService.getTables();
 
-    // Load orders separately — bad stored data should never block the menu
+    // Load orders and inventory in parallel — failures should not block the menu
     List<RestaurantOrder> orders = [];
+    List<InventoryItem> inventory = [];
     try {
-      orders = await _restaurantService.getOrders();
+      final results = await Future.wait([
+        _restaurantService.getOrders(),
+        _restaurantService.getInventory(),
+      ]);
+      orders    = results[0] as List<RestaurantOrder>;
+      inventory = results[1] as List<InventoryItem>;
     } catch (_) {}
 
     if (!mounted) return;
@@ -92,11 +100,26 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     }
 
     setState(() {
-      _menuItems = items;
-      _tables = tables;
-      _allTableOrders = allOrders;
-      _isLoading = false;
+      _menuItems        = items;
+      _tables           = tables;
+      _inventoryItems   = inventory;
+      _allTableOrders   = allOrders;
+      _isLoading        = false;
     });
+  }
+
+  /// Returns true if any ingredient for [item] has insufficient stock
+  /// to add one more unit (accounting for what's already in the cart).
+  bool _isIngredientOutOfStock(MenuItem item) {
+    if (item.ingredients.isEmpty) return false;
+    final cartQty = _cart.fold(0, (s, c) => c.menuItem.id == item.id ? s + c.quantity : s);
+    for (final ing in item.ingredients) {
+      final inv = _inventoryItems.where((i) => i.ingredientId == ing.ingredientId).firstOrNull;
+      if (inv == null) continue; // no inventory tracked → skip
+      final needed = ing.quantity * (cartQty + 1);
+      if (inv.currentStock < needed) return true;
+    }
+    return false;
   }
 
   List<String> get _categories {
@@ -122,6 +145,17 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
   void _addToCart(MenuItem item) {
     if (!item.isAvailable) return;
+    if (_isIngredientOutOfStock(item)) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${item.name} cannot be added — ingredient stock is insufficient.'),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
     setState(() {
       final idx = _cart.indexWhere((e) => e.menuItem.id == item.id);
       if (idx >= 0) {
@@ -175,15 +209,19 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     await _restaurantService.saveOrder(order); // also deducts inventory
 
     if (paymentStatus == PaymentStatus.chargedToRoom && bookingId != null) {
+      final s = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+      final tRate = s?.taxRate ?? 0.0;
+      final scRate = order.type == OrderType.dineIn ? (s?.serviceChargeRate ?? 0.0) : 0.0;
+      final billAmount = order.totalAmount * (1 + tRate + scRate);
       await _bookingService.addExpense(Expense(
         id: _uuid.v4(),
         description: 'Restaurant Order #${order.orderNumber}',
-        amount: order.totalAmount,
+        amount: billAmount,
         date: DateTime.now(),
         category: ExpenseCategory.restaurant,
         isBillable: true,
         bookingId: bookingId,
-        roomId: roomId,   // ← needed so RoomExpensesDialog picks it up
+        roomId: roomId,
         isPaid: false,
       ));
     }
@@ -198,17 +236,18 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       _isLoading = false;
     });
 
-    // Refresh tables to reflect the latest occupancy status.
-    _loadData();
-
     return order;
   }
 
   Future<void> _handleCheckout(PaymentStatus status, {String? bookingId, String? roomId}) async {
     final order = await _checkout(paymentStatus: status, bookingId: bookingId, roomId: roomId);
     if (order == null || !mounted) return;
-    // Show invoice immediately after checkout
-    await _showInvoiceDialog(order);
+    // Show invoice and refresh table/inventory data in parallel —
+    // sidebar occupancy updates while the user reviews the invoice.
+    await Future.wait([
+      _showInvoiceDialog(order),
+      _loadData(),
+    ]);
     if (!mounted) return;
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -391,7 +430,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   }
 
   Widget _buildMenuTile(MenuItem item) {
-    final unavailable = !item.isAvailable;
+    final unavailable = !item.isAvailable || _isIngredientOutOfStock(item);
+    final outOfStock  = item.isAvailable && _isIngredientOutOfStock(item);
     return GestureDetector(
       onTap: unavailable || !canEditSection(ref, 'restaurant_pos') ? null : () => _addToCart(item),
       child: Opacity(
@@ -423,11 +463,17 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
-                  Text(unavailable ? 'Unavailable' : _currencyFormat.format(item.price),
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: unavailable ? Colors.red.shade400 : _kOrange,
-                          fontSize: 13)),
+                  Text(
+                    !item.isAvailable
+                        ? 'Unavailable'
+                        : outOfStock
+                            ? 'Out of Stock'
+                            : _currencyFormat.format(item.price),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: unavailable ? Colors.red.shade400 : _kOrange,
+                        fontSize: 13),
+                  ),
                 ],
               ),
               if (unavailable)
@@ -623,6 +669,13 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   }
 
   Widget _buildCartFooter() {
+    final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+    final taxRate  = settings?.taxRate ?? 0.0;
+    final svcRate  = _orderType == OrderType.dineIn ? (settings?.serviceChargeRate ?? 0.0) : 0.0;
+    final taxValue = _cartTotal * taxRate;
+    final svcValue = _cartTotal * svcRate;
+    final grandTotal = _cartTotal + taxValue + svcValue;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -639,7 +692,10 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                 selected: _discountType,
                 onChanged: (t) => setState(() {
                   _discountType = t;
-                  _discountAmount = double.tryParse(_discountController.text.trim()) ?? 0.0;
+                  final raw = double.tryParse(_discountController.text.trim()) ?? 0.0;
+                  _discountAmount = t == 'percentage'
+                      ? raw.clamp(0.0, 100.0)
+                      : raw.clamp(0.0, _cartItemsTotal);
                 }),
               ),
               const SizedBox(width: 8),
@@ -658,7 +714,10 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                       suffixText: _discountType == 'percentage' ? '%' : null,
                     ),
                     onChanged: (v) => setState(() {
-                      _discountAmount = double.tryParse(v.trim()) ?? 0.0;
+                      final raw = double.tryParse(v.trim()) ?? 0.0;
+                      _discountAmount = _discountType == 'percentage'
+                          ? raw.clamp(0.0, 100.0)
+                          : raw.clamp(0.0, _cartItemsTotal);
                     }),
                   ),
                 ),
@@ -706,11 +765,35 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             ),
             const Divider(height: 12),
           ],
+          if (taxRate > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Tax (${(taxRate * 100).toStringAsFixed(0)}%)',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                Text(_currencyFormat.format(taxValue),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
+          if (svcRate > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Service (${(svcRate * 100).toStringAsFixed(0)}%)',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                Text(_currencyFormat.format(svcValue),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Total', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade500)),
-              Text(_currencyFormat.format(_cartTotal),
+              Text(_currencyFormat.format(grandTotal),
                   style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _kOrange)),
             ],
           ),
@@ -768,7 +851,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   label: Text(
                     _cart.isEmpty
                         ? 'Add items then Send to Kitchen'
-                        : 'Send Add-On to Kitchen  ·  ${_currencyFormat.format(_cartTotal)}',
+                        : 'Send Add-On to Kitchen  ·  ${_currencyFormat.format(grandTotal)}',
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -1036,7 +1119,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     final itemsTotal = openOrders.fold(0.0, (s, o) => s + o.itemsTotal);
 
     final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
-    final taxRate           = settings?.taxRate           ?? 0.08;
+    final taxRate           = settings?.taxRate           ?? 0.0;
     final serviceChargeRate = settings?.serviceChargeRate ?? 0.0;
 
     final result = await showDialog<_PosPaymentResult>(
@@ -1400,7 +1483,10 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
                     selected: _discountType,
                     onChanged: (t) => setState(() {
                       _discountType   = t;
-                      _discountAmount = double.tryParse(_discountController.text.trim()) ?? 0.0;
+                      final raw = double.tryParse(_discountController.text.trim()) ?? 0.0;
+                      _discountAmount = t == 'percentage'
+                          ? raw.clamp(0.0, 100.0)
+                          : raw.clamp(0.0, widget.itemsTotal);
                     }),
                   ),
                   const SizedBox(width: 8),
@@ -1417,7 +1503,10 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
                         suffixText: _discountType == 'percentage' ? '%' : null,
                       ),
                       onChanged: (v) => setState(() {
-                        _discountAmount = double.tryParse(v.trim()) ?? 0.0;
+                        final raw = double.tryParse(v.trim()) ?? 0.0;
+                        _discountAmount = _discountType == 'percentage'
+                            ? raw.clamp(0.0, 100.0)
+                            : raw.clamp(0.0, widget.itemsTotal);
                       }),
                     ),
                   ),
