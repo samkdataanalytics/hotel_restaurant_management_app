@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../app_theme.dart';
+import 'widgets/skeleton.dart';
 import '../models/check_in.dart';
 import '../models/guest.dart';
 import '../models/room.dart';
@@ -81,14 +82,12 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const TableListSkeleton(rowCount: 8, cellCount: 5);
 
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -114,30 +113,49 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
             const SizedBox(height: 24),
 
             // Search & tabs
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: _filterData,
-                    decoration: InputDecoration(
-                      hintText: 'Search by guest name, booking ref, or room...',
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+            if (AppTheme.isMobile(context)) ...[
+              TextField(
+                controller: _searchController,
+                onChanged: _filterData,
+                decoration: InputDecoration(
+                  hintText: 'Search guests, rooms...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _tabButton('Check-ins', 'checkins', '${_filteredCheckIns.length}'),
+                  const SizedBox(width: 8),
+                  _tabButton('All Bookings', 'bookings', '${_filteredBookings.length}'),
+                ],
+              ),
+            ] else
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: _filterData,
+                      decoration: InputDecoration(
+                        hintText: 'Search by guest name, booking ref, or room...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                _tabButton('Check-ins', 'checkins',
-                    '${_filteredCheckIns.length}'),
-                const SizedBox(width: 8),
-                _tabButton(
-                    'All Bookings', 'bookings', '${_filteredBookings.length}'),
-              ],
-            ),
+                  const SizedBox(width: 16),
+                  _tabButton('Check-ins', 'checkins', '${_filteredCheckIns.length}'),
+                  const SizedBox(width: 8),
+                  _tabButton('All Bookings', 'bookings', '${_filteredBookings.length}'),
+                ],
+              ),
             const SizedBox(height: 24),
 
             // Content
@@ -551,13 +569,14 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
     
     if (mounted) {
       Navigator.pop(context); // Close loading dialog
-      final sym = Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+      final settings = Provider.of<HotelSession>(context, listen: false).settings;
       await _invoiceService.displayInvoicePdf(
         booking: booking,
         room: room,
         guest: guest,
         expenses: expenses,
-        currencySymbol: sym,
+        currencySymbol: settings?.currencySymbol ?? '\$',
+        settings: settings,
       );
     }
   }

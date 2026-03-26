@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -540,5 +541,71 @@ class OrganizationService {
   /// Uses a SECURITY DEFINER RPC to bypass RLS on related tables.
   Future<void> deleteProperty(String propertyId) async {
     await _db.rpc('delete_property', params: {'p_property_id': propertyId});
+  }
+
+  // ── Property edit ────────────────────────────────────────────────────────────
+
+  /// Updates core property fields in both `hotels` and `hotel_settings`.
+  Future<void> updateProperty({
+    required String propertyId,
+    required String name,
+    required String address,
+    required String city,
+    required String country,
+    required String phone,
+    required String email,
+    required String timezone,
+    required String currency,
+  }) async {
+    await _db.from('hotels').update({
+      'name':     name,
+      'address':  address,
+      'city':     city,
+      'country':  country,
+      'phone':    phone,
+      'email':    email,
+      'timezone': timezone,
+      'currency': currency,
+    }).eq('id', propertyId);
+
+    await _db.from('hotel_settings').update({
+      'display_name':    name,
+      'address':         address,
+      'phone':           phone,
+      'email':           email,
+      'currency_symbol': _currencySymbol(currency),
+    }).eq('hotel_id', propertyId);
+  }
+
+  // ── Property logo ─────────────────────────────────────────────────────────────
+
+  /// Uploads [bytes] to the `property-logos` bucket and returns the public URL.
+  /// The file is stored at `{propertyId}/logo.{ext}` and is upserted so
+  /// re-uploading replaces the previous logo.
+  Future<String> uploadPropertyLogo(
+    String propertyId,
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : 'png';
+    final path = '$propertyId/logo.$ext';
+    await _db.storage.from('property-logos').uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(
+            contentType: 'image/$ext',
+            upsert: true,
+          ),
+        );
+    return _db.storage.from('property-logos').getPublicUrl(path);
+  }
+
+  /// Saves [logoUrl] to both `hotels.logo_url` and `hotel_settings.logo_url`
+  /// so invoice and in-app header both reflect the new logo immediately.
+  Future<void> updatePropertyLogo(String propertyId, String logoUrl) async {
+    await Future.wait([
+      _db.from('hotels').update({'logo_url': logoUrl}).eq('id', propertyId),
+      _db.from('hotel_settings').update({'logo_url': logoUrl}).eq('hotel_id', propertyId),
+    ]);
   }
 }

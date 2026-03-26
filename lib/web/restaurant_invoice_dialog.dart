@@ -101,14 +101,18 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                     Center(
                       child: Column(
                         children: [
-                          Container(
-                            width: 52, height: 52,
-                            decoration: BoxDecoration(
-                              color: _kOrangeBg,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Icon(Icons.restaurant_rounded, color: _kOrange, size: 28),
-                          ),
+                          if (settings?.logoUrl.isNotEmpty == true)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.network(
+                                settings!.logoUrl,
+                                height: 64,
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, __, ___) => _DefaultLogoIcon(),
+                              ),
+                            )
+                          else
+                            _DefaultLogoIcon(),
                           const SizedBox(height: 10),
                           Text(
                               settings?.displayName.isNotEmpty == true
@@ -430,5 +434,19 @@ class RestaurantInvoiceDialog extends StatelessWidget {
       case PaymentStatus.chargedToRoom: return 'CHARGED TO ROOM';
       case PaymentStatus.unpaid: return 'UNPAID';
     }
+  }
+}
+
+class _DefaultLogoIcon extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 52, height: 52,
+      decoration: BoxDecoration(
+        color: _kOrangeBg,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Icon(Icons.restaurant_rounded, color: _kOrange, size: 28),
+    );
   }
 }

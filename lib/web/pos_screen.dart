@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
+import 'widgets/skeleton.dart';
 import '../providers/hotel_session.dart';
 import '../models/menu_item.dart';
 import '../models/restaurant_table.dart';
@@ -51,6 +52,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   String  _discountType   = 'percentage'; // 'percentage' | 'flat'
   double  _discountAmount = 0.0;
   final   _discountController = TextEditingController();
+  bool    _showDiscount   = false; // hidden by default; revealed on tap
+  bool    _mobileCartExpanded = false; // mobile cart panel open/closed
 
   bool _isLoading = true;
   /// All open (non-cancelled, non-paid) orders per table, sorted oldest→newest.
@@ -233,6 +236,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       _selectedBookingId = null;
       _discountAmount = 0.0;
       _discountController.clear();
+      _showDiscount = false;
+      _mobileCartExpanded = false;
       _isLoading = false;
     });
 
@@ -344,7 +349,23 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const PosMenuSkeleton();
+
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    if (isMobile) {
+      return ColoredBox(
+        color: const Color(0xFFF1F5F9),
+        child: Column(
+          children: [
+            _buildHeader(),
+            _buildCategoryTabs(),
+            Expanded(child: _buildMenuGrid()),
+            _buildMobileCartBar(),
+          ],
+        ),
+      );
+    }
 
     return ColoredBox(
       color: const Color(0xFFF1F5F9),
@@ -380,8 +401,12 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           const SizedBox(width: 14),
           Text('Restaurant POS', style: Theme.of(context).textTheme.displayMedium),
           const Spacer(),
-          Text(DateFormat('EEEE, MMM dd').format(DateTime.now()),
-              style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black45, fontSize: 13)),
+          if (MediaQuery.of(context).size.width >= 600)
+            Text(DateFormat('EEEE, MMM dd').format(DateTime.now()),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black45,
+                    fontSize: 13)),
         ],
       ),
     );
@@ -390,7 +415,16 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   Widget _buildCategoryTabs() {
     return Container(
       height: 58,
-      color: Colors.white,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
@@ -416,13 +450,17 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   }
 
   Widget _buildMenuGrid() {
+    final w = MediaQuery.of(context).size.width;
+    final cols = w < 600 ? 2 : (w < 900 ? 3 : 4);
+    final pad  = w < 600 ? 12.0 : 20.0;
+    final gap  = w < 600 ? 10.0 : 14.0;
     return GridView.builder(
-      padding: const EdgeInsets.all(20),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
+      padding: EdgeInsets.all(pad),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
         childAspectRatio: 0.85,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
+        crossAxisSpacing: gap,
+        mainAxisSpacing: gap,
       ),
       itemCount: _filteredMenu.length,
       itemBuilder: (_, i) => _buildMenuTile(_filteredMenu[i]),
@@ -495,6 +533,264 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     );
   }
 
+  // ─── MOBILE CART BAR ─────────────────────────────────────────────────────
+
+  /// Sticky bottom panel on mobile. Collapses to a summary strip and expands
+  /// to show order-type selector, cart items, totals, and checkout buttons.
+  Widget _buildMobileCartBar() {
+    final settings =
+        pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+    final taxRate = settings?.taxRate ?? 0.0;
+    final svcRate = _orderType == OrderType.dineIn
+        ? (settings?.serviceChargeRate ?? 0.0)
+        : 0.0;
+    final taxValue = _cartTotal * taxRate;
+    final svcValue = _cartTotal * svcRate;
+    final grandTotal = _cartTotal + taxValue + svcValue;
+    final hasItems = _cart.isNotEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.10),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Summary strip ──────────────────────────────────────────
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: hasItems
+                  ? () => setState(
+                      () => _mobileCartExpanded = !_mobileCartExpanded)
+                  : null,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    Stack(clipBehavior: Clip.none, children: [
+                      Icon(Icons.shopping_cart_outlined,
+                          size: 22,
+                          color: hasItems ? _kOrange : Colors.grey.shade300),
+                      if (hasItems)
+                        Positioned(
+                          top: -4,
+                          right: -6,
+                          child: Container(
+                            width: 17,
+                            height: 17,
+                            decoration: const BoxDecoration(
+                                color: _kOrange, shape: BoxShape.circle),
+                            child: Center(
+                              child: Text(
+                                '${_cart.length}',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ]),
+                    const SizedBox(width: 12),
+                    if (!hasItems)
+                      Text('Cart is empty',
+                          style: TextStyle(
+                              color: Colors.grey.shade400, fontSize: 14))
+                    else ...[
+                      Text(
+                        '${_cart.length} item${_cart.length == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 14),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '• ${_currencyFormat.format(grandTotal)}',
+                        style: const TextStyle(
+                            color: _kOrange,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14),
+                      ),
+                    ],
+                    const Spacer(),
+                    if (hasItems)
+                      Icon(
+                        _mobileCartExpanded
+                            ? Icons.keyboard_arrow_down_rounded
+                            : Icons.keyboard_arrow_up_rounded,
+                        color: Colors.grey.shade400,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Expanded: order type + table + items + total ───────────
+            if (_mobileCartExpanded && hasItems) ...[
+              const Divider(height: 1),
+              // Order type chips
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                child: Row(children: [
+                  Expanded(child: _typeBtn('Dine-in', OrderType.dineIn)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _typeBtn('Takeaway', OrderType.takeaway)),
+                ]),
+              ),
+              // Table selector (dine-in only)
+              if (_orderType == OrderType.dineIn)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  child: DropdownButtonFormField<String>(
+                    decoration: InputDecoration(
+                      labelText: 'Select Table',
+                      prefixIcon: const Icon(Icons.table_restaurant_rounded,
+                          size: 18),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                    ),
+                    value: _selectedTableId,
+                    items: _tables
+                        .map((t) => DropdownMenuItem(
+                              value: t.id,
+                              child: Text(
+                                  'Table ${t.tableNumber} (${t.capacity} pax)'),
+                            ))
+                        .toList(),
+                    onChanged: (val) =>
+                        setState(() => _selectedTableId = val),
+                  ),
+                ),
+              const Divider(height: 1),
+              // Cart items (scrollable, capped height)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  separatorBuilder: (_, __) =>
+                      Divider(color: Colors.grey.shade100, height: 1),
+                  itemCount: _cart.length,
+                  itemBuilder: (_, i) => _buildCartItem(_cart[i], i),
+                ),
+              ),
+              // Totals
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Column(
+                  children: [
+                    if (taxRate > 0)
+                      _mobileRow('Tax (${(taxRate * 100).toStringAsFixed(0)}%)',
+                          _currencyFormat.format(taxValue)),
+                    if (svcRate > 0)
+                      _mobileRow(
+                          'Service (${(svcRate * 100).toStringAsFixed(0)}%)',
+                          _currencyFormat.format(svcValue)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Total',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 14)),
+                        Text(
+                          _currencyFormat.format(grandTotal),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 20,
+                              color: _kOrange),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+            ],
+
+            // ── Checkout buttons ───────────────────────────────────────
+            if (hasItems)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: Row(children: [
+                  Expanded(
+                    flex: 5,
+                    child: ElevatedButton.icon(
+                      onPressed: !canEditSection(ref, 'restaurant_pos')
+                          ? null
+                          : () => _handleCheckout(PaymentStatus.paid),
+                      icon: const Icon(Icons.attach_money_rounded, size: 16),
+                      label: Text(
+                        'Cash  •  ${_currencyFormat.format(grandTotal)}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 12),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.success,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 3,
+                    child: OutlinedButton.icon(
+                      onPressed: _showChargeToRoomDialog,
+                      icon: const Icon(Icons.hotel_rounded, size: 14),
+                      label: const Text('Room',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.warning,
+                        side: BorderSide(color: AppTheme.warning),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _mobileRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style:
+                  TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+          Text(value,
+              style:
+                  TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+        ],
+      ),
+    );
+  }
+
   // ─── CART ────────────────────────────────────────────
 
   Widget _buildCart() {
@@ -542,11 +838,28 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Current Order', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: _kOrange.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text('${_cart.length} items',
-                    style: const TextStyle(color: _kOrange, fontWeight: FontWeight.bold, fontSize: 12)),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
+                child: Container(
+                  key: ValueKey(_cart.length),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _cart.isEmpty
+                        ? Colors.grey.shade100
+                        : _kOrange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _cart.isEmpty ? 'Empty' : '${_cart.length} items',
+                    style: TextStyle(
+                      color: _cart.isEmpty ? Colors.grey.shade400 : _kOrange,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -609,11 +922,16 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
   Widget _typeBtn(String label, OrderType type) {
     final sel = _orderType == type;
-    return ElevatedButton(
+    final icon = type == OrderType.dineIn
+        ? Icons.table_restaurant_rounded
+        : Icons.takeout_dining_rounded;
+    return ElevatedButton.icon(
       onPressed: () => setState(() {
         _orderType = type;
         if (type == OrderType.takeaway) _selectedTableId = null;
       }),
+      icon: Icon(icon, size: 15),
+      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
       style: ElevatedButton.styleFrom(
         backgroundColor: sel ? _kOrange : Colors.grey.shade100,
         foregroundColor: sel ? Colors.white : Colors.black54,
@@ -621,7 +939,6 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
     );
   }
 
@@ -684,59 +1001,77 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       ),
       child: Column(
         children: [
-          // ── Discount row ─────────────────────────────────────────────
+          // ── Discount row — hidden until tapped ───────────────────────
           if (_cart.isNotEmpty) ...[
-            Row(children: [
-              // Type toggle: % / flat
-              _DiscountTypeToggle(
-                selected: _discountType,
-                onChanged: (t) => setState(() {
-                  _discountType = t;
-                  final raw = double.tryParse(_discountController.text.trim()) ?? 0.0;
-                  _discountAmount = t == 'percentage'
-                      ? raw.clamp(0.0, 100.0)
-                      : raw.clamp(0.0, _cartItemsTotal);
-                }),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: SizedBox(
-                  height: 38,
-                  child: TextField(
-                    controller: _discountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: const TextStyle(fontSize: 13),
-                    decoration: InputDecoration(
-                      hintText: _discountType == 'percentage' ? 'Discount %' : 'Discount amount',
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      isDense: true,
-                      suffixText: _discountType == 'percentage' ? '%' : null,
-                    ),
-                    onChanged: (v) => setState(() {
-                      final raw = double.tryParse(v.trim()) ?? 0.0;
-                      _discountAmount = _discountType == 'percentage'
-                          ? raw.clamp(0.0, 100.0)
-                          : raw.clamp(0.0, _cartItemsTotal);
-                    }),
+            if (!_showDiscount)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => setState(() => _showDiscount = true),
+                  icon: Icon(Icons.local_offer_outlined,
+                      size: 13, color: Colors.grey.shade500),
+                  label: Text('Add Discount',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
-              ),
-              if (_discountAmount > 0) ...[
+              )
+            else ...[
+              Row(children: [
+                // Type toggle: % / flat
+                _DiscountTypeToggle(
+                  selected: _discountType,
+                  onChanged: (t) => setState(() {
+                    _discountType = t;
+                    final raw = double.tryParse(_discountController.text.trim()) ?? 0.0;
+                    _discountAmount = t == 'percentage'
+                        ? raw.clamp(0.0, 100.0)
+                        : raw.clamp(0.0, _cartItemsTotal);
+                  }),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SizedBox(
+                    height: 38,
+                    child: TextField(
+                      controller: _discountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: _discountType == 'percentage' ? 'Discount %' : 'Discount amount',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        isDense: true,
+                        suffixText: _discountType == 'percentage' ? '%' : null,
+                      ),
+                      onChanged: (v) => setState(() {
+                        final raw = double.tryParse(v.trim()) ?? 0.0;
+                        _discountAmount = _discountType == 'percentage'
+                            ? raw.clamp(0.0, 100.0)
+                            : raw.clamp(0.0, _cartItemsTotal);
+                      }),
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 6),
                 IconButton(
-                  icon: const Icon(Icons.close_rounded, size: 18, color: Colors.red),
-                  tooltip: 'Remove discount',
+                  icon: Icon(Icons.close_rounded, size: 18,
+                      color: _discountAmount > 0 ? Colors.red : Colors.grey.shade400),
+                  tooltip: 'Hide discount',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                   onPressed: () => setState(() {
                     _discountAmount = 0.0;
                     _discountController.clear();
+                    _showDiscount = false;
                   }),
                 ),
-              ],
-            ]),
-            const SizedBox(height: 10),
+              ]),
+              const SizedBox(height: 10),
+            ],
           ],
 
           // ── Subtotal / Discount / Total rows ─────────────────────────
@@ -810,6 +1145,10 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     backgroundColor: AppTheme.success,
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade200,
+                    disabledForegroundColor: Colors.grey.shade400,
+                    elevation: _cart.isEmpty ? 0 : 2,
+                    shadowColor: AppTheme.success.withOpacity(0.4),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
@@ -824,6 +1163,10 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     backgroundColor: const Color(0xFF0EA5E9),
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade200,
+                    disabledForegroundColor: Colors.grey.shade400,
+                    elevation: _cart.isEmpty ? 0 : 2,
+                    shadowColor: const Color(0xFF0EA5E9).withOpacity(0.4),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),

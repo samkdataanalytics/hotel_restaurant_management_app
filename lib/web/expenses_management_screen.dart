@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart' as pkg_provider;
 import '../app_theme.dart';
+import 'widgets/skeleton.dart';
 import '../providers/hotel_session.dart';
 import '../models/expense.dart';
 import '../models/room.dart';
@@ -124,14 +125,12 @@ class _ExpensesManagementScreenState extends ConsumerState<ExpensesManagementScr
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const TableListSkeleton(rowCount: 7, cellCount: 5);
 
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -140,17 +139,20 @@ class _ExpensesManagementScreenState extends ConsumerState<ExpensesManagementScr
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Property Expenses', style: Theme.of(context).textTheme.displayMedium),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Manage, categorize, and track operational costs and billables.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Property Expenses', style: Theme.of(context).textTheme.displayMedium),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Manage, categorize, and track operational costs and billables.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 16),
                 ElevatedButton.icon(
                   onPressed: canEditSection(ref, 'hotel_expenses') ? () => _openExpenseDialog() : null,
                   icon: const Icon(Icons.add_rounded, size: 20, color: Colors.white),

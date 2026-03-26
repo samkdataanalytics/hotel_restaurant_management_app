@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../app_theme.dart';
+import 'widgets/skeleton.dart';
 import '../models/check_in.dart';
 import '../models/guest.dart';
 import '../models/room.dart';
@@ -52,13 +53,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const DashboardSkeleton();
     if (_error != null) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: AppTheme.screenPad(context),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -88,35 +87,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Dashboard',
-                      style: Theme.of(context).textTheme.displayMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Welcome back! Here\'s today\'s overview.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-                Text(
-                  _dateFormat.format(DateTime.now()),
-                  style: TextStyle(
-                    color: AppTheme.adminTextMuted,
-                    fontSize: 14,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Dashboard',
+                        style: Theme.of(context).textTheme.displayMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Welcome back! Here\'s today\'s overview.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
                   ),
                 ),
+                if (!AppTheme.isMobile(context))
+                  Text(
+                    _dateFormat.format(DateTime.now()),
+                    style: TextStyle(
+                      color: AppTheme.adminTextMuted,
+                      fontSize: 14,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 32),

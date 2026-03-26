@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:provider/provider.dart';
 import '../app_theme.dart';
+import 'widgets/skeleton.dart';
 import '../providers/hotel_session.dart';
 import '../models/booking.dart';
 import '../models/room.dart';
@@ -170,7 +171,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const KpiTableSkeleton();
 
     final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
     double materializedRevenue = 0;
@@ -237,7 +238,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -246,25 +247,32 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Financials Dashboard', style: Theme.of(context).textTheme.displayMedium),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Monitor past, present, and potential future revenues.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Financials Dashboard', style: Theme.of(context).textTheme.displayMedium),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Monitor past, present, and potential future revenues.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 12),
                 OutlinedButton.icon(
                   onPressed: _selectDateRange,
                   icon: const Icon(Icons.date_range_rounded, size: 18),
-                  label: Text('${_dateFormat.format(_dateRange.start)} — ${_dateFormat.format(_dateRange.end)}'),
+                  label: AppTheme.isMobile(context)
+                      ? const SizedBox.shrink()
+                      : Text('${_dateFormat.format(_dateRange.start)} — ${_dateFormat.format(_dateRange.end)}'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppTheme.adminPrimary,
                     side: BorderSide(color: AppTheme.adminPrimary.withOpacity(0.5)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: AppTheme.isMobile(context)
+                        ? const EdgeInsets.all(14)
+                        : const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
