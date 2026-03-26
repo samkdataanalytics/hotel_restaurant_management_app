@@ -27,6 +27,7 @@ import '../orders_screen.dart';
 import '../restaurant_analytics_screen.dart';
 import '../cancellations_refunds_screen.dart';
 import '../users_management_screen.dart';
+import '../edit_property_dialog.dart';
 
 // ─── Page list (flat index-addressed) ────────────────────────────────────────
 
@@ -126,6 +127,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   // Badge counts: pageIndex → count (only populated for actionable items)
   Map<int, int> _badgeCounts = {};
   Timer? _badgeRefreshTimer;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -166,8 +168,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       if (mounted) {
         setState(() {
           _isInitializing = false;
-          if (activeProperty != null && !activeProperty.isHotel) {
-            _selectedIndex = 6; // default to POS for restaurant-only
+          if (activeProperty != null) {
+            _selectedIndex = _defaultPageIndex(activeProperty);
           }
         });
       }
@@ -271,11 +273,16 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   Future<void> _switchToProperty(OrgProperty property) async {
     await _applyActiveProperty(property);
+    setState(() => _selectedIndex = _defaultPageIndex(property));
+  }
 
-    setState(() {
-      // Default to hotel dashboard or POS depending on type
-      _selectedIndex = property.isHotel ? 0 : 6;
-    });
+  /// Returns the page index the user should land on for [property].
+  /// Finds the first page in the first visible nav section so restaurant-only
+  /// staff on a combined property don't land on the hotel Dashboard.
+  int _defaultPageIndex(OrgProperty property) {
+    final sections = _activeSections(property);
+    final firstItem = sections.expand((s) => s.items).firstOrNull;
+    return firstItem?.pageIndex ?? 0;
   }
 
   List<_NavSection> _activeSections(OrgProperty? property) {
@@ -371,7 +378,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     final sections = _activeSections(activeProperty);
 
     return Scaffold(
+      key: _scaffoldKey,
       drawer: isMobile ? Drawer(child: _buildSidebar(activeProperty, authState, sections, isDrawer: true)) : null,
+      bottomNavigationBar: isMobile ? _buildBottomNav(activeProperty) : null,
       body: Row(
         children: [
           if (!isMobile) _buildSidebar(activeProperty, authState, sections),
@@ -407,6 +416,87 @@ class _AppShellState extends ConsumerState<AppShell> {
     );
   }
 
+  // ─── Mobile bottom navigation ─────────────────────────────────────────────
+
+  /// Returns the 4 primary nav items for the mobile bottom bar, chosen by
+  /// property type so staff can reach the most-used screens in one tap.
+  List<_NavItem> _mobileNavItems(OrgProperty? property) {
+    if (property == null) return [_hotelSection.items[0]];
+    if (property.isHotel && property.isRestaurant) {
+      return [
+        _hotelSection.items[0],      // Dashboard
+        _hotelSection.items[1],      // Check-Ins
+        _restaurantSection.items[0], // POS
+        _restaurantSection.items[2], // Kitchen
+      ];
+    }
+    if (property.isRestaurant) {
+      return [
+        _restaurantSection.items[0], // POS
+        _restaurantSection.items[1], // Tables
+        _restaurantSection.items[2], // Kitchen
+        _restaurantSection.items[4], // Orders
+      ];
+    }
+    // Hotel only
+    return [
+      _hotelSection.items[0], // Dashboard
+      _hotelSection.items[1], // Check-Ins
+      _hotelSection.items[2], // Rooms
+      _hotelSection.items[3], // Reservations
+    ];
+  }
+
+  Widget _buildBottomNav(OrgProperty? activeProperty) {
+    final navItems = _mobileNavItems(activeProperty);
+    // Which bottom-nav tab is active? Falls back to the "More" slot (last)
+    // if the currently viewed page is not in the shortcut list.
+    int selectedIdx = navItems.indexWhere((i) => i.pageIndex == _selectedIndex);
+    if (selectedIdx < 0) selectedIdx = navItems.length; // "More" slot
+
+    return BottomNavigationBar(
+      currentIndex: selectedIdx.clamp(0, navItems.length),
+      type: BottomNavigationBarType.fixed,
+      backgroundColor: const Color(0xFF0F172A),
+      selectedItemColor: const Color(0xFFD4A853),
+      unselectedItemColor: Colors.white38,
+      selectedLabelStyle:
+          const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+      unselectedLabelStyle: const TextStyle(fontSize: 10),
+      elevation: 8,
+      onTap: (idx) {
+        if (idx < navItems.length) {
+          setState(() => _selectedIndex = navItems[idx].pageIndex);
+        } else {
+          // "More" — open the full sidebar drawer
+          _scaffoldKey.currentState?.openDrawer();
+        }
+      },
+      items: [
+        ...navItems.map((item) {
+          final count = _badgeCounts[item.pageIndex] ?? 0;
+          return BottomNavigationBarItem(
+            icon: count > 0
+                ? Badge(
+                    label: Text(
+                      count > 99 ? '99+' : '$count',
+                      style: const TextStyle(fontSize: 9),
+                    ),
+                    backgroundColor: AppTheme.danger,
+                    child: Icon(item.icon),
+                  )
+                : Icon(item.icon),
+            label: item.label,
+          );
+        }),
+        const BottomNavigationBarItem(
+          icon: Icon(Icons.apps_rounded),
+          label: 'More',
+        ),
+      ],
+    );
+  }
+
   // ─── Sidebar ──────────────────────────────────────────────────────────────
 
   Widget _buildSidebar(
@@ -420,7 +510,11 @@ class _AppShellState extends ConsumerState<AppShell> {
       duration: const Duration(milliseconds: 200),
       width: expanded ? 240 : 72,
       decoration: BoxDecoration(
-        color: AppTheme.sidebarDark,
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF1A2540), Color(0xFF0F172A)],
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.2),
@@ -999,27 +1093,25 @@ class _AppShellState extends ConsumerState<AppShell> {
 
           const Spacer(),
 
-          // Current user — show username for staff accounts, email otherwise
+          // Current user — on mobile show only avatar icon; on desktop show name
           if (authState?.email != null)
-            Row(
-              children: [
-                const Icon(
-                  Icons.account_circle_rounded,
-                  size: 20,
-                  color: Color(0xFF94A3B8),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  (authState?.isStaffAccount ?? false)
-                      ? authState!.email!.split('@').first
-                      : authState!.email!,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF64748B),
+            isMobile
+                ? const Icon(Icons.account_circle_rounded,
+                    size: 24, color: Color(0xFF94A3B8))
+                : Row(
+                    children: [
+                      const Icon(Icons.account_circle_rounded,
+                          size: 20, color: Color(0xFF94A3B8)),
+                      const SizedBox(width: 8),
+                      Text(
+                        (authState?.isStaffAccount ?? false)
+                            ? authState!.email!.split('@').first
+                            : authState!.email!,
+                        style: const TextStyle(
+                            fontSize: 13, color: Color(0xFF64748B)),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
         ],
       ),
     );
@@ -1235,6 +1327,16 @@ class _ManagePropertiesDialog extends StatefulWidget {
 class _ManagePropertiesDialogState extends State<_ManagePropertiesDialog> {
   bool _loading = false;
 
+  Future<void> _editProperty(OrgProperty p) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => EditPropertyDialog(property: p),
+    );
+    if (saved != true || !mounted) return;
+    widget.onChanged();
+    Navigator.of(context).pop();
+  }
+
   Future<void> _toggleStatus(OrgProperty p) async {
     final newStatus = p.status == 'active' ? 'inactive' : 'active';
     setState(() => _loading = true);
@@ -1394,6 +1496,15 @@ class _ManagePropertiesDialogState extends State<_ManagePropertiesDialog> {
                                 ],
                               ),
                             ],
+                          ),
+                        ),
+                        // Edit property details
+                        Tooltip(
+                          message: 'Edit property',
+                          child: IconButton(
+                            icon: const Icon(Icons.edit_rounded, size: 18),
+                            color: AppTheme.adminPrimary,
+                            onPressed: () => _editProperty(p),
                           ),
                         ),
                         // Toggle active/inactive

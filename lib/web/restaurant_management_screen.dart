@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
+import 'widgets/skeleton.dart';
 import '../providers/hotel_session.dart';
 import '../models/menu_item.dart';
 import '../models/ingredient.dart';
@@ -84,7 +85,8 @@ class _RestaurantManagementScreenState extends State<RestaurantManagementScreen>
   Widget _buildTopBar() {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(32, 24, 32, 0),
+      padding: EdgeInsets.fromLTRB(AppTheme.isMobile(context) ? 16 : 32, 24,
+          AppTheme.isMobile(context) ? 16 : 32, 0),
       child: Row(
         children: [
           Container(
@@ -114,7 +116,8 @@ class _RestaurantManagementScreenState extends State<RestaurantManagementScreen>
   Widget _buildTabBar() {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(32, 12, 32, 0),
+      padding: EdgeInsets.fromLTRB(AppTheme.isMobile(context) ? 16 : 32, 12,
+          AppTheme.isMobile(context) ? 16 : 32, 0),
       child: TabBar(
         controller: _tabController,
         isScrollable: true,
@@ -231,7 +234,7 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
     final categories = _items.map((e) => e.category).toSet().toList()..sort();
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+      padding: AppTheme.screenPad(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -239,8 +242,11 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('${_items.length} Menu Items',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Color(0xFF1E293B))),
+              Expanded(
+                child: Text('${_items.length} Menu Items',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Color(0xFF1E293B))),
+              ),
+              const SizedBox(width: 12),
               ElevatedButton.icon(
                 onPressed: canEditSection(ref, 'restaurant_management') ? () => _openDialog() : null,
                 icon: const Icon(Icons.add_rounded, size: 18),
@@ -907,7 +913,7 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: AppTheme.screenPad(context),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1560,7 +1566,7 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
     final available = _tables.length - occupied;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+      padding: AppTheme.screenPad(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2217,7 +2223,7 @@ class _InventoryTabState extends ConsumerState<_InventoryTab> {
     final outCount = _ingredients.where((i) { final v = _invFor(i.id); return v != null && v.isOut; }).length;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+      padding: AppTheme.screenPad(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2562,10 +2568,10 @@ class _SettingsTabState extends State<_SettingsTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const TableListSkeleton(rowCount: 8, cellCount: 5);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+      padding: AppTheme.screenPad(context),
       child: Align(
         alignment: Alignment.topLeft,
         child: ConstrainedBox(

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
+import 'widgets/skeleton.dart';
 import '../models/booking.dart';
 import '../models/guest.dart';
 import '../models/room.dart';
@@ -228,12 +229,12 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const TableListSkeleton(rowCount: 8, cellCount: 5);
 
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -274,19 +275,24 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Reservations', style: Theme.of(context).textTheme.displayMedium),
-            const SizedBox(height: 4),
-            Text(
-              'Manage all reservations from Booking.com, Airbnb & direct bookings.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Reservations', style: Theme.of(context).textTheme.displayMedium),
+              const SizedBox(height: 4),
+              Text(
+                'Manage all reservations from Booking.com, Airbnb & direct bookings.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
         ),
+        const SizedBox(width: 16),
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh), tooltip: 'Refresh'),
             const SizedBox(width: 8),
@@ -1140,13 +1146,14 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     
     if (mounted) {
       Navigator.pop(context); // Close loading dialog
-      final sym = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+      final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
       await _invoiceService.displayInvoicePdf(
         booking: booking,
         room: room,
         guest: guest,
         expenses: expenses,
-        currencySymbol: sym,
+        currencySymbol: settings?.currencySymbol ?? '\$',
+        settings: settings,
       );
     }
   }

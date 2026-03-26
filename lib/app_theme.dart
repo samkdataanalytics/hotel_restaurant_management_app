@@ -95,11 +95,11 @@ class AppTheme {
 
   // ─── Web Admin Theme ─────────────────────────────────────
 
-  static const _adminPrimary = Color(0xFF3B82F6);
-  static const _adminPrimaryLight = Color(0xFF60A5FA);
+  static const _adminPrimary = Color(0xFF2563EB);
+  static const _adminPrimaryLight = Color(0xFF3B82F6);
   static const _adminBgDark = Color(0xFF0F172A);
-  static const _adminSidebar = Color(0xFF1E293B);
-  static const _adminContent = Color(0xFFF8FAFC);
+  static const _adminSidebar = Color(0xFF1A2540);
+  static const _adminContent = Color(0xFFF5F7FA);
   static const _adminCard = Colors.white;
   static const _adminTextDark = Color(0xFF1E293B);
   static const _adminTextMuted = Color(0xFF64748B);
@@ -155,7 +155,7 @@ class AppTheme {
         shadowColor: Colors.black12,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          side: const BorderSide(color: Color(0xFFE8EDF3)),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -250,7 +250,7 @@ class AppTheme {
   static BoxDecoration get cardDecoration => BoxDecoration(
     color: Colors.white,
     borderRadius: BorderRadius.circular(cardRadius),
-    border: Border.all(color: const Color(0xFFE2E8F0)),
+    border: Border.all(color: const Color(0xFFE8EDF3)),
     boxShadow: cardShadow,
   );
 
@@ -260,9 +260,9 @@ class AppTheme {
     borderRadius: BorderRadius.circular(cardRadius),
     border: Border(
       left: BorderSide(color: accent, width: 4),
-      top: const BorderSide(color: Color(0xFFE2E8F0)),
-      right: const BorderSide(color: Color(0xFFE2E8F0)),
-      bottom: const BorderSide(color: Color(0xFFE2E8F0)),
+      top: const BorderSide(color: Color(0xFFE8EDF3)),
+      right: const BorderSide(color: Color(0xFFE8EDF3)),
+      bottom: const BorderSide(color: Color(0xFFE8EDF3)),
     ),
     boxShadow: cardShadow,
   );
@@ -278,12 +278,28 @@ class AppTheme {
   static const Color statusGreen  = Color(0xFF22C55E);   // success / available
   static const Color statusAmber  = Color(0xFFF59E0B);   // warning / preparing
   static const Color statusRed    = Color(0xFFEF4444);   // danger / occupied
-  static const Color statusBlue   = Color(0xFF3B82F6);   // info / hotel accent
+  static const Color statusBlue   = Color(0xFF2563EB);   // info / hotel accent
   static const Color statusPurple = Color(0xFF8B5CF6);   // payment due
 
   // ─── Page Background ─────────────────────────────────────────────────────────
 
-  static const Color pageBg = Color(0xFFF8FAFC);
+  static const Color pageBg = Color(0xFFF5F7FA);
+
+  // ─── Responsive helpers ───────────────────────────────────────────────────
+
+  /// True when viewport width < 600 px (phone portrait).
+  static bool isMobile(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < 600;
+
+  /// True when viewport width is between 600 and 1024 px.
+  static bool isTablet(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
+    return w >= 600 && w < 1024;
+  }
+
+  /// Standard scrollable-content padding: 16 on mobile, 32 on desktop.
+  static EdgeInsets screenPad(BuildContext context) =>
+      EdgeInsets.all(isMobile(context) ? 16.0 : 32.0);
 
   // ─── Helper Colors for Web Admin ─────────────────────────
 

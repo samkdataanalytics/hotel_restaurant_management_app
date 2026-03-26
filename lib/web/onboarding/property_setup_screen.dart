@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -92,6 +94,8 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
 
   bool _isStepB = false;
   bool _isSubmitting = false;
+  Uint8List? _logoBytes;
+  String? _logoFileName;
 
   @override
   void dispose() {
@@ -112,6 +116,21 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
       return;
     }
     setState(() => _isStepB = true);
+  }
+
+  Future<void> _pickLogo() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      allowMultiple: false,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    if (file.bytes == null) return;
+    setState(() {
+      _logoBytes = file.bytes;
+      _logoFileName = file.name;
+    });
   }
 
   Future<void> _submitProperty() async {
@@ -135,6 +154,14 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
         timezone: _selectedTimezone,
         currency: _selectedCurrency,
       );
+
+      // Upload logo if one was picked
+      if (_logoBytes != null && _logoFileName != null) {
+        final logoUrl = await OrganizationService().uploadPropertyLogo(
+          newProperty.id, _logoBytes!, _logoFileName!,
+        );
+        await OrganizationService().updatePropertyLogo(newProperty.id, logoUrl);
+      }
 
       // Persist as active property
       await OrganizationService().setActivePropertyId(newProperty.id);
@@ -588,7 +615,76 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
             )).toList(),
             onChanged: (v) => setState(() => _selectedCurrency = v ?? 'USD'),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 20),
+
+          // Logo picker
+          _FieldLabel(text: 'Property Logo  (optional)'),
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: _pickLogo,
+            child: Container(
+              height: 100,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                border: Border.all(
+                  color: _logoBytes != null
+                      ? AppTheme.adminPrimary.withOpacity(0.5)
+                      : Colors.grey.shade300,
+                  width: 1.5,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: _logoBytes != null
+                  ? Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(11),
+                          child: Image.memory(
+                            _logoBytes!,
+                            height: 100,
+                            width: double.infinity,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                        Positioned(
+                          top: 6, right: 6,
+                          child: GestureDetector(
+                            onTap: () => setState(() {
+                              _logoBytes = null;
+                              _logoFileName = null;
+                            }),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Icon(Icons.close_rounded, size: 14, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_photo_alternate_rounded,
+                            size: 28, color: Colors.grey.shade400),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Click to upload logo',
+                          style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                        ),
+                        Text(
+                          'PNG, JPG, WEBP — max 2 MB',
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+          const SizedBox(height: 28),
 
           // Buttons
           Row(

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_theme.dart';
+import 'widgets/skeleton.dart';
 import '../models/staff_permission.dart';
 import '../providers/app_auth_provider.dart';
 import '../services/staff_service.dart';
@@ -266,9 +267,7 @@ class _UsersManagementScreenState
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const TableListSkeleton(rowCount: 7, cellCount: 4);
 
     final isOwner = ref.watch(isPropertyOwnerProvider);
     // Managers don't see the hotel owner in the team list
@@ -279,7 +278,7 @@ class _UsersManagementScreenState
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -288,18 +287,21 @@ class _UsersManagementScreenState
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Team Members',
-                        style: Theme.of(context).textTheme.displayMedium),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Manage staff access and per-section privileges for this property.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Team Members',
+                          style: Theme.of(context).textTheme.displayMedium),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Manage staff access and per-section privileges for this property.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 16),
                 ElevatedButton.icon(
                   onPressed: _addMember,
                   icon: const Icon(Icons.person_add_rounded,

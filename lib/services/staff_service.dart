@@ -346,7 +346,7 @@ class StaffService {
     // Return highest privilege: owner > manager > staff
     if (staffRole == 'owner' || hotelRole == 'owner') return 'owner';
     if (staffRole == 'manager' || hotelRole == 'manager') return 'manager';
-    if (staffRole != null) return staffRole;
+    if (staffRole == 'staff' || hotelRole == 'staff') return 'staff';
     return null;
   }
 }

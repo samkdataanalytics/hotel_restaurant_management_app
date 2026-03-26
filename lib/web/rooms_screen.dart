@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
+import 'widgets/skeleton.dart';
 import '../providers/hotel_session.dart';
 import '../models/room.dart';
 import '../models/staff_permission.dart';
@@ -231,9 +232,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const TableListSkeleton(rowCount: 7, cellCount: 5);
 
     final availableCount =
         _rooms.where((r) => r.status == RoomStatus.available).length;
@@ -245,19 +244,23 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  'Room Management',
-                  style: Theme.of(context).textTheme.displayMedium,
+                Expanded(
+                  child: Text(
+                    'Room Management',
+                    style: Theme.of(context).textTheme.displayMedium,
+                  ),
                 ),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
                       onPressed: _loadRooms,

@@ -73,7 +73,7 @@ Deno.serve(async (req: Request) => {
       .eq('hotel_id', primaryPropertyId).eq('user_id', caller.id).maybeSingle()
 
     const isManager =
-      (staffRow && staffRow.role === 'manager') ||
+      (staffRow && ['owner', 'manager'].includes(staffRow.role)) ||
       (hotelRow && ['owner', 'manager'].includes(hotelRow.role))
 
     if (!isManager) {
