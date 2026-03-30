@@ -299,11 +299,15 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
             ElevatedButton.icon(
               onPressed: canEditSection(ref, 'hotel_reservations') ? _showAddReservationDialog : null,
               icon: const Icon(Icons.add_rounded, size: 20),
-              label: const Text('Add Reservation'),
+              label: AppTheme.isMobile(context)
+                  ? const SizedBox.shrink()
+                  : const Text('Add Reservation'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.adminPrimary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                padding: AppTheme.isMobile(context)
+                    ? const EdgeInsets.all(14)
+                    : const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),

@@ -313,6 +313,29 @@ class BookingService {
         }).toList();
   }
 
+  // ─── Badge counts (lightweight — IDs only, server-filtered) ─────────────
+
+  /// Returns the number of pending bookings arriving today.
+  /// Used by AppShell badge; fetches only IDs, no joins.
+  Future<int> countPendingArrivalsToday() async {
+    if (hotelId == null) return 0;
+    try {
+      final today = DateTime.now();
+      final start = DateTime(today.year, today.month, today.day).toIso8601String();
+      final end   = DateTime(today.year, today.month, today.day, 23, 59, 59).toIso8601String();
+      final rows  = await _db
+          .from('bookings')
+          .select('id')
+          .eq('hotel_id', hotelId!)
+          .eq('status', 'pending')
+          .gte('check_in_date', start)
+          .lte('check_in_date', end);
+      return rows.length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   // ─── Dashboard Stats ──────────────────────────────────────────────────────
 
   Future<Map<String, int>> getDashboardStats() async {

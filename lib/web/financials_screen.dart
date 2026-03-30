@@ -281,48 +281,60 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
             const SizedBox(height: 24),
 
             // Advanced Summary Cards
-            Row(
-              children: [
-                Expanded(
-                  child: _buildSummaryCard(
-                    title: 'Gross Revenue',
-                    subtitle: 'Up to today',
-                    value: _fmtAmt(materializedRevenue),
-                    icon: Icons.account_balance_wallet_rounded,
-                    color: AppTheme.success,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildSummaryCard(
-                    title: 'Total Costs',
-                    subtitle: 'Room expenses up to today',
-                    value: _fmtAmt(totalExpenses),
-                    icon: Icons.money_off_csred_rounded,
-                    color: AppTheme.danger,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildSummaryCard(
-                    title: 'Net Profit',
-                    subtitle: 'Revenue minus costs',
-                    value: _fmtAmt(materializedRevenue - totalExpenses),
-                    icon: Icons.payments_rounded,
-                    color: AppTheme.warning,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildSummaryCard(
-                    title: 'Future & Potential',
-                    subtitle: '+ ${_fmtAmt(potentialRevenue)} possible',
-                    value: _fmtAmt(futureRevenue),
-                    icon: Icons.event_available_rounded,
-                    color: AppTheme.adminPrimary,
-                  ),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 700;
+                final spacing = isNarrow ? 12.0 : 16.0;
+                final cardWidth = isNarrow
+                    ? (constraints.maxWidth - spacing) / 2
+                    : (constraints.maxWidth - spacing * 3) / 4;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    SizedBox(
+                      width: cardWidth,
+                      child: _buildSummaryCard(
+                        title: 'Gross Revenue',
+                        subtitle: 'Up to today',
+                        value: _fmtAmt(materializedRevenue),
+                        icon: Icons.account_balance_wallet_rounded,
+                        color: AppTheme.success,
+                      ),
+                    ),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _buildSummaryCard(
+                        title: 'Total Costs',
+                        subtitle: 'Room expenses up to today',
+                        value: _fmtAmt(totalExpenses),
+                        icon: Icons.money_off_csred_rounded,
+                        color: AppTheme.danger,
+                      ),
+                    ),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _buildSummaryCard(
+                        title: 'Net Profit',
+                        subtitle: 'Revenue minus costs',
+                        value: _fmtAmt(materializedRevenue - totalExpenses),
+                        icon: Icons.payments_rounded,
+                        color: AppTheme.warning,
+                      ),
+                    ),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _buildSummaryCard(
+                        title: 'Future & Potential',
+                        subtitle: '+ ${_fmtAmt(potentialRevenue)} possible',
+                        value: _fmtAmt(futureRevenue),
+                        icon: Icons.event_available_rounded,
+                        color: AppTheme.adminPrimary,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 32),
 
@@ -334,7 +346,9 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.grey.shade200),
               ),
-              child: Row(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
                 children: [
                   Text('Filter Platforms:', style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.adminTextMuted)),
                   const SizedBox(width: 16),
@@ -360,62 +374,73 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                   }),
                 ],
               ),
+              ),
             ),
             const SizedBox(height: 32),
 
             // Charts
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Daily Revenue by Source', style: AppTheme.dmSerif(fontSize: 16)),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            height: 300,
-                            child: _buildRevenueChart(days, dailyStats),
-                          ),
-                        ],
-                      ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final revenueCard = Card(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Daily Revenue by Source', style: AppTheme.dmSerif(fontSize: 16)),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          height: 260,
+                          child: _buildRevenueChart(days, dailyStats),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  flex: 2,
-                  child: Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Active Reservations', style: AppTheme.dmSerif(fontSize: 16)),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            height: 300,
-                            child: _buildBookingsLineChart(days, dailyStats),
-                          ),
-                        ],
-                      ),
+                );
+                final bookingsCard = Card(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Active Reservations', style: AppTheme.dmSerif(fontSize: 16)),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          height: 260,
+                          child: _buildBookingsLineChart(days, dailyStats),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
+                );
+                if (constraints.maxWidth > 700) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 3, child: revenueCard),
+                      const SizedBox(width: 20),
+                      Expanded(flex: 2, child: bookingsCard),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [revenueCard, const SizedBox(height: 16), bookingsCard],
+                );
+              },
             ),
             const SizedBox(height: 32),
 
             // Data Table
             Text('Daily Breakdown', style: AppTheme.dmSerif(fontSize: 18)),
             const SizedBox(height: 16),
-            Card(
+            LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: constraints.maxWidth < 560 ? 560 : constraints.maxWidth,
+                  child: Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
@@ -545,6 +570,9 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                       );
                     }),
                   ],
+                ),
+              ),
+            ),
                 ),
               ),
             ),

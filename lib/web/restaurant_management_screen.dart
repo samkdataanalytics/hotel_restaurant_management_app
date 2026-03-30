@@ -16,6 +16,8 @@ import '../models/restaurant_order.dart';
 import '../models/inventory_item.dart';
 import '../models/staff_permission.dart';
 import '../services/restaurant_service.dart';
+import '../services/menu_pdf_service.dart';
+import '../services/menu_doc_service.dart';
 
 // ─── Color palette for restaurant sections — sourced from AppTheme ───────────
 class _RC {
@@ -155,6 +157,9 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
   List<Ingredient> _ingredients = [];
   Map<String, double> _currentCosts = {};
   bool _loading = true;
+  bool _generatingPdf = false;
+  final _menuPdfService = MenuPdfService();
+  final _menuDocService = MenuDocService();
   NumberFormat get _currency => NumberFormat.currency(
       symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
@@ -226,6 +231,230 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
     );
   }
 
+  // ── Generate PDF ────────────────────────────────────────────────────────────
+
+  Future<void> _generateMenuPdf({bool includeUnavailable = false}) async {
+    if (_generatingPdf) return;
+    setState(() => _generatingPdf = true);
+    try {
+      final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
+      await _menuPdfService.displayMenuPdf(
+        items: _items,
+        settings: session.settings,
+        includeUnavailable: includeUnavailable,
+        currencySymbol: session.settings?.currencySymbol ?? '\$',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to generate PDF: $e'),
+          backgroundColor: AppTheme.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _generatingPdf = false);
+    }
+  }
+
+  // ── Generate Doc (HTML) ──────────────────────────────────────────────────
+
+  void _generateMenuDoc({bool includeUnavailable = false}) {
+    try {
+      final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
+      _menuDocService.generateAndDownload(
+        items: _items,
+        settings: session.settings,
+        includeUnavailable: includeUnavailable,
+        currencySymbol: session.settings?.currencySymbol ?? '\$',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Menu document downloaded — open in browser or import into Google Docs'),
+          backgroundColor: AppTheme.statusGreen,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to generate document: $e'),
+          backgroundColor: AppTheme.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+      );
+    }
+  }
+
+  // ── Bottom sheet ──────────────────────────────────────────────────────────
+
+  void _showGenerateMenuOptions() {
+    final availableCount = _items.where((i) => i.isAvailable).length;
+    final totalCount     = _items.length;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Header ──
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _RC.accentLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.menu_book_rounded, color: _RC.accent, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Generate Menu',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                    Text('Choose format and content',
+                        style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 13)),
+                  ],
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 24),
+
+            // ── PDF section ──
+            _formatSectionHeader(
+              icon: Icons.picture_as_pdf_rounded,
+              color: const Color(0xFFE53935),
+              label: 'PDF',
+              hint: 'Opens print dialog · save or print',
+            ),
+            const SizedBox(height: 10),
+            _menuOption(
+              icon: Icons.check_circle_outline_rounded,
+              iconColor: AppTheme.statusGreen,
+              title: 'Available Items Only',
+              subtitle: '$availableCount items currently in stock',
+              onTap: () { Navigator.pop(context); _generateMenuPdf(includeUnavailable: false); },
+            ),
+            const SizedBox(height: 8),
+            _menuOption(
+              icon: Icons.list_alt_rounded,
+              iconColor: AppTheme.adminPrimary,
+              title: 'Full Menu (all items)',
+              subtitle: '$totalCount items · sold-out items marked',
+              onTap: () { Navigator.pop(context); _generateMenuPdf(includeUnavailable: true); },
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── Doc section ──
+            _formatSectionHeader(
+              icon: Icons.description_rounded,
+              color: const Color(0xFF1A73E8),
+              label: 'Document',
+              hint: 'Downloads .html · open in browser or import into Google Docs',
+            ),
+            const SizedBox(height: 10),
+            _menuOption(
+              icon: Icons.check_circle_outline_rounded,
+              iconColor: AppTheme.statusGreen,
+              title: 'Available Items Only',
+              subtitle: '$availableCount items currently in stock',
+              onTap: () { Navigator.pop(context); _generateMenuDoc(includeUnavailable: false); },
+            ),
+            const SizedBox(height: 8),
+            _menuOption(
+              icon: Icons.list_alt_rounded,
+              iconColor: AppTheme.adminPrimary,
+              title: 'Full Menu (all items)',
+              subtitle: '$totalCount items · sold-out items marked',
+              onTap: () { Navigator.pop(context); _generateMenuDoc(includeUnavailable: true); },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _formatSectionHeader({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String hint,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 8),
+        Text(label,
+            style: TextStyle(
+                fontWeight: FontWeight.w700, fontSize: 13, color: color)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(hint,
+              style: TextStyle(fontSize: 11, color: AppTheme.adminTextMuted)),
+        ),
+      ],
+    );
+  }
+
+  Widget _menuOption({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade200),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: iconColor, size: 22),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: TextStyle(
+                          fontSize: 12, color: AppTheme.adminTextMuted)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.black26),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -247,16 +476,53 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Color(0xFF1E293B))),
               ),
               const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: canEditSection(ref, 'restaurant_management') ? () => _openDialog() : null,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add Menu Item'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _RC.accent,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Generate Menu PDF button
+                  OutlinedButton.icon(
+                    onPressed: _items.isEmpty
+                        ? null
+                        : _generatingPdf
+                            ? null
+                            : _showGenerateMenuOptions,
+                    icon: _generatingPdf
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                    label: AppTheme.isMobile(context)
+                        ? const SizedBox.shrink()
+                        : const Text('Generate Menu'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _RC.accent,
+                      side: const BorderSide(color: _RC.accent),
+                      padding: AppTheme.isMobile(context)
+                          ? const EdgeInsets.all(13)
+                          : const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Add Menu Item button
+                  ElevatedButton.icon(
+                    onPressed: canEditSection(ref, 'restaurant_management') ? () => _openDialog() : null,
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: AppTheme.isMobile(context)
+                        ? const SizedBox.shrink()
+                        : const Text('Add Menu Item'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _RC.accent,
+                      foregroundColor: Colors.white,
+                      padding: AppTheme.isMobile(context)
+                          ? const EdgeInsets.all(13)
+                          : const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

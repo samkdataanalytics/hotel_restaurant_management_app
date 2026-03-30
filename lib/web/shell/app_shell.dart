@@ -10,8 +10,6 @@ import '../../services/organization_service.dart';
 import '../../services/booking_service.dart';
 import '../../services/restaurant_service.dart';
 import '../../models/staff_permission.dart';
-import '../../models/booking.dart';
-import '../../models/restaurant_order.dart';
 import '../../services/staff_service.dart';
 import '../dashboard_screen.dart';
 import '../checkins_screen.dart';
@@ -117,8 +115,10 @@ class AppShell extends ConsumerStatefulWidget {
 
 class _AppShellState extends ConsumerState<AppShell> {
   int _selectedIndex = 0;
+  final List<int> _navHistory = [];   // back-stack of previously visited indices
   bool _sidebarExpanded = true;
   bool _isInitializing = true;
+  bool _noProperties   = false; // true when a staff user has no assigned properties
   String? _initError;
   // Permission state for the current user on the active property
   bool _isPropertyManager = true; // assume true until loaded (safe default)
@@ -135,7 +135,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
     // Refresh badge counts every 30 seconds in the background
     _badgeRefreshTimer = Timer.periodic(
-      const Duration(seconds: 30),
+      const Duration(seconds: 60),
       (_) => _loadBadgeCounts(),
     );
   }
@@ -148,8 +148,11 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   Future<void> _initialize() async {
     try {
-      final authState = ref.read(authProvider).valueOrNull;
-      final properties = authState?.properties ?? [];
+      // Use .future so we wait for the auth to fully resolve on browser reload.
+      // ref.read(authProvider).valueOrNull returns null while loading, which
+      // would cause properties=[] and the user landing on page 0 every time.
+      final authState = await ref.read(authProvider.future);
+      final properties = authState.properties;
 
       OrgProperty? activeProperty;
 
@@ -165,12 +168,24 @@ class _AppShellState extends ConsumerState<AppShell> {
         await _applyActiveProperty(activeProperty);
       }
 
+      // No properties at all — staff account with no assignment yet
+      if (activeProperty == null && properties.isEmpty) {
+        if (mounted) setState(() { _isInitializing = false; _noProperties = true; });
+        return;
+      }
+
+      // Compute the landing page AFTER permissions have been loaded so that
+      // _isPropertyManager and _userPermissions reflect the real values.
+      // _defaultPageIndex reads those instance variables; calling it here
+      // (outside of any setState) ensures we read the freshly-written state.
+      final landingIndex = activeProperty != null
+          ? _defaultPageIndex(activeProperty)
+          : 0;
+
       if (mounted) {
         setState(() {
           _isInitializing = false;
-          if (activeProperty != null) {
-            _selectedIndex = _defaultPageIndex(activeProperty);
-          }
+          _selectedIndex  = landingIndex;
         });
       }
     } catch (e) {
@@ -185,36 +200,43 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   /// Persists, propagates, and syncs [property] across all state holders.
   Future<void> _applyActiveProperty(OrgProperty property) async {
-    // Persist to shared prefs
+    // Persist to shared prefs and update Riverpod notifier (both fast/sync)
     await OrganizationService().setActivePropertyId(property.id);
-
-    // Update Riverpod active property notifier
     ref.read(activePropertyProvider.notifier).setProperty(property);
 
-    // Sync to legacy Provider-based HotelSession so existing screens work
-    if (mounted) {
-      final session =
-          provider_pkg.Provider.of<HotelSession>(context, listen: false);
-      await session.setHotelId(property.id);
-    }
-
-    // Sync to singleton services
+    // Point singleton services at the new property before any parallel work
     BookingService().hotelId    = property.id;
     RestaurantService().hotelId = property.id;
 
-    // Load current user's role + permissions for this property
-    await _loadUserPermissions(property.id);
+    // Run session sync (fetches hotel_settings) and permission load in parallel
+    // — they are independent DB calls, no ordering required.
+    if (mounted) {
+      final session =
+          provider_pkg.Provider.of<HotelSession>(context, listen: false);
+      await Future.wait([
+        session.setHotelId(property.id),
+        _loadUserPermissions(property.id),
+      ]);
+    } else {
+      await _loadUserPermissions(property.id);
+    }
+
     // Refresh badge counts now that services are pointed at the new property
     _loadBadgeCounts();
   }
 
   Future<void> _loadUserPermissions(String propertyId) async {
     final role = await StaffService().getMyRoleForProperty(propertyId);
-    // owner  = created the property (hotel_users) — full admin including team mgmt
+    // owner   = created the property (hotel_users) — full admin including team mgmt
     // manager = promoted staff member — full operational access, no team mgmt
     // staff   = limited to their assigned permissions
-    // null    = not found in any table → treat as owner (e.g. during onboarding)
-    final isOwner   = role == null || role == 'owner';
+    // null    = not found in any table:
+    //   • regular accounts (org owners) → treat as owner
+    //   • staff accounts (@staff.internal) → role wasn't readable; default to 'staff'
+    //     so they land on their first permitted page, not the hotel Dashboard.
+    final isStaffAccount =
+        ref.read(authProvider).valueOrNull?.isStaffAccount ?? false;
+    final isOwner   = !isStaffAccount && (role == null || role == 'owner');
     final isManager = isOwner || role == 'manager';
     Map<String, PrivilegeLevel> permissions = {};
     if (!isManager) {
@@ -233,31 +255,18 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   /// Fetches counts for nav items that need attention badges.
+  /// Uses targeted ID-only queries filtered server-side — no full table scans.
   /// Runs silently — failures are swallowed so they never break the shell.
   Future<void> _loadBadgeCounts() async {
     if (!mounted) return;
     try {
-      final results = await Future.wait([
-        BookingService().getEnrichedBookings(),
-        RestaurantService().getOrders(),
+      final results = await Future.wait<int>([
+        BookingService().countPendingArrivalsToday(),
+        RestaurantService().countActiveKitchenOrdersToday(),
       ]);
 
-      final bookings = results[0] as List<Map<String, dynamic>>;
-      final orders   = results[1] as List<RestaurantOrder>;
-      final today    = DateTime.now();
-
-      // Check-Ins (page 1): guests arriving today still awaiting check-in
-      final pendingArrivals = bookings.where((d) {
-        final b = d['booking'] as Booking;
-        return b.status == BookingStatus.pending &&
-            DateUtils.isSameDay(b.checkInDate, today);
-      }).length;
-
-      // Kitchen (page 8): orders pending or in preparation today
-      final activeKitchen = orders.where((o) =>
-          (o.status == OrderStatus.pending ||
-              o.status == OrderStatus.preparing) &&
-          DateUtils.isSameDay(o.createdAt, today)).length;
+      final pendingArrivals = results[0];
+      final activeKitchen   = results[1];
 
       if (!mounted) return;
       setState(() {
@@ -273,7 +282,21 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   Future<void> _switchToProperty(OrgProperty property) async {
     await _applyActiveProperty(property);
-    setState(() => _selectedIndex = _defaultPageIndex(property));
+    // Compute after await so permissions are already updated in instance state
+    final landing = _defaultPageIndex(property);
+    setState(() {
+      _navHistory.clear(); // new property → fresh history
+      _selectedIndex = landing;
+    });
+  }
+
+  /// Navigate to [pageIndex], pushing the current page onto the back-stack.
+  void _navigateTo(int pageIndex) {
+    if (pageIndex == _selectedIndex) return;
+    setState(() {
+      _navHistory.add(_selectedIndex);
+      _selectedIndex = pageIndex;
+    });
   }
 
   /// Returns the page index the user should land on for [property].
@@ -327,10 +350,12 @@ class _AppShellState extends ConsumerState<AppShell> {
     final authState = ref.watch(authProvider).valueOrNull;
     final isMobile = MediaQuery.of(context).size.width < 768;
 
-    // When the active property changes (e.g. after adding a new property),
-    // re-apply it so HotelSession, BookingService, RestaurantService update.
+    // Re-apply only on an actual property *switch* (both previous and next
+    // are non-null and different).  The initial set (null → property) is
+    // already handled by _initialize, so we skip it here to avoid a
+    // duplicate round of DB calls on every startup.
     ref.listen<OrgProperty?>(activePropertyProvider, (previous, next) {
-      if (next != null && next.id != previous?.id) {
+      if (previous != null && next != null && next.id != previous.id) {
         _applyActiveProperty(next);
       }
     });
@@ -375,76 +400,124 @@ class _AppShellState extends ConsumerState<AppShell> {
       );
     }
 
-    final sections = _activeSections(activeProperty);
-
-    return Scaffold(
-      key: _scaffoldKey,
-      drawer: isMobile ? Drawer(child: _buildSidebar(activeProperty, authState, sections, isDrawer: true)) : null,
-      bottomNavigationBar: isMobile ? _buildBottomNav(activeProperty) : null,
-      body: Row(
-        children: [
-          if (!isMobile) _buildSidebar(activeProperty, authState, sections),
-          Expanded(
+    if (_noProperties) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                _buildTopBar(activeProperty, authState, isMobile),
-                Expanded(
-                  key: ValueKey(activeProperty?.id ?? 'none'),
-                  child: activeProperty?.status == 'inactive'
-                      ? _InactivePropertyScreen(
-                          property: activeProperty!,
-                          onReactivate: () async {
-                            await OrganizationService()
-                                .updatePropertyStatus(activeProperty!.id, 'active');
-                            await ref.read(authProvider.notifier).reload();
-                            // Reload active property from DB
-                            final updated = await OrganizationService()
-                                .getActiveProperty();
-                            if (updated != null) {
-                              ref.read(activePropertyProvider.notifier)
-                                  .setProperty(updated);
-                            }
-                          },
-                        )
-                      : _pages[_selectedIndex],
+                const Icon(Icons.lock_outline_rounded, size: 56, color: Color(0xFF475569)),
+                const SizedBox(height: 20),
+                const Text(
+                  'No properties assigned',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Your account has not been assigned to any property yet.\nPlease contact your manager.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppTheme.adminTextMuted, height: 1.5),
+                ),
+                const SizedBox(height: 28),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    await ref.read(authProvider.notifier).signOut();
+                  },
+                  icon: const Icon(Icons.logout_rounded),
+                  label: const Text('Sign out'),
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.white54),
                 ),
               ],
             ),
           ),
-        ],
+        ),
+      );
+    }
+
+    final sections = _activeSections(activeProperty);
+
+    return PopScope(
+      // Intercept back: navigate to previous section instead of leaving the app.
+      canPop: _navHistory.isEmpty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _navHistory.isNotEmpty) {
+          setState(() => _selectedIndex = _navHistory.removeLast());
+        }
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawer: isMobile ? Drawer(child: _buildSidebar(activeProperty, authState, sections, isDrawer: true)) : null,
+        bottomNavigationBar: isMobile ? _buildBottomNav(activeProperty) : null,
+        body: Row(
+          children: [
+            if (!isMobile) _buildSidebar(activeProperty, authState, sections),
+            Expanded(
+              child: Column(
+                children: [
+                  _buildTopBar(activeProperty, authState, isMobile),
+                  Expanded(
+                    key: ValueKey(activeProperty?.id ?? 'none'),
+                    child: activeProperty?.status == 'inactive'
+                        ? _InactivePropertyScreen(
+                            property: activeProperty!,
+                            onReactivate: () async {
+                              await OrganizationService()
+                                  .updatePropertyStatus(activeProperty!.id, 'active');
+                              await ref.read(authProvider.notifier).reload();
+                              final updated = await OrganizationService()
+                                  .getActiveProperty();
+                              if (updated != null) {
+                                ref.read(activePropertyProvider.notifier)
+                                    .setProperty(updated);
+                              }
+                            },
+                          )
+                        : _pages[_selectedIndex],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   // ─── Mobile bottom navigation ─────────────────────────────────────────────
 
-  /// Returns the 4 primary nav items for the mobile bottom bar, chosen by
-  /// property type so staff can reach the most-used screens in one tap.
+  /// Returns up to 4 primary nav items for the mobile bottom bar.
+  /// Uses _activeSections so only pages the current user has access to appear.
   List<_NavItem> _mobileNavItems(OrgProperty? property) {
     if (property == null) return [_hotelSection.items[0]];
+
+    final sections = _activeSections(property);
+    if (sections.isEmpty) return [];
+
+    // For combined hotel+restaurant properties show 2 from each section (if
+    // accessible), otherwise show the first 4 items from available sections.
     if (property.isHotel && property.isRestaurant) {
-      return [
-        _hotelSection.items[0],      // Dashboard
-        _hotelSection.items[1],      // Check-Ins
-        _restaurantSection.items[0], // POS
-        _restaurantSection.items[2], // Kitchen
-      ];
+      final hotelItems = sections
+          .where((s) => s.label == 'HOTEL')
+          .expand((s) => s.items)
+          .take(2)
+          .toList();
+      final restaurantItems = sections
+          .where((s) => s.label == 'RESTAURANT')
+          .expand((s) => s.items)
+          .take(2)
+          .toList();
+      final combined = [...hotelItems, ...restaurantItems];
+      if (combined.isNotEmpty) return combined.take(4).toList();
     }
-    if (property.isRestaurant) {
-      return [
-        _restaurantSection.items[0], // POS
-        _restaurantSection.items[1], // Tables
-        _restaurantSection.items[2], // Kitchen
-        _restaurantSection.items[4], // Orders
-      ];
-    }
-    // Hotel only
-    return [
-      _hotelSection.items[0], // Dashboard
-      _hotelSection.items[1], // Check-Ins
-      _hotelSection.items[2], // Rooms
-      _hotelSection.items[3], // Reservations
-    ];
+
+    return sections.expand((s) => s.items).take(4).toList();
   }
 
   Widget _buildBottomNav(OrgProperty? activeProperty) {
@@ -466,7 +539,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       elevation: 8,
       onTap: (idx) {
         if (idx < navItems.length) {
-          setState(() => _selectedIndex = navItems[idx].pageIndex);
+          _navigateTo(navItems[idx].pageIndex);
         } else {
           // "More" — open the full sidebar drawer
           _scaffoldKey.currentState?.openDrawer();
@@ -768,7 +841,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          onTap: () => setState(() => _selectedIndex = item.pageIndex),
+          onTap: () => _navigateTo(item.pageIndex),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             padding: EdgeInsets.symmetric(

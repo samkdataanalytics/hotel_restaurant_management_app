@@ -56,7 +56,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         return AppRoutes.onboarding;
       }
 
-      if (!auth.hasProperties) {
+      // Staff accounts cannot create properties — never send them to property-setup
+      // even if their property list appears empty (e.g. RLS or timing issue).
+      // The AppShell will display a "no access" state instead.
+      if (!auth.hasProperties && !auth.isStaffAccount) {
         if (loc == AppRoutes.propertySetup) return null;
         return AppRoutes.propertySetup;
       }
@@ -64,7 +67,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Has org + properties → main app
       // propertySetup is intentionally NOT listed here — users can navigate
       // there from the app shell to add more properties.
-      // Staff accounts (username-based) cannot create new properties.
       if (auth.isStaffAccount && loc == AppRoutes.propertySetup) {
         return AppRoutes.app;
       }

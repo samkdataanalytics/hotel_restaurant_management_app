@@ -8,7 +8,10 @@
       "Bash(python -c \":*)",
       "Bash(grep -l \"owner\\\\|manager\\\\|kitchen\\\\|frontDesk\" /c/Users/gphks/Documents/MyDoc/Proj/ideadeck/my_projects/proj_1/lib/models/*.dart /c/Users/gphks/Documents/MyDoc/Proj/ideadeck/my_projects/proj_1/lib/web/*.dart)",
       "Bash(grep -E \"\\\\.dart$\")",
-      "Bash(timeout /t 20 /nobreak)"
+      "Bash(timeout /t 20 /nobreak)",
+      "Bash(timeout /t 35 /nobreak)",
+      "Bash(dart analyze:*)",
+      "Bash(flutter build:*)"
     ]
   }
 }

@@ -355,6 +355,25 @@ class RestaurantService {
     return rows.map(_orderFromRow).toList();
   }
 
+  /// Returns the number of active kitchen orders created today.
+  /// Used by AppShell badge; fetches only IDs, server-filtered.
+  Future<int> countActiveKitchenOrdersToday() async {
+    if (hotelId == null) return 0;
+    try {
+      final today = DateTime.now();
+      final start = DateTime(today.year, today.month, today.day).toIso8601String();
+      final rows  = await _db
+          .from('restaurant_orders')
+          .select('id')
+          .eq('hotel_id', hotelId!)
+          .inFilter('status', ['pending', 'preparing'])
+          .gte('created_at', start);
+      return rows.length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// Upserts an order and keeps table status in sync.
   /// Inventory is deducted only when the order is brand new.
   Future<void> saveOrder(RestaurantOrder order) async {
