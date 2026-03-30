@@ -82,10 +82,67 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     if (err != null) {
       setState(() {
         _isLoading = false;
-        _error = err;
+        _error = null; // clear any old inline error
       });
+      _showAuthError(err);
     }
     // On success: GoRouter listens to authProvider and redirects automatically
+  }
+
+  void _showAuthError(String message) {
+    // Translate Supabase raw messages to friendlier text
+    final String friendly;
+    final String detail;
+    if (message.toLowerCase().contains('invalid login') ||
+        message.toLowerCase().contains('invalid credentials') ||
+        message.toLowerCase().contains('user not found')) {
+      friendly = 'Account not found';
+      detail = 'No account matches these credentials.\n'
+          'Check your email/username and password, or create a new account.';
+    } else if (message.toLowerCase().contains('wrong password') ||
+        message.toLowerCase().contains('invalid password')) {
+      friendly = 'Incorrect password';
+      detail = 'The password you entered is incorrect. Please try again.';
+    } else if (message.toLowerCase().contains('email not confirmed')) {
+      friendly = 'Email not verified';
+      detail = 'Please verify your email address before signing in.';
+    } else {
+      friendly = 'Sign-in failed';
+      detail = message;
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: const Color(0xFF1E293B),
+        icon: Icon(Icons.error_outline_rounded,
+            color: AppTheme.danger, size: 40),
+        title: Text(
+          friendly,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          textAlign: TextAlign.center,
+        ),
+        content: Text(
+          detail,
+          style: TextStyle(color: Colors.white.withOpacity(0.7), height: 1.5),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.adminPrimary,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              minimumSize: const Size(120, 40),
+            ),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -305,31 +362,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     onSubmitted: (_) => _login(),
                   ),
 
+                  // Validation errors (empty fields) shown inline
                   if (_error != null) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.danger.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                        border:
-                            Border.all(color: AppTheme.danger.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.error_outline,
-                              color: AppTheme.danger, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _error!,
-                              style:
-                                  TextStyle(color: AppTheme.danger, fontSize: 13),
-                            ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded,
+                            color: AppTheme.danger, size: 16),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: TextStyle(
+                                color: AppTheme.danger, fontSize: 12.5),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
 

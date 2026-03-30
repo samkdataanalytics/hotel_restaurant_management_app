@@ -168,7 +168,12 @@ class _ExpensesManagementScreenState extends ConsumerState<ExpensesManagementScr
             const SizedBox(height: 32),
 
             // Main Table Card
-            Card(
+            LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: constraints.maxWidth < 680 ? 680 : constraints.maxWidth,
+                  child: Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               margin: EdgeInsets.zero,
               child: ClipRRect(
@@ -204,6 +209,9 @@ class _ExpensesManagementScreenState extends ConsumerState<ExpensesManagementScr
                     else
                       ..._expenses.map((expense) => _buildExpenseRow(expense)),
                   ],
+                ),
+              ),
+            ),
                 ),
               ),
             ),

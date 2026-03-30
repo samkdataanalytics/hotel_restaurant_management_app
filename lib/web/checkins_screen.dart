@@ -229,8 +229,8 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
       return _emptyState('No check-ins found');
     }
 
-    return SizedBox(
-      width: double.infinity,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: DataTable(
         columnSpacing: 24,
         columns: const [
@@ -264,8 +264,8 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
       return _emptyState('No bookings found');
     }
 
-    return SizedBox(
-      width: double.infinity,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: DataTable(
         columnSpacing: 24,
         columns: const [
