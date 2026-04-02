@@ -171,27 +171,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [AppTheme.goldPrimary, AppTheme.goldLight],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.goldPrimary.withOpacity(0.35),
-                        blurRadius: 24,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.admin_panel_settings_rounded,
-                    color: Color(0xFF0F172A),
-                    size: 32,
-                  ),
+                Image.asset(
+                  'assets/images/hotrest_logo.png',
+                  width: 120,
+                  height: 120,
                 ),
                 const SizedBox(height: 28),
                 SizedBox(
@@ -245,41 +228,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Logo
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [AppTheme.goldPrimary, AppTheme.goldLight],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.goldPrimary.withOpacity(0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.admin_panel_settings_rounded,
-                      color: Color(0xFF0F172A),
-                      size: 32,
-                    ),
+                  Image.asset(
+                    'assets/images/hotrest_logo.png',
+                    width: 140,
+                    height: 140,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 8),
 
-                  const Text(
-                    'Admin Portal',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
                   Text(
-                    'HotRest Management',
+                    'Management Portal',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.white.withOpacity(0.5),

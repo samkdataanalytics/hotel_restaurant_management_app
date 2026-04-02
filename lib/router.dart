@@ -10,6 +10,7 @@ import 'web/onboarding/onboarding_shell.dart';
 import 'web/onboarding/property_setup_screen.dart';
 import 'web/shell/app_shell.dart';
 import 'web/accept_invite_screen.dart';
+import 'web/guest/guest_menu_screen.dart';
 
 // ─── Route names ─────────────────────────────────────────────────────────────
 
@@ -21,6 +22,7 @@ class AppRoutes {
   static const propertySetup = '/property-setup';
   static const app           = '/app';
   static const acceptInvite  = '/accept-invite';
+  static const guestMenu     = '/menu';
 }
 
 // ─── Router provider ─────────────────────────────────────────────────────────
@@ -36,6 +38,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (auth == null || auth.isLoading) return null;
 
       final loc = state.matchedLocation;
+
+      // Guest menu is public — no auth required
+      if (loc.startsWith(AppRoutes.guestMenu)) return null;
 
       if (!auth.isLoggedIn) {
         if (loc == AppRoutes.login || loc == AppRoutes.signup) return null;
@@ -107,6 +112,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           final token = state.uri.queryParameters['token'] ?? '';
           return AcceptInviteScreen(token: token);
         },
+      ),
+      // Public guest menu — /menu/:propertyId/:tableId (no auth required)
+      GoRoute(
+        path: '${AppRoutes.guestMenu}/:propertyId/:tableId',
+        builder: (context, state) => GuestMenuScreen(
+          propertyId: state.pathParameters['propertyId']!,
+          tableId: state.pathParameters['tableId']!,
+        ),
       ),
       // Guest registration deep link (keep existing behaviour)
       GoRoute(

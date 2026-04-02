@@ -11,7 +11,11 @@
       "Bash(timeout /t 20 /nobreak)",
       "Bash(timeout /t 35 /nobreak)",
       "Bash(dart analyze:*)",
-      "Bash(flutter build:*)"
+      "Bash(flutter build:*)",
+      "Bash(mkdir -p \"c:/Users/gphks/Documents/MyDoc/Proj/ideadeck/my_projects/proj_1/assets/images\")",
+      "Bash(cp \"c:/Users/gphks/Downloads/hotrest_logo.png\" \"c:/Users/gphks/Documents/MyDoc/Proj/ideadeck/my_projects/proj_1/assets/images/hotrest_logo.png\")",
+      "Bash(mkdir -p \"/c/Users/gphks/Documents/MyDoc/Proj/ideadeck/my_projects/proj_1/assets/images\")",
+      "Bash(cp \"/c/Users/gphks/Downloads/hotrest logo.png\" \"/c/Users/gphks/Documents/MyDoc/Proj/ideadeck/my_projects/proj_1/assets/images/hotrest_logo.png\")"
     ]
   }
 }
