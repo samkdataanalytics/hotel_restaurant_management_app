@@ -18,6 +18,8 @@ import '../models/staff_permission.dart';
 import '../services/restaurant_service.dart';
 import '../services/menu_pdf_service.dart';
 import '../services/menu_doc_service.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:flutter/services.dart';
 
 // ─── Color palette for restaurant sections — sourced from AppTheme ───────────
 class _RC {
@@ -1824,6 +1826,92 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
     );
   }
 
+  void _showQrDialog(RestaurantTable table) {
+    final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
+    final propertyId = session.hotelId ?? '';
+    // Build the full public URL for the guest menu
+    final uri = Uri.base;
+    final baseUrl = '${uri.scheme}://${uri.host}${uri.port != 80 && uri.port != 443 ? ':${uri.port}' : ''}';
+    final menuUrl = '$baseUrl/#/menu/$propertyId/${table.id}';
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.qr_code_2_rounded, size: 22),
+            const SizedBox(width: 8),
+            Text('Table ${table.tableNumber} QR Code'),
+          ],
+        ),
+        content: SizedBox(
+          width: 280,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: QrImageView(
+                  data: menuUrl,
+                  version: QrVersions.auto,
+                  size: 220,
+                  backgroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Guests scan this code to order directly from their phone.',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              // URL copy row
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(menuUrl,
+                          style: const TextStyle(fontSize: 11),
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded, size: 18),
+                      tooltip: 'Copy link',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: menuUrl));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Link copied to clipboard')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -1924,6 +2012,15 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
                           style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: statusColor)),
                     ),
                     const SizedBox(width: 4),
+                    InkWell(
+                      onTap: () => _showQrDialog(table),
+                      borderRadius: BorderRadius.circular(6),
+                      child: const Padding(
+                        padding: EdgeInsets.all(2),
+                        child: Icon(Icons.qr_code_rounded, size: 16, color: Color(0xFF64748B)),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
                     if (canEditSection(ref, 'restaurant_management'))
                     InkWell(
                       onTap: () => _deleteTable(table),

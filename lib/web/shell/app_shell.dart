@@ -629,20 +629,11 @@ class _AppShellState extends ConsumerState<AppShell> {
       alignment: Alignment.centerLeft,
       child: Row(
         children: [
-          Container(
+          Image.asset(
+            'assets/images/hotrest_logo.png',
             width: 40,
             height: 40,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFD4A853), Color(0xFFE8C97A)],
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.hotel_rounded,
-              color: Color(0xFF0F172A),
-              size: 22,
-            ),
+            fit: BoxFit.contain,
           ),
           if (expanded) ...[
             const SizedBox(width: 12),
