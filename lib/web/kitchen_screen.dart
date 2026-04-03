@@ -103,6 +103,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     }
   }
 
+  String _roomName(String? roomNumber) =>
+      roomNumber != null ? 'Room $roomNumber' : 'Room ?';
+
   // ── Age-based urgency helpers ────────────────────────────────────────────────
 
   /// Card background colour escalates with age.
@@ -422,9 +425,14 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                     spacing: 6,
                     runSpacing: 4,
                     children: [
-                      _badge(order.type.name.toUpperCase(), Colors.black38,
-                          Colors.white70),
-                      if (order.tableId != null)
+                      if (order.type == OrderType.roomService)
+                        _badge('ROOM SERVICE', Colors.purple.withOpacity(0.3), Colors.purpleAccent.shade100)
+                      else
+                        _badge(order.type.name.toUpperCase(), Colors.black38, Colors.white70),
+                      if (order.type == OrderType.roomService && order.tableId != null)
+                        _badge(_roomName(order.tableId),
+                            Colors.purple.withOpacity(0.2), Colors.purple.shade200)
+                      else if (order.tableId != null)
                         _badge(_tableName(order.tableId),
                             Colors.blue.withOpacity(0.3), Colors.blue),
                       if (isAddon)

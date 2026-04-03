@@ -254,18 +254,36 @@ class AppTheme {
     boxShadow: cardShadow,
   );
 
-  /// KPI card with coloured left accent bar.
+  /// KPI card base decoration (uniform border — safe with borderRadius).
+  /// Use [kpiCard] to get the full left-accent card widget.
   static BoxDecoration kpiDecoration(Color accent) => BoxDecoration(
     color: Colors.white,
     borderRadius: BorderRadius.circular(cardRadius),
-    border: Border(
-      left: BorderSide(color: accent, width: 4),
-      top: const BorderSide(color: Color(0xFFE8EDF3)),
-      right: const BorderSide(color: Color(0xFFE8EDF3)),
-      bottom: const BorderSide(color: Color(0xFFE8EDF3)),
-    ),
+    border: Border.all(color: const Color(0xFFE8EDF3)),
     boxShadow: cardShadow,
   );
+
+  /// Wraps [child] in a KPI card with a coloured left accent strip.
+  static Widget kpiCard({required Color accent, required Widget child}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(cardRadius),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(cardRadius),
+          border: Border.all(color: const Color(0xFFE8EDF3)),
+          boxShadow: cardShadow,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 4, color: accent),
+            Expanded(child: child),
+          ],
+        ),
+      ),
+    );
+  }
 
   // ─── Restaurant Section (const — safe in const expressions) ─────────────────
 

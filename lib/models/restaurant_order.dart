@@ -1,6 +1,6 @@
 import 'menu_item.dart';
 
-enum OrderType { dineIn, takeaway }
+enum OrderType { dineIn, takeaway, roomService }
 enum OrderStatus { pending, preparing, ready, served, cancelled }
 enum PaymentStatus { unpaid, paid, chargedToRoom }
 
@@ -101,6 +101,10 @@ class RestaurantOrder {
   final String? discountType;
   final double  discountAmount;
 
+  /// For room service orders: the room number the order was placed from.
+  /// Null for dine-in / takeaway orders.
+  final String? roomNumber;
+
   RestaurantOrder({
     required this.id,
     required this.orderNumber,
@@ -115,6 +119,7 @@ class RestaurantOrder {
     this.parentOrderId,
     this.discountType,
     this.discountAmount = 0.0,
+    this.roomNumber,
   });
 
   double get itemsTotal => items.fold(0.0, (sum, item) => sum + item.subtotal);
@@ -157,6 +162,7 @@ class RestaurantOrder {
     String? parentOrderId,
     Object? discountType = _unset, // use Object? so null can be explicitly passed
     double? discountAmount,
+    String? roomNumber,
   }) {
     return RestaurantOrder(
       id: id ?? this.id,
@@ -172,6 +178,7 @@ class RestaurantOrder {
       parentOrderId: parentOrderId ?? this.parentOrderId,
       discountType: identical(discountType, _unset) ? this.discountType : discountType as String?,
       discountAmount: discountAmount ?? this.discountAmount,
+      roomNumber: roomNumber ?? this.roomNumber,
     );
   }
 
@@ -190,6 +197,7 @@ class RestaurantOrder {
       'parentOrderId': parentOrderId,
       'discountType': discountType,
       'discountAmount': discountAmount,
+      'roomNumber': roomNumber,
     };
   }
 
@@ -217,6 +225,7 @@ class RestaurantOrder {
       parentOrderId: map['parentOrderId'],
       discountType: map['discountType'] as String?,
       discountAmount: (map['discountAmount'] as num?)?.toDouble() ?? 0.0,
+      roomNumber: map['roomNumber'] as String?,
     );
   }
 }

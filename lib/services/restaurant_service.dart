@@ -83,6 +83,7 @@ class RestaurantService {
         'parentOrderId': r['parent_order_id'],
         'discountType': r['discount_type'],
         'discountAmount': r['discount_amount'],
+        'roomNumber': r['room_number'],
       });
 
   Map<String, dynamic> _orderToRow(RestaurantOrder o) => {
@@ -352,6 +353,20 @@ class RestaurantService {
         .select()
         .eq('hotel_id', hotelId!)
         .order('created_at', ascending: false);
+    return rows.map(_orderFromRow).toList();
+  }
+
+  /// Returns all restaurant orders that were charged to a specific hotel booking.
+  Future<List<RestaurantOrder>> getChargedToRoomOrders(String bookingId) async {
+    if (hotelId == null) return [];
+    final rows = await _db
+        .from('restaurant_orders')
+        .select()
+        .eq('hotel_id', hotelId!)
+        .eq('booking_id', bookingId)
+        .eq('payment_status', 'chargedToRoom')
+        .neq('status', 'cancelled')
+        .order('created_at', ascending: true);
     return rows.map(_orderFromRow).toList();
   }
 
