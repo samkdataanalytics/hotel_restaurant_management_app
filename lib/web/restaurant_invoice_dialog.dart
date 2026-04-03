@@ -50,10 +50,11 @@ class RestaurantInvoiceDialog extends StatelessWidget {
     final subtotal = itemsTotal - totalDiscount; // post-discount subtotal
 
     // Tax & service charge from property settings
-    // Service charge only applies to dine-in orders (not takeaway)
-    final isDineIn = ordersToRender.any((o) => o.type == OrderType.dineIn);
+    // Service charge applies to dine-in and room service orders (not takeaway)
+    final isServiceChargeable = ordersToRender.any(
+        (o) => o.type == OrderType.dineIn || o.type == OrderType.roomService);
     final taxRate           = settings?.taxRate           ?? 0.0;
-    final serviceChargeRate = isDineIn ? (settings?.serviceChargeRate ?? 0.0) : 0.0;
+    final serviceChargeRate = isServiceChargeable ? (settings?.serviceChargeRate ?? 0.0) : 0.0;
     final tax           = subtotal * taxRate;
     final serviceCharge = subtotal * serviceChargeRate;
     final grandTotal = subtotal + tax + serviceCharge;
@@ -159,7 +160,11 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                           Expanded(child: _meta('Date', dateF.format(order.createdAt))),
                           if (table != null)
                             Expanded(child: _meta('Table', table!.tableNumber)),
-                          Expanded(child: _meta('Type', order.type == OrderType.dineIn ? 'Dine-in' : 'Takeaway')),
+                          Expanded(child: _meta('Type', switch (order.type) {
+                            OrderType.dineIn      => 'Dine-in',
+                            OrderType.roomService => 'Room Service',
+                            OrderType.takeaway    => 'Takeaway',
+                          })),
                         ],
                       ),
                     ),

@@ -112,28 +112,38 @@ class SkeletonKpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
-        border: const Border(
-          left: BorderSide(color: Color(0xFFDDE3EC), width: 4),
-          top: BorderSide(color: Color(0xFFE8EDF3)),
-          right: BorderSide(color: Color(0xFFE8EDF3)),
-          bottom: BorderSide(color: Color(0xFFE8EDF3)),
+    // Fixed height gives Row(crossAxisAlignment.stretch) a bounded constraint,
+    // which is required for the left accent strip to stretch to full card height.
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+      child: Container(
+        height: 88,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+          border: Border.all(color: const Color(0xFFE8EDF3)),
+          boxShadow: AppTheme.cardShadow,
         ),
-        boxShadow: AppTheme.cardShadow,
-      ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SkeletonLine(width: 90),
-          SizedBox(height: 12),
-          SkeletonBox(width: 64, height: 32),
-          SizedBox(height: 8),
-          SkeletonLine(width: 110),
-        ],
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 4, color: const Color(0xFFDDE3EC)),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    SkeletonLine(width: 90),
+                    SizedBox(height: 10),
+                    SkeletonBox(width: 64, height: 24),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

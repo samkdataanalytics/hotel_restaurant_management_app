@@ -53,7 +53,7 @@ class GuestMenuService {
   Future<String> getPropertyName(String propertyId) async {
     try {
       final rows = await _db
-          .from('properties')
+          .from('hotels')
           .select('name')
           .eq('id', propertyId)
           .limit(1);
@@ -95,10 +95,12 @@ class GuestMenuService {
     required String tableId,
     required List<({MenuItem item, int qty, String notes})> cartItems,
     String? parentOrderId,
+    String type = 'dineIn',
   }) async {
     final orderId = const Uuid().v4();
+    final prefix = type == 'roomService' ? 'RS' : 'QR';
     final orderNumber =
-        'QR${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+        '$prefix${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
 
     final itemsJson = cartItems.map((e) => {
           'id': const Uuid().v4(),
@@ -112,9 +114,12 @@ class GuestMenuService {
     await _db.from('restaurant_orders').insert({
       'id': orderId,
       'order_number': orderNumber,
-      'table_id': tableId,
+      // room service orders pass room number as tableId — store in room_number
+      // column (TEXT) instead of table_id (UUID) to avoid type mismatch.
+      if (type == 'roomService') 'room_number': tableId
+      else 'table_id': tableId,
       'hotel_id': propertyId,
-      'type': 'dineIn',
+      'type': type,
       'status': 'pending',
       'payment_status': 'unpaid',
       'items': itemsJson,

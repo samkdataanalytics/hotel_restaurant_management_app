@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -7,12 +8,11 @@ import 'widgets/skeleton.dart';
 import '../models/booking.dart';
 import '../models/guest.dart';
 import '../models/room.dart';
-import '../models/expense.dart';
 import '../services/booking_service.dart';
+import '../services/restaurant_service.dart';
 import 'package:provider/provider.dart' as pkg_provider;
 import '../providers/hotel_session.dart';
 import '../services/invoice_service.dart';
-import 'room_expenses_dialog.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'guest_responses_dialog.dart';
 import '../models/staff_permission.dart';
@@ -25,8 +25,9 @@ class ReservationsScreen extends ConsumerStatefulWidget {
 }
 
 class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
-  final _bookingService = BookingService();
-  final _invoiceService = InvoiceService();
+  final _bookingService    = BookingService();
+  final _restaurantService = RestaurantService();
+  final _invoiceService    = InvoiceService();
   final _dateFormat = DateFormat('MMM dd');
   final _fullDateFormat = DateFormat('MMM dd, yyyy');
   String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
@@ -1090,37 +1091,59 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     if (!mounted) return;
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Guest Registration QR: ${booking.bookingRef}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Ask the guest to scan this QR code to securely fill out their information and preferences.', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: 250,
-                height: 250,
-                child: QrImageView(
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: SizedBox(
+          width: 380,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Guest Registration QR: ${booking.bookingRef}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                const Text(
+                  'Ask the guest to scan this QR code to securely fill out their information and preferences.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.black54),
+                ),
+                const SizedBox(height: 24),
+                QrImageView(
                   data: url,
                   version: QrVersions.auto,
+                  size: 220,
                   eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
                   dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
                 ),
-              ),
-              const SizedBox(height: 16),
-              SelectableText(url, style: TextStyle(fontSize: 12, color: AppTheme.adminPrimary)),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
+                const SizedBox(height: 12),
+                SelectableText(url, style: TextStyle(fontSize: 12, color: AppTheme.adminPrimary), textAlign: TextAlign.center),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('URL copied to clipboard')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy URL'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
-        );
-      },
+          ),
+        ),
+      ),
     );
   }
 
@@ -1144,20 +1167,24 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
 
   Future<void> _printInvoice(Booking booking, Room room, Guest guest) async {
     showDialog(context: context, builder: (_) => const Center(child: CircularProgressIndicator()));
-    
-    // Fetch expenses just in time
-    final expenses = await _bookingService.getAllExpenses();
-    
+
+    final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
+    _restaurantService.hotelId = session.hotelId;
+
+    final expenses         = await _bookingService.getAllExpenses();
+    final restaurantOrders = await _restaurantService.getChargedToRoomOrders(booking.id);
+
     if (mounted) {
       Navigator.pop(context); // Close loading dialog
-      final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+      final settings = session.settings;
       await _invoiceService.displayInvoicePdf(
-        booking: booking,
-        room: room,
-        guest: guest,
-        expenses: expenses,
-        currencySymbol: settings?.currencySymbol ?? '\$',
-        settings: settings,
+        booking:          booking,
+        room:             room,
+        guest:            guest,
+        expenses:         expenses,
+        restaurantOrders: restaurantOrders,
+        currencySymbol:   settings?.currencySymbol ?? '\$',
+        settings:         settings,
       );
     }
   }

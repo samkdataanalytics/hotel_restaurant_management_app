@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../app_theme.dart';
@@ -7,8 +8,8 @@ import '../models/check_in.dart';
 import '../models/guest.dart';
 import '../models/room.dart';
 import '../models/booking.dart';
-import '../models/expense.dart';
 import '../services/booking_service.dart';
+import '../services/restaurant_service.dart';
 import 'package:provider/provider.dart';
 import '../providers/hotel_session.dart';
 import '../services/invoice_service.dart';
@@ -22,8 +23,9 @@ class CheckinsScreen extends StatefulWidget {
 }
 
 class _CheckinsScreenState extends State<CheckinsScreen> {
-  final _bookingService = BookingService();
-  final _invoiceService = InvoiceService();
+  final _bookingService    = BookingService();
+  final _restaurantService = RestaurantService();
+  final _invoiceService    = InvoiceService();
   final _timeFormat = DateFormat('hh:mm a');
   final _dateFormat = DateFormat('MMM dd, yyyy');
   final _searchController = TextEditingController();
@@ -527,56 +529,82 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
     if (!mounted) return;
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Guest Registration QR: ${booking.bookingRef}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Ask the guest to scan this QR code to securely fill out their information.', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: 250,
-                height: 250,
-                child: QrImageView(
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: SizedBox(
+          width: 380,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Guest Registration QR: ${booking.bookingRef}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                const Text(
+                  'Ask the guest to scan this QR code to securely fill out their information.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.black54),
+                ),
+                const SizedBox(height: 24),
+                QrImageView(
                   data: url,
                   version: QrVersions.auto,
+                  size: 220,
                   eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
                   dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
                 ),
-              ),
-              const SizedBox(height: 16),
-              SelectableText(url, style: TextStyle(fontSize: 12, color: AppTheme.adminPrimary)),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
+                const SizedBox(height: 12),
+                SelectableText(url, style: TextStyle(fontSize: 12, color: AppTheme.adminPrimary), textAlign: TextAlign.center),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('URL copied to clipboard')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy URL'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
-        );
-      },
+          ),
+        ),
+      ),
     );
   }
 
   Future<void> _printInvoice(Booking booking, Room room, Guest guest) async {
     showDialog(context: context, builder: (_) => const Center(child: CircularProgressIndicator()));
-    
-    // Fetch expenses just in time
-    final expenses = await _bookingService.getAllExpenses();
-    
+
+    final session = Provider.of<HotelSession>(context, listen: false);
+    _restaurantService.hotelId = session.hotelId;
+
+    final expenses        = await _bookingService.getAllExpenses();
+    final restaurantOrders = await _restaurantService.getChargedToRoomOrders(booking.id);
+
     if (mounted) {
       Navigator.pop(context); // Close loading dialog
-      final settings = Provider.of<HotelSession>(context, listen: false).settings;
+      final settings = session.settings;
       await _invoiceService.displayInvoicePdf(
-        booking: booking,
-        room: room,
-        guest: guest,
-        expenses: expenses,
-        currencySymbol: settings?.currencySymbol ?? '\$',
-        settings: settings,
+        booking:          booking,
+        room:             room,
+        guest:            guest,
+        expenses:         expenses,
+        restaurantOrders: restaurantOrders,
+        currencySymbol:   settings?.currencySymbol ?? '\$',
+        settings:         settings,
       );
     }
   }

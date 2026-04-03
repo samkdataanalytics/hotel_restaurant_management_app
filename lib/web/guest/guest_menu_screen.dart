@@ -629,6 +629,8 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
                   decoration: const InputDecoration(
                     hintText: 'Share your experience (optional)…',
                     hintStyle: TextStyle(color: _C.subtext, fontSize: 14),
+                    filled: true,
+                    fillColor: Colors.transparent,
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.all(16),
                   ),

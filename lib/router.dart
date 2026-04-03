@@ -11,6 +11,8 @@ import 'web/onboarding/property_setup_screen.dart';
 import 'web/shell/app_shell.dart';
 import 'web/accept_invite_screen.dart';
 import 'web/guest/guest_menu_screen.dart';
+import 'web/guest/guest_checkin_screen.dart';
+import 'web/guest/guest_room_service_screen.dart';
 
 // ─── Route names ─────────────────────────────────────────────────────────────
 
@@ -23,6 +25,7 @@ class AppRoutes {
   static const app           = '/app';
   static const acceptInvite  = '/accept-invite';
   static const guestMenu     = '/menu';
+  static const roomService   = '/room-service';
 }
 
 // ─── Router provider ─────────────────────────────────────────────────────────
@@ -39,8 +42,10 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final loc = state.matchedLocation;
 
-      // Guest menu is public — no auth required
+      // Guest-facing public pages — no auth required
       if (loc.startsWith(AppRoutes.guestMenu)) return null;
+      if (loc.startsWith(AppRoutes.roomService)) return null;
+      if (loc.startsWith('/guest-registration')) return null;
 
       if (!auth.isLoggedIn) {
         if (loc == AppRoutes.login || loc == AppRoutes.signup) return null;
@@ -121,12 +126,20 @@ final routerProvider = Provider<GoRouter>((ref) {
           tableId: state.pathParameters['tableId']!,
         ),
       ),
-      // Guest registration deep link (keep existing behaviour)
+      // Room service portal — /room-service/:propertyId/:roomNumber (no auth)
+      GoRoute(
+        path: '${AppRoutes.roomService}/:propertyId/:roomNumber',
+        builder: (context, state) => GuestRoomServiceScreen(
+          propertyId: state.pathParameters['propertyId']!,
+          roomNumber: state.pathParameters['roomNumber']!,
+        ),
+      ),
+      // Guest self check-in portal — /guest-registration?ref=BK-0001
       GoRoute(
         path: '/guest-registration',
         builder: (context, state) {
           final ref = state.uri.queryParameters['ref'] ?? '';
-          return _GuestRegPlaceholder(ref: ref);
+          return GuestCheckinScreen(bookingRef: ref);
         },
       ),
     ],
@@ -140,19 +153,5 @@ final routerProvider = Provider<GoRouter>((ref) {
 class _AuthChangeNotifier extends ChangeNotifier {
   _AuthChangeNotifier(Ref ref) {
     ref.listen(authProvider, (_, __) => notifyListeners());
-  }
-}
-
-// Placeholder while we keep the old guest-registration route
-class _GuestRegPlaceholder extends StatelessWidget {
-  final String ref;
-  const _GuestRegPlaceholder({required this.ref});
-
-  @override
-  Widget build(BuildContext context) {
-    // Dynamically import the existing screen
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
   }
 }

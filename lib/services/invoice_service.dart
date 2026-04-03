@@ -8,6 +8,7 @@ import '../models/booking.dart';
 import '../models/room.dart';
 import '../models/expense.dart';
 import '../models/guest.dart';
+import '../models/restaurant_order.dart';
 import '../providers/hotel_session.dart';
 
 // ─── Brand palette ────────────────────────────────────────────────────────────
@@ -47,6 +48,7 @@ class InvoiceService {
     required Room room,
     required Guest guest,
     required List<Expense> expenses,
+    List<RestaurantOrder> restaurantOrders = const [],
     String currencySymbol = '\$',
     HotelSettings? settings,
   }) async {
@@ -58,10 +60,21 @@ class InvoiceService {
     final totalExpenses = billable.fold(0.0, (s, e) => s + e.amount);
     final paidExpenses  = billable.where((e) => e.isPaid).fold(0.0, (s, e) => s + e.amount);
     final bookingPaid   = booking.isPaid ? booking.totalAmount : 0.0;
-    final subTotal      = booking.totalAmount + totalExpenses;
-    final amountPaid    = bookingPaid + paidExpenses;
-    final balanceDue    = subTotal - amountPaid;
-    final isFullyPaid   = balanceDue <= 0.005; // tolerance for float
+
+    // F&B: sum of non-cancelled restaurant orders charged to room
+    final taxRate           = settings?.taxRate           ?? 0.0;
+    final serviceChargeRate = settings?.serviceChargeRate ?? 0.0;
+    final fbSubtotal        = restaurantOrders.fold(0.0, (s, o) => s + o.totalAmount);
+    final fbTax             = fbSubtotal * taxRate;
+    final fbService         = restaurantOrders.any((o) => o.type == OrderType.dineIn)
+        ? fbSubtotal * serviceChargeRate
+        : 0.0;
+    final fbTotal           = fbSubtotal + fbTax + fbService;
+
+    final subTotal    = booking.totalAmount + totalExpenses + fbTotal;
+    final amountPaid  = bookingPaid + paidExpenses;
+    final balanceDue  = subTotal - amountPaid;
+    final isFullyPaid = balanceDue <= 0.005; // tolerance for float
 
     // ── Property branding ───────────────────────────────────────────────────
     final propName    = settings?.displayName.isNotEmpty == true ? settings!.displayName : 'Property';
@@ -245,30 +258,23 @@ class InvoiceService {
                     ),
                     pw.SizedBox(height: 22),
 
-                    // ── 3b. Section label ─────────────────────────────────
-                    pw.Row(
-                      crossAxisAlignment: pw.CrossAxisAlignment.center,
-                      children: [
-                        pw.Container(width: 3, height: 13, color: _kGold),
-                        pw.SizedBox(width: 8),
-                        pw.Text(
-                          'CHARGES',
-                          style: pw.TextStyle(
-                            color: _kNavy,
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
-                            letterSpacing: 1.8,
-                          ),
-                        ),
-                      ],
-                    ),
+                    // ── 3b. Section label — Room & Extras ────────────────
+                    _sectionLabel('ACCOMMODATION & EXTRAS'),
                     pw.SizedBox(height: 8),
 
-                    // ── 3c. Charges table ─────────────────────────────────
+                    // ── 3c. Room + expenses table ─────────────────────────
                     _buildChargesTable(booking, billable, fmt),
                     pw.SizedBox(height: 20),
 
-                    // ── 3d. Totals + payment status ───────────────────────
+                    // ── 3d. F&B section (only when orders exist) ──────────
+                    if (restaurantOrders.isNotEmpty) ...[
+                      _sectionLabel('FOOD & BEVERAGE'),
+                      pw.SizedBox(height: 8),
+                      _buildFnbTable(restaurantOrders, taxRate, serviceChargeRate, fmt),
+                      pw.SizedBox(height: 20),
+                    ],
+
+                    // ── 3e. Totals + payment status ───────────────────────
                     _buildTotals(subTotal, amountPaid, balanceDue, isFullyPaid, fmt),
 
                     pw.Spacer(),
@@ -436,6 +442,162 @@ class InvoiceService {
     );
   }
 
+  pw.Widget _sectionLabel(String label) {
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.center,
+      children: [
+        pw.Container(width: 3, height: 13, color: _kGold),
+        pw.SizedBox(width: 8),
+        pw.Text(
+          label,
+          style: pw.TextStyle(
+            color: _kNavy,
+            fontSize: 8,
+            fontWeight: pw.FontWeight.bold,
+            letterSpacing: 1.8,
+          ),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _buildFnbTable(
+    List<RestaurantOrder> orders,
+    double taxRate,
+    double serviceChargeRate,
+    NumberFormat fmt,
+  ) {
+    final rowData = <Map<String, dynamic>>[];
+
+    for (final order in orders) {
+      // Sub-header row for each ticket
+      rowData.add({'isSubHeader': true, 'label': 'Order #${order.orderNumber}'});
+
+      for (final item in order.items) {
+        if (item.isFullyRefunded) continue;
+        rowData.add({
+          'isSubHeader': false,
+          'desc':  item.menuItem.name,
+          'qty':   '${item.activeQuantity}',
+          'price': fmt.format(item.menuItem.price),
+          'total': fmt.format(item.subtotal),
+        });
+      }
+
+      // Discount sub-line
+      if (order.discountValue > 0) {
+        rowData.add({
+          'isSubHeader': false,
+          'desc':  'Discount (${order.discountType == 'percentage' ? '${order.discountAmount.toStringAsFixed(0)}%' : 'flat'})',
+          'qty':   '',
+          'price': '',
+          'total': '− ${fmt.format(order.discountValue)}',
+          'isDiscount': true,
+        });
+      }
+    }
+
+    // Totals
+    final fbSubtotal = orders.fold(0.0, (s, o) => s + o.totalAmount);
+    final fbTax      = fbSubtotal * taxRate;
+    final hasDineIn  = orders.any((o) => o.type == OrderType.dineIn);
+    final fbService  = hasDineIn ? fbSubtotal * serviceChargeRate : 0.0;
+    final fbTotal    = fbSubtotal + fbTax + fbService;
+
+    final tableRows = <pw.TableRow>[
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _kNavy),
+        children: [
+          _th('DESCRIPTION'),
+          _th('QTY', align: pw.TextAlign.center),
+          _th('UNIT PRICE', align: pw.TextAlign.right),
+          _th('AMOUNT', align: pw.TextAlign.right),
+        ],
+      ),
+      ...rowData.asMap().entries.map((entry) {
+        final idx = entry.key;
+        final row = entry.value;
+        if (row['isSubHeader'] == true) {
+          return pw.TableRow(
+            decoration: const pw.BoxDecoration(color: _kBg),
+            children: [
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                child: pw.Text(
+                  row['label'] as String,
+                  style: pw.TextStyle(
+                    fontSize: 8,
+                    fontWeight: pw.FontWeight.bold,
+                    color: _kNavy,
+                  ),
+                ),
+              ),
+              _td('', align: pw.TextAlign.center),
+              _td('', align: pw.TextAlign.right),
+              _td('', align: pw.TextAlign.right),
+            ],
+          );
+        }
+        final isDiscount = row['isDiscount'] == true;
+        return pw.TableRow(
+          decoration: pw.BoxDecoration(color: idx.isEven ? PdfColors.white : _kBg),
+          children: [
+            _td(row['desc'] as String, align: pw.TextAlign.left, color: isDiscount ? _kMuted : _kText),
+            _td(row['qty'] as String, align: pw.TextAlign.center),
+            _td(row['price'] as String, align: pw.TextAlign.right),
+            _td(row['total'] as String, align: pw.TextAlign.right, bold: !isDiscount, color: isDiscount ? _kGold : _kText),
+          ],
+        );
+      }),
+    ];
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+      children: [
+        pw.Table(
+          columnWidths: const {
+            0: pw.FlexColumnWidth(4.2),
+            1: pw.FlexColumnWidth(0.7),
+            2: pw.FlexColumnWidth(1.5),
+            3: pw.FlexColumnWidth(1.5),
+          },
+          border: const pw.TableBorder(
+            bottom: pw.BorderSide(color: _kBorder, width: 0.5),
+          ),
+          children: tableRows,
+        ),
+        // F&B sub-totals (tax / service charge)
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          color: _kBg,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              if (taxRate > 0) ...[
+                _summaryLine(
+                  'Tax (${(taxRate * 100).toStringAsFixed(0)}%)',
+                  fmt.format(fbTax),
+                ),
+                pw.SizedBox(height: 3),
+              ],
+              if (hasDineIn && serviceChargeRate > 0) ...[
+                _summaryLine(
+                  'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(0)}%)',
+                  fmt.format(fbService),
+                ),
+                pw.SizedBox(height: 3),
+              ],
+              _summaryLine(
+                'F&B Total',
+                fmt.format(fbTotal),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   pw.Widget _th(String text, {pw.TextAlign align = pw.TextAlign.left}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -577,16 +739,18 @@ class InvoiceService {
     required Room room,
     required Guest guest,
     required List<Expense> expenses,
+    List<RestaurantOrder> restaurantOrders = const [],
     String currencySymbol = '\$',
     HotelSettings? settings,
   }) async {
     final pdfBytes = await generateInvoice(
-      booking:        booking,
-      room:           room,
-      guest:          guest,
-      expenses:       expenses,
-      currencySymbol: currencySymbol,
-      settings:       settings,
+      booking:          booking,
+      room:             room,
+      guest:            guest,
+      expenses:         expenses,
+      restaurantOrders: restaurantOrders,
+      currencySymbol:   currencySymbol,
+      settings:         settings,
     );
     await Printing.layoutPdf(
       onLayout: (_) async => pdfBytes,

@@ -1477,6 +1477,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         taxRate: taxRate,
         serviceChargeRate: serviceChargeRate,
         orderCount: openOrders.length,
+        roomNumber: openOrders.last.roomNumber,
       ),
     );
     if (result == null || !mounted) return;
@@ -1652,6 +1653,9 @@ class _PosPaymentDialog extends StatefulWidget {
   final double taxRate;
   final double serviceChargeRate;
   final int orderCount;
+  /// For room service orders: the room number the order came from.
+  /// When set, the Room Charge guest list is pre-filtered to that room.
+  final String? roomNumber;
 
   const _PosPaymentDialog({
     required this.displayOrder,
@@ -1662,6 +1666,7 @@ class _PosPaymentDialog extends StatefulWidget {
     required this.taxRate,
     required this.serviceChargeRate,
     this.orderCount = 1,
+    this.roomNumber,
   });
 
   @override
@@ -1712,9 +1717,21 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
       final booking = d['booking'] as Booking?;
       return booking != null && booking.status == BookingStatus.checkedIn;
     }).toList();
+
+    // For room service orders, auto-select the guest from the originating room.
+    Map<String, dynamic>? autoSelected;
+    if (widget.roomNumber != null) {
+      autoSelected = checkedIn.firstWhere(
+        (d) => (d['room'] as Room?)?.roomNumber == widget.roomNumber,
+        orElse: () => <String, dynamic>{},
+      );
+      if (autoSelected.isEmpty) autoSelected = null;
+    }
+
     setState(() {
       _checkedInGuests = checkedIn;
       _loadingGuests = false;
+      if (autoSelected != null) _selectedGuest = autoSelected;
     });
   }
 
@@ -1941,7 +1958,51 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
               // Room charge — checked-in guest list
               if (_method == 'room') ...[
                 const SizedBox(height: 16),
-                const Text('Select checked-in guest',
+                // Room service origin banner
+                if (widget.roomNumber != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _selectedGuest != null
+                          ? const Color(0xFFF0FFF4)
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _selectedGuest != null
+                            ? Colors.green.shade200
+                            : Colors.orange.shade200,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _selectedGuest != null
+                              ? Icons.check_circle_rounded
+                              : Icons.info_outline_rounded,
+                          size: 14,
+                          color: _selectedGuest != null
+                              ? Colors.green.shade600
+                              : Colors.orange.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _selectedGuest != null
+                              ? 'Order from Room ${widget.roomNumber} — guest auto-selected'
+                              : 'Order from Room ${widget.roomNumber} — no guest checked in to this room',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _selectedGuest != null
+                                ? Colors.green.shade700
+                                : Colors.orange.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                Text('Select checked-in guest',
                     style: TextStyle(
                         fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black45)),
                 const SizedBox(height: 8),

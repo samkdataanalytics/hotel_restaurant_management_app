@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as pkg_provider;
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
@@ -160,6 +162,101 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
       await _bookingService.updateRoom(result);
       await _loadRooms();
     }
+  }
+
+  void _showRoomServiceQr(Room room) {
+    final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
+    final propertyId = session.hotelId ?? '';
+    final baseUrl = Uri.base.origin;
+    final url = '$baseUrl/#/room-service/$propertyId/${room.roomNumber}';
+
+    showDialog(
+      context: context,
+      // Use Dialog (not AlertDialog) — AlertDialog wraps content in IntrinsicWidth
+      // which is incompatible with QrImageView's internal LayoutBuilder.
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: SizedBox(
+          width: 380,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.room_service_rounded, color: Colors.purple, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Room ${room.roomNumber} — Room Service QR',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                // Description
+                const Text(
+                  'Place this QR code in the room so guests can order food directly from their room.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                // QR code — fixed size avoids IntrinsicWidth → LayoutBuilder conflict
+                Center(
+                  child: QrImageView(
+                    data: url,
+                    version: QrVersions.auto,
+                    size: 220,
+                    eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                    dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square, color: Colors.black),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Center(
+                  child: SelectableText(
+                    url,
+                    style: TextStyle(fontSize: 11, color: AppTheme.adminPrimary),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // Actions
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('URL copied to clipboard')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy URL'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showDeleteConfirmation(Room room) async {
@@ -488,6 +585,13 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
                     )
                   else
                     const Spacer(),
+                  _actionIconButton(
+                    icon: Icons.qr_code_rounded,
+                    tooltip: 'Room service QR',
+                    color: Colors.purple,
+                    onPressed: () => _showRoomServiceQr(room),
+                  ),
+                  const SizedBox(width: 4),
                   if (canEditSection(ref, 'hotel_rooms')) ...[
                   _actionIconButton(
                     icon: Icons.edit_outlined,
@@ -530,21 +634,20 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
     required Color color,
     required VoidCallback onPressed,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+    // GestureDetector with HitTestBehavior.opaque wins the gesture arena
+    // over the outer Card InkWell, so the button tap is not swallowed.
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onPressed,
-        child: Tooltip(
-          message: tooltip,
-          child: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 18, color: color),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(8),
           ),
+          child: Icon(icon, size: 18, color: color),
         ),
       ),
     );
