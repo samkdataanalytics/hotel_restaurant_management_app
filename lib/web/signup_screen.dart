@@ -168,27 +168,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
       mainAxisSize: MainAxisSize.min,
       children: [
         // Logo
-        Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [AppTheme.goldPrimary, AppTheme.goldLight],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.goldPrimary.withOpacity(0.3),
-                blurRadius: 20,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.business_rounded,
-            color: Color(0xFF0F172A),
-            size: 32,
-          ),
+        Image.asset(
+          'assets/images/hotrest_logo.png',
+          width: 140,
+          height: 140,
+          fit: BoxFit.contain,
         ),
         const SizedBox(height: 24),
 

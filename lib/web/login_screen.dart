@@ -173,8 +173,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               children: [
                 Image.asset(
                   'assets/images/hotrest_logo.png',
-                  width: 120,
-                  height: 120,
+                  width: 160,
+                  height: 160,
                 ),
                 const SizedBox(height: 28),
                 SizedBox(
@@ -230,8 +230,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   // Logo
                   Image.asset(
                     'assets/images/hotrest_logo.png',
-                    width: 140,
-                    height: 140,
+                    width: 180,
+                    height: 180,
                   ),
                   const SizedBox(height: 8),
 
