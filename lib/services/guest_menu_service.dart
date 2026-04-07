@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/menu_item.dart';
 import '../models/restaurant_table.dart';
+import 'notification_service.dart';
 
 class GuestMenuService {
   final _db = Supabase.instance.client;
@@ -65,23 +66,26 @@ class GuestMenuService {
 
   // ─── Settings (tax / service charge) ──────────────────────────────────────
 
-  Future<({double taxRate, double serviceChargeRate})> getSettings(
-      String propertyId) async {
+  Future<({double taxRate, double serviceChargeRate, String primaryColorHex})>
+      getSettings(String propertyId) async {
     try {
       final rows = await _db
           .from('hotel_settings')
-          .select('tax_rate, service_charge_rate')
+          .select('tax_rate, service_charge_rate, primary_color')
           .eq('hotel_id', propertyId)
           .limit(1);
-      if (rows.isEmpty) return (taxRate: 0.0, serviceChargeRate: 0.0);
+      if (rows.isEmpty) {
+        return (taxRate: 0.0, serviceChargeRate: 0.0, primaryColorHex: '#D4A853');
+      }
       final r = rows.first;
       return (
         taxRate: (r['tax_rate'] as num?)?.toDouble() ?? 0.0,
         serviceChargeRate:
             (r['service_charge_rate'] as num?)?.toDouble() ?? 0.0,
+        primaryColorHex: r['primary_color'] as String? ?? '#D4A853',
       );
     } catch (_) {
-      return (taxRate: 0.0, serviceChargeRate: 0.0);
+      return (taxRate: 0.0, serviceChargeRate: 0.0, primaryColorHex: '#D4A853');
     }
   }
 
@@ -128,6 +132,19 @@ class GuestMenuService {
       'discount_amount': 0,
       if (parentOrderId != null) 'parent_order_id': parentOrderId,
     });
+
+    // Fire room service notification for staff (non-blocking)
+    if (type == 'roomService') {
+      final itemCount = cartItems.fold(0, (sum, e) => sum + e.qty);
+      final total = cartItems.fold(
+          0.0, (sum, e) => sum + e.item.price * e.qty);
+      NotificationService(propertyId).notifyRoomServiceOrder(
+        orderNumber: orderNumber,
+        roomNumber: tableId,
+        itemCount: itemCount,
+        total: total,
+      );
+    }
 
     return orderId;
   }

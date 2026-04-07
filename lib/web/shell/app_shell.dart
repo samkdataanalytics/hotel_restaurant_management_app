@@ -25,7 +25,10 @@ import '../orders_screen.dart';
 import '../restaurant_analytics_screen.dart';
 import '../cancellations_refunds_screen.dart';
 import '../users_management_screen.dart';
+import '../staff_schedule_screen.dart';
 import '../edit_property_dialog.dart';
+import '../../services/notification_service.dart';
+import '../widgets/notification_bell.dart';
 
 // ─── Page list (flat index-addressed) ────────────────────────────────────────
 
@@ -45,8 +48,9 @@ const List<Widget> _pages = [
   OrdersScreen(),
   RestaurantAnalyticsScreen(),
   CancellationsRefundsScreen(),
-  // TEAM (13)
+  // TEAM (13–14)
   UsersManagementScreen(),
+  StaffScheduleScreen(),
 ];
 
 // ─── Nav models ───────────────────────────────────────────────────────────────
@@ -100,7 +104,8 @@ const _teamSection = _NavSection(
   Color(0xFF818CF8), // indigo-400
   Color(0x1A818CF8),
   [
-    _NavItem(Icons.people_alt_rounded, 'Team Members', 13),
+    _NavItem(Icons.people_alt_rounded,    'Team Members', 13),
+    _NavItem(Icons.calendar_month_rounded, 'Shifts',      14),
   ],
 );
 
@@ -128,6 +133,9 @@ class _AppShellState extends ConsumerState<AppShell> {
   Map<int, int> _badgeCounts = {};
   Timer? _badgeRefreshTimer;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // Notification service — re-created when the active property changes
+  NotificationService? _notificationService;
 
   @override
   void initState() {
@@ -223,6 +231,14 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     // Refresh badge counts now that services are pointed at the new property
     _loadBadgeCounts();
+
+    // Spin up notification service for the new property + run housekeeping check
+    if (mounted) {
+      setState(() {
+        _notificationService = NotificationService(property.id);
+      });
+      _notificationService!.checkHousekeeping();
+    }
   }
 
   Future<void> _loadUserPermissions(String propertyId) async {
@@ -308,17 +324,32 @@ class _AppShellState extends ConsumerState<AppShell> {
     return firstItem?.pageIndex ?? 0;
   }
 
+  /// Builds the hotel nav section with the property's brand color.
+  _NavSection _hotelSectionFor(OrgProperty? property) {
+    final accent = property != null
+        ? hexToColor(property.primaryColor)
+        : const Color(0xFFD4A853);
+    return _NavSection(
+      'HOTEL',
+      accent,
+      accent.withAlpha(26), // ~10% opacity
+      _hotelSection.items,
+    );
+  }
+
   List<_NavSection> _activeSections(OrgProperty? property) {
+    final hotelSec = _hotelSectionFor(property);
+
     // Determine raw sections based on property type
     List<_NavSection> rawSections;
     if (property == null) {
-      rawSections = [_hotelSection];
+      rawSections = [hotelSec];
     } else if (property.isHotel && property.isRestaurant) {
-      rawSections = [_hotelSection, _restaurantSection];
+      rawSections = [hotelSec, _restaurantSection];
     } else if (property.isRestaurant) {
       rawSections = [_restaurantSection];
     } else {
-      rawSections = [_hotelSection];
+      rawSections = [hotelSec];
     }
 
     // Managers and owners see all operational sections + team members
@@ -531,7 +562,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       currentIndex: selectedIdx.clamp(0, navItems.length),
       type: BottomNavigationBarType.fixed,
       backgroundColor: const Color(0xFF0F172A),
-      selectedItemColor: const Color(0xFFD4A853),
+      selectedItemColor: hexToColor(activeProperty?.primaryColor ?? '#D4A853'),
       unselectedItemColor: Colors.white38,
       selectedLabelStyle:
           const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
@@ -1079,15 +1110,16 @@ class _AppShellState extends ConsumerState<AppShell> {
     Color typeBadgeColor = AppTheme.adminPrimary;
 
     if (property != null) {
+      final brandColor = hexToColor(property.primaryColor);
       if (property.isHotel && property.isRestaurant) {
         typeBadgeLabel = 'Hotel + Restaurant';
-        typeBadgeColor = AppTheme.goldPrimary;
+        typeBadgeColor = brandColor;
       } else if (property.isRestaurant) {
         typeBadgeLabel = 'Restaurant';
         typeBadgeColor = AppTheme.restaurantAccent;
       } else {
         typeBadgeLabel = 'Hotel';
-        typeBadgeColor = AppTheme.adminPrimary;
+        typeBadgeColor = brandColor;
       }
     }
 
@@ -1156,6 +1188,12 @@ class _AppShellState extends ConsumerState<AppShell> {
             ),
 
           const Spacer(),
+
+          // Notification bell
+          if (_notificationService != null) ...[
+            NotificationBell(service: _notificationService!),
+            const SizedBox(width: 8),
+          ],
 
           // Current user — on mobile show only avatar icon; on desktop show name
           if (authState?.email != null)

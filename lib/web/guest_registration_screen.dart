@@ -3,7 +3,9 @@ import 'package:intl/intl.dart';
 import '../app_theme.dart';
 import '../models/booking.dart';
 import '../models/guest.dart';
+import '../providers/hotel_session.dart' show hexToColor;
 import '../services/booking_service.dart';
+import '../services/guest_menu_service.dart';
 
 class GuestRegistrationScreen extends StatefulWidget {
   final String bookingRef;
@@ -18,6 +20,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
   final _bookingService = BookingService();
   bool _isLoading = true;
   String? _error;
+  Color _accent = AppTheme.adminPrimary; // overridden after booking lookup
 
   Booking? _booking;
   Guest? _guest;
@@ -77,9 +80,16 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
     _whatsAppCtrl.text = _guest!.whatsApp ?? _guest!.phone;
     _dateOfBirth = _guest!.dateOfBirth;
 
-    setState(() {
-      _isLoading = false;
-    });
+    // Load brand color — non-blocking, falls back to adminPrimary on error
+    final hotelId = data['hotelId'] as String?;
+    if (hotelId != null) {
+      try {
+        final s = await GuestMenuService().getSettings(hotelId);
+        if (mounted) setState(() => _accent = hexToColor(s.primaryColorHex));
+      } catch (_) {}
+    }
+
+    if (mounted) setState(() => _isLoading = false);
   }
 
   Future<void> _selectDateOfBirth() async {
@@ -92,7 +102,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
         return Theme(
           data: AppTheme.webTheme.copyWith(
             colorScheme: ColorScheme.light(
-              primary: AppTheme.adminPrimary,
+              primary: _accent,
               onPrimary: Colors.white,
             ),
           ),
@@ -349,7 +359,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
                 child: ElevatedButton(
                   onPressed: _submitForm,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.adminPrimary,
+                    backgroundColor: _accent,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text('Submit Registration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
@@ -368,7 +378,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
       padding: const EdgeInsets.only(left: 8, bottom: 12),
       child: Text(
         title,
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.adminPrimary),
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _accent),
       ),
     );
   }

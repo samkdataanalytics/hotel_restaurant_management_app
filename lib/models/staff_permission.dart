@@ -36,6 +36,7 @@ const Map<int, String> kSectionKeyByPageIndex = {
   10: 'restaurant_orders',
   11: 'restaurant_analytics',
   12: 'restaurant_cancellations',
+  // Team section — no permission key; managers only (filtered in AppShell)
 };
 
 const Map<String, String> kSectionLabel = {

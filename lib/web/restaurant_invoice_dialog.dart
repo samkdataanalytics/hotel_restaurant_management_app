@@ -6,10 +6,6 @@ import '../providers/hotel_session.dart';
 import '../models/restaurant_order.dart';
 import '../models/restaurant_table.dart';
 
-// ─── Restaurant brand colors — sourced from AppTheme ─────────────────────────
-const _kOrange = AppTheme.restaurantAccent;
-const _kOrangeBg = AppTheme.restaurantAccentBg;
-
 /// Full-page invoice dialog.
 ///
 /// Pass [allOrders] when there are multiple tickets (parent + add-ons) to
@@ -32,6 +28,8 @@ class RestaurantInvoiceDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = Provider.of<HotelSession>(context, listen: false).settings;
+    final accent   = settings?.primaryColor ?? AppTheme.restaurantAccent;
+    final accentBg = accent.withAlpha(30);
     final sym = settings?.currencySymbol ?? '\$';
     final currency = NumberFormat.currency(symbol: sym, decimalDigits: 2);
     final dateF = DateFormat('MMM dd, yyyy  HH:mm');
@@ -76,7 +74,7 @@ class RestaurantInvoiceDialog extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.receipt_long_rounded, size: 16, color: _kOrange),
+                  Icon(Icons.receipt_long_rounded, size: 16, color: accent),
                   const SizedBox(width: 8),
                   Text(isPreview ? 'Invoice Preview' : 'Invoice',
                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
@@ -109,11 +107,11 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                                 settings!.logoUrl,
                                 height: 64,
                                 fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => _DefaultLogoIcon(),
+                                errorBuilder: (_, __, ___) => _DefaultLogoIcon(accent: accent),
                               ),
                             )
                           else
-                            _DefaultLogoIcon(),
+                            _DefaultLogoIcon(accent: accent),
                           const SizedBox(height: 10),
                           Text(
                               settings?.displayName.isNotEmpty == true
@@ -319,7 +317,7 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       decoration: BoxDecoration(
-                        color: _kOrangeBg,
+                        color: accentBg,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
@@ -328,7 +326,7 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                           const Text('GRAND TOTAL',
                               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                           Text(currency.format(grandTotal),
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: _kOrange)),
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: accent)),
                         ],
                       ),
                     ),
@@ -379,7 +377,7 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                     icon: const Icon(Icons.check_rounded, size: 16),
                     label: const Text('Done'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _kOrange,
+                      backgroundColor: accent,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -443,15 +441,18 @@ class RestaurantInvoiceDialog extends StatelessWidget {
 }
 
 class _DefaultLogoIcon extends StatelessWidget {
+  final Color accent;
+  const _DefaultLogoIcon({required this.accent});
+
   @override
   Widget build(BuildContext context) {
     return Container(
       width: 52, height: 52,
       decoration: BoxDecoration(
-        color: _kOrangeBg,
+        color: accent.withAlpha(30),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: const Icon(Icons.restaurant_rounded, color: _kOrange, size: 28),
+      child: Icon(Icons.restaurant_rounded, color: accent, size: 28),
     );
   }
 }

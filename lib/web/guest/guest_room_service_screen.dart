@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/menu_item.dart';
+import '../../providers/hotel_session.dart' show hexToColor;
 import '../../services/guest_menu_service.dart';
 
 // ─── Colour palette (same as guest menu portal) ───────────────────────────────
@@ -69,6 +70,9 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
   final _fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
   late TabController _tabCtrl;
 
+  // Brand color (loaded from DB)
+  Color _accent = _C.gold;
+
   // Data
   bool _loading = true;
   String? _error;
@@ -121,7 +125,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
       ]);
 
       final items    = results[0] as List<MenuItem>;
-      final settings = results[1] as ({double taxRate, double serviceChargeRate});
+      final settings = results[1] as ({double taxRate, double serviceChargeRate, String primaryColorHex});
       final name     = results[2] as String;
 
       final cats = items.map((i) => i.category).toSet().toList()..sort();
@@ -133,6 +137,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
         _selectedCategory = cats.isNotEmpty ? cats.first : '';
         _taxRate = settings.taxRate;
         _serviceRate = settings.serviceChargeRate;
+        _accent = hexToColor(settings.primaryColorHex);
         _propertyName = name;
         _loading = false;
         _tabCtrl.dispose();
@@ -273,7 +278,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
     body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
       Image.asset('assets/images/hotrest_logo.png', width: 80, height: 80),
       const SizedBox(height: 24),
-      const CircularProgressIndicator(color: _C.gold),
+      CircularProgressIndicator(color: _accent),
       const SizedBox(height: 16),
       const Text('Loading menu…', style: TextStyle(color: _C.subtext, fontSize: 14)),
     ])),
@@ -286,7 +291,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
     body: Center(child: Padding(
       padding: const EdgeInsets.all(28),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.error_outline_rounded, color: _C.gold, size: 48),
+        Icon(Icons.error_outline_rounded, color: _accent, size: 48),
         const SizedBox(height: 16),
         Text(_error!, style: const TextStyle(color: _C.subtext, fontSize: 14),
             textAlign: TextAlign.center),
@@ -303,7 +308,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
       elevation: 0,
       title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(_propertyName,
-            style: const TextStyle(color: _C.gold, fontSize: 12, fontWeight: FontWeight.w600)),
+            style: TextStyle(color: _accent, fontSize: 12, fontWeight: FontWeight.w600)),
         Row(children: [
           const Icon(Icons.hotel_rounded, color: _C.subtext, size: 14),
           const SizedBox(width: 4),
@@ -326,24 +331,24 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
         if (_addingMore)
           TextButton.icon(
             onPressed: () => setState(() { _addingMore = false; _cart.clear(); }),
-            icon: const Icon(Icons.arrow_back_rounded, color: _C.gold, size: 16),
-            label: const Text('My Order', style: TextStyle(color: _C.gold, fontSize: 13)),
+            icon: Icon(Icons.arrow_back_rounded, color: _accent, size: 16),
+            label: Text('My Order', style: TextStyle(color: _accent, fontSize: 13)),
           ),
       ],
       bottom: _categories.length > 1
           ? TabBar(
               controller: _tabCtrl,
               isScrollable: true,
-              labelColor: _C.gold,
+              labelColor: _accent,
               unselectedLabelColor: _C.subtext,
-              indicatorColor: _C.gold,
+              indicatorColor: _accent,
               tabs: _categories.map((c) => Tab(text: c)).toList(),
             )
           : null,
     ),
     body: _buildMenuBody(),
     floatingActionButton: _cart.isEmpty ? null : FloatingActionButton.extended(
-      backgroundColor: _C.gold,
+      backgroundColor: _accent,
       foregroundColor: _C.bg,
       onPressed: () => _showCartSheet(),
       icon: const Icon(Icons.shopping_cart_rounded),
@@ -380,7 +385,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
         color: _C.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: qty > 0 ? _C.gold.withAlpha(100) : _C.divider,
+          color: qty > 0 ? _accent.withAlpha(100) : _C.divider,
         ),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -395,7 +400,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
           ],
           const SizedBox(height: 8),
           Text(_fmt.format(item.price),
-              style: const TextStyle(color: _C.gold, fontWeight: FontWeight.w700, fontSize: 14)),
+              style: TextStyle(color: _accent, fontWeight: FontWeight.w700, fontSize: 14)),
         ])),
         const SizedBox(width: 12),
         qty == 0
@@ -404,7 +409,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
                 child: Container(
                   width: 34, height: 34,
                   decoration: BoxDecoration(
-                    color: _C.gold, borderRadius: BorderRadius.circular(10)),
+                    color: _accent, borderRadius: BorderRadius.circular(10)),
                   child: const Icon(Icons.add_rounded, color: _C.bg, size: 20),
                 ),
               )
@@ -413,7 +418,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: Text('$qty',
-                      style: const TextStyle(color: _C.gold, fontWeight: FontWeight.w700, fontSize: 16)),
+                      style: TextStyle(color: _accent, fontWeight: FontWeight.w700, fontSize: 16)),
                 ),
                 _qtyBtn(Icons.add_rounded, () => _addItem(item)),
               ]),
@@ -452,6 +457,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
         onRemove: _removeItem,
         onPlace: () { Navigator.pop(context); _placeOrder(); },
         currencySymbol: _currencySymbol,
+        accent: _accent,
       ),
     );
   }
@@ -494,11 +500,11 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
               child: OutlinedButton.icon(
                 onPressed: () => setState(() { _addingMore = true; }),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: _C.gold),
+                  side: BorderSide(color: _accent),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                icon: const Icon(Icons.add_shopping_cart_rounded, color: _C.gold),
-                label: const Text('Order More Items', style: TextStyle(color: _C.gold)),
+                icon: Icon(Icons.add_shopping_cart_rounded, color: _accent),
+                label: Text('Order More Items', style: TextStyle(color: _accent)),
               ),
             ),
         ],
@@ -527,10 +533,10 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: _C.gold.withAlpha(30),
+                color: _accent.withAlpha(30),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Text('Add-on', style: TextStyle(color: _C.gold, fontSize: 11)),
+              child: Text('Add-on', style: TextStyle(color: _accent, fontSize: 11)),
             ),
         ]),
         const SizedBox(height: 10),
@@ -566,11 +572,11 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
       decoration: BoxDecoration(
         color: _C.card,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _C.gold.withAlpha(60)),
+        border: Border.all(color: _accent.withAlpha(60)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(_orders.length > 1 ? 'Combined Bill' : 'Bill Summary',
-            style: const TextStyle(color: _C.gold, fontWeight: FontWeight.w700, fontSize: 13)),
+            style: TextStyle(color: _accent, fontWeight: FontWeight.w700, fontSize: 13)),
         const SizedBox(height: 10),
         _invoiceRow('Subtotal', fmt.format(total), fmt),
         if (_taxRate > 0) _invoiceRow('Tax', fmt.format(tax), fmt),
@@ -578,7 +584,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
         const Divider(color: _C.divider, height: 16),
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           const Text('Grand Total', style: TextStyle(color: _C.text, fontWeight: FontWeight.w800, fontSize: 16)),
-          Text(fmt.format(grand), style: const TextStyle(color: _C.gold, fontWeight: FontWeight.w800, fontSize: 18)),
+          Text(fmt.format(grand), style: TextStyle(color: _accent, fontWeight: FontWeight.w800, fontSize: 18)),
         ]),
       ]),
     );
@@ -654,7 +660,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
           child: ElevatedButton(
             onPressed: (_feedbackRating == 0 || _isSubmittingFeedback) ? null : _submitFeedback,
             style: ElevatedButton.styleFrom(
-              backgroundColor: _C.gold, foregroundColor: _C.bg,
+              backgroundColor: _accent, foregroundColor: _C.bg,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
             child: _isSubmittingFeedback
@@ -681,7 +687,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Image.asset('assets/images/hotrest_logo.png', width: 80, height: 80),
         const SizedBox(height: 24),
-        const Icon(Icons.check_circle_rounded, color: _C.gold, size: 56),
+        Icon(Icons.check_circle_rounded, color: _accent, size: 56),
         const SizedBox(height: 16),
         const Text('Thank You!',
             style: TextStyle(color: _C.text, fontSize: 26, fontWeight: FontWeight.w800)),
@@ -722,6 +728,7 @@ class _CartSheet extends StatefulWidget {
   final void Function(MenuItem) onRemove;
   final VoidCallback onPlace;
   final String currencySymbol;
+  final Color accent;
 
   const _CartSheet({
     required this.cart,
@@ -737,6 +744,7 @@ class _CartSheet extends StatefulWidget {
     required this.onRemove,
     required this.onPlace,
     required this.currencySymbol,
+    required this.accent,
   });
 
   @override
@@ -798,7 +806,7 @@ class _CartSheetState extends State<_CartSheet> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       child: Text('${c.qty}',
-                          style: const TextStyle(color: _C.gold, fontWeight: FontWeight.w700, fontSize: 15)),
+                          style: TextStyle(color: widget.accent, fontWeight: FontWeight.w700, fontSize: 15)),
                     ),
                     GestureDetector(
                       onTap: () { widget.onAdd(c.item); setState(() {}); },
@@ -833,14 +841,14 @@ class _CartSheetState extends State<_CartSheet> {
                 Text(widget.isAddOn ? 'This order' : 'Total',
                     style: const TextStyle(color: _C.text, fontWeight: FontWeight.w800, fontSize: 16)),
                 Text(fmt.format(widget.total),
-                    style: const TextStyle(color: _C.gold, fontWeight: FontWeight.w800, fontSize: 18)),
+                    style: TextStyle(color: widget.accent, fontWeight: FontWeight.w800, fontSize: 18)),
               ]),
               const SizedBox(height: 16),
               SizedBox(width: double.infinity, height: 52,
                 child: ElevatedButton(
                   onPressed: widget.isPlacing ? null : widget.onPlace,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _C.gold, foregroundColor: _C.bg,
+                    backgroundColor: widget.accent, foregroundColor: _C.bg,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   child: widget.isPlacing

@@ -73,6 +73,7 @@ class OrgProperty {
   final String currency; // ISO 4217 code e.g. USD, EUR
   final String logoUrl;
   final String status;
+  final String primaryColor; // hex e.g. '#D4A853'
   final DateTime createdAt;
 
   const OrgProperty({
@@ -89,24 +90,26 @@ class OrgProperty {
     required this.currency,
     required this.logoUrl,
     required this.status,
+    this.primaryColor = '#D4A853',
     required this.createdAt,
   });
 
   factory OrgProperty.fromRow(Map<String, dynamic> r) => OrgProperty(
-        id:        r['id']         as String,
-        orgId:     r['org_id']     as String? ?? '',
-        name:      r['name']       as String,
-        type:      r['type']       as String? ?? 'hotel',
-        address:   r['address']    as String? ?? '',
-        city:      r['city']       as String? ?? '',
-        country:   r['country']    as String? ?? '',
-        phone:     r['phone']      as String? ?? '',
-        email:     r['email']      as String? ?? '',
-        timezone:  r['timezone']   as String? ?? 'UTC',
-        currency:  r['currency']   as String? ?? 'USD',
-        logoUrl:   r['logo_url']   as String? ?? '',
-        status:    r['status']     as String? ?? 'active',
-        createdAt: DateTime.parse(r['created_at'] as String),
+        id:           r['id']            as String,
+        orgId:        r['org_id']        as String? ?? '',
+        name:         r['name']          as String,
+        type:         r['type']          as String? ?? 'hotel',
+        address:      r['address']       as String? ?? '',
+        city:         r['city']          as String? ?? '',
+        country:      r['country']       as String? ?? '',
+        phone:        r['phone']         as String? ?? '',
+        email:        r['email']         as String? ?? '',
+        timezone:     r['timezone']      as String? ?? 'UTC',
+        currency:     r['currency']      as String? ?? 'USD',
+        logoUrl:      r['logo_url']      as String? ?? '',
+        status:       r['status']        as String? ?? 'active',
+        primaryColor: r['primary_color'] as String? ?? '#D4A853',
+        createdAt:    DateTime.parse(r['created_at'] as String),
       );
 
   bool get isHotel      => type == 'hotel' || type == 'both';
@@ -556,16 +559,18 @@ class OrganizationService {
     required String email,
     required String timezone,
     required String currency,
+    String primaryColor = '#D4A853',
   }) async {
     await _db.from('hotels').update({
-      'name':     name,
-      'address':  address,
-      'city':     city,
-      'country':  country,
-      'phone':    phone,
-      'email':    email,
-      'timezone': timezone,
-      'currency': currency,
+      'name':          name,
+      'address':       address,
+      'city':          city,
+      'country':       country,
+      'phone':         phone,
+      'email':         email,
+      'timezone':      timezone,
+      'currency':      currency,
+      'primary_color': primaryColor,
     }).eq('id', propertyId);
 
     await _db.from('hotel_settings').update({
@@ -574,6 +579,7 @@ class OrganizationService {
       'phone':           phone,
       'email':           email,
       'currency_symbol': _currencySymbol(currency),
+      'primary_color':   primaryColor,
     }).eq('hotel_id', propertyId);
   }
 
