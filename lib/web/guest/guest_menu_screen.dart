@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/menu_item.dart';
 import '../../models/restaurant_table.dart';
+import '../../providers/hotel_session.dart' show hexToColor;
 import '../../services/guest_menu_service.dart';
 
 // ─── Colour palette (navy + gold) ─────────────────────────────────────────────
@@ -72,6 +73,8 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
   // ── Data ───────────────────────────────────────────────────────────────────
   RestaurantTable? _table;
   String _propertyName = '';
+  Color _accent = _C.gold;
+  String _logoUrl = '';
   List<MenuItem> _items = [];
   List<String> _categories = [];
   double _taxRate = 0;
@@ -149,7 +152,7 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
       final items    = results[0] as List<MenuItem>;
       final table    = results[1] as RestaurantTable?;
       final name     = results[2] as String;
-      final settings = results[3] as ({double taxRate, double serviceChargeRate});
+      final settings = results[3] as ({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl});
       final cats = items.map((e) => e.category).toSet().toList()..sort();
       _tabController.dispose();
       _tabController = TabController(length: cats.length, vsync: this)
@@ -164,6 +167,8 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
         _propertyName  = name;
         _taxRate       = settings.taxRate;
         _serviceRate   = settings.serviceChargeRate;
+        _accent        = hexToColor(settings.primaryColorHex);
+        _logoUrl       = settings.logoUrl;
         _categories    = cats;
         _selectedCategory = cats.isNotEmpty ? cats.first : null;
         _loading       = false;
@@ -254,6 +259,23 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
     });
   }
 
+  // ── Logo helper ────────────────────────────────────────────────────────────
+  Widget _logoWidget(double size) {
+    if (_logoUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.2),
+        child: Image.network(
+          _logoUrl,
+          width: size, height: size,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => Image.asset(
+            'assets/images/hotrest_logo.png', width: size, height: size),
+        ),
+      );
+    }
+    return Image.asset('assets/images/hotrest_logo.png', width: size, height: size);
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -274,7 +296,7 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
     backgroundColor: _C.bg,
     body: Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Image.asset('assets/images/hotrest_logo.png', width: 80, height: 80),
+        _logoWidget(80),
         const SizedBox(height: 24),
         const CircularProgressIndicator(color: _C.gold),
         const SizedBox(height: 16),
@@ -324,7 +346,7 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
             children: [
               // Header
               Row(children: [
-                Image.asset('assets/images/hotrest_logo.png', width: 36, height: 36),
+                _logoWidget(36),
                 const SizedBox(width: 12),
                 Expanded(child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -564,7 +586,7 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const SizedBox(height: 20),
-              Image.asset('assets/images/hotrest_logo.png', width: 72, height: 72),
+              _logoWidget(72),
               const SizedBox(height: 24),
               const Text('Payment received!',
                   style: TextStyle(color: _C.gold, fontSize: 13,
@@ -707,7 +729,7 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Image.asset('assets/images/hotrest_logo.png', width: 80, height: 80),
+              _logoWidget(80),
               const SizedBox(height: 32),
               Container(
                 width: 72, height: 72,
@@ -791,7 +813,7 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
           child: Row(children: [
-            Image.asset('assets/images/hotrest_logo.png', width: 36, height: 36),
+            _logoWidget(36),
             const SizedBox(width: 12),
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

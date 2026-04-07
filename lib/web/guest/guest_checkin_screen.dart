@@ -40,8 +40,9 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
   final _dateFmt = DateFormat('EEE, MMM d yyyy');
   final _refCtrl = TextEditingController();
 
-  // ── Brand colour (loaded from hotel_settings after booking lookup) ──────────
+  // ── Brand colour + logo (loaded from hotel_settings after booking lookup) ────
   Color _accent = _C.gold;
+  String _logoUrl = '';
 
   // ── State ──────────────────────────────────────────────────────────────────
   bool _loading = true;
@@ -117,11 +118,14 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
     final room    = data['room']    as Room?;
     final hotelId = data['hotelId'] as String? ?? '';
 
-    // Load brand colour (non-blocking — fall back to default gold if it fails)
+    // Load brand colour + logo (non-blocking — fall back to defaults on error)
     if (hotelId.isNotEmpty) {
       try {
         final settings = await GuestMenuService().getSettings(hotelId);
-        if (mounted) setState(() => _accent = hexToColor(settings.primaryColorHex));
+        if (mounted) setState(() {
+          _accent  = hexToColor(settings.primaryColorHex);
+          _logoUrl = settings.logoUrl;
+        });
       } catch (_) {}
     }
 
@@ -210,6 +214,23 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
       _passportCtrl.text.isNotEmpty &&
       _emailCtrl.text.isNotEmpty;
 
+  // ── Logo helper ────────────────────────────────────────────────────────────
+  Widget _logoWidget(double size) {
+    if (_logoUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.2),
+        child: Image.network(
+          _logoUrl,
+          width: size, height: size,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => Image.asset(
+            'assets/images/hotrest_logo.png', width: size, height: size),
+        ),
+      );
+    }
+    return Image.asset('assets/images/hotrest_logo.png', width: size, height: size);
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -224,7 +245,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
   Widget _loadingView() => Scaffold(
     backgroundColor: _C.bg,
     body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Image.asset('assets/images/hotrest_logo.png', width: 80, height: 80),
+      _logoWidget(80),
       const SizedBox(height: 24),
       CircularProgressIndicator(color: _accent),
       const SizedBox(height: 16),
@@ -238,7 +259,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
     body: SafeArea(child: Center(child: Padding(
       padding: const EdgeInsets.all(28),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Image.asset('assets/images/hotrest_logo.png', width: 80, height: 80),
+        _logoWidget(80),
         const SizedBox(height: 24),
         const Text('Online Check-In', style: TextStyle(color: _C.text, fontSize: 22, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
@@ -296,7 +317,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
       padding: const EdgeInsets.all(24),
       child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
         const SizedBox(height: 16),
-        Image.asset('assets/images/hotrest_logo.png', width: 72, height: 72),
+        _logoWidget(72),
         const SizedBox(height: 20),
         Container(
           width: 64, height: 64,
@@ -420,7 +441,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
     child: SafeArea(bottom: false, child: Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Row(children: [
-        Image.asset('assets/images/hotrest_logo.png', width: 36, height: 36),
+        _logoWidget(36),
         const SizedBox(width: 12),
         const Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

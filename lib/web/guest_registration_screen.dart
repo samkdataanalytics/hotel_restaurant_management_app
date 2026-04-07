@@ -21,6 +21,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
   bool _isLoading = true;
   String? _error;
   Color _accent = AppTheme.adminPrimary; // overridden after booking lookup
+  String _propertyName = '';
 
   Booking? _booking;
   Guest? _guest;
@@ -80,12 +81,20 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
     _whatsAppCtrl.text = _guest!.whatsApp ?? _guest!.phone;
     _dateOfBirth = _guest!.dateOfBirth;
 
-    // Load brand color — non-blocking, falls back to adminPrimary on error
+    // Load brand color + property name — non-blocking, fallback on error
     final hotelId = data['hotelId'] as String?;
     if (hotelId != null) {
       try {
-        final s = await GuestMenuService().getSettings(hotelId);
-        if (mounted) setState(() => _accent = hexToColor(s.primaryColorHex));
+        final results = await Future.wait([
+          GuestMenuService().getSettings(hotelId),
+          GuestMenuService().getPropertyName(hotelId),
+        ]);
+        final s    = results[0] as ({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl});
+        final name = results[1] as String;
+        if (mounted) setState(() {
+          _accent       = hexToColor(s.primaryColorHex);
+          _propertyName = name;
+        });
       } catch (_) {}
     }
 
@@ -228,9 +237,9 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
             children: [
-              const Text(
-                'Welcome to HotRest Management',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+              Text(
+                _propertyName.isNotEmpty ? 'Welcome to $_propertyName' : 'Guest Pre-Registration',
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
