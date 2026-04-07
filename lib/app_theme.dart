@@ -265,21 +265,24 @@ class AppTheme {
 
   /// Wraps [child] in a KPI card with a coloured left accent strip.
   static Widget kpiCard({required Color accent, required Widget child}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(cardRadius),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(cardRadius),
-          border: Border.all(color: const Color(0xFFE8EDF3)),
-          boxShadow: cardShadow,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(width: 4, color: accent),
-            Expanded(child: child),
-          ],
+    // Outer box: uniform border + borderRadius + shadow (flutter requires
+    // uniform colors when borderRadius is set).
+    // ClipRRect clips the inner content to the same radius.
+    // Inner DecoratedBox: left accent strip only — no borderRadius, so valid.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(cardRadius),
+        border: Border.all(color: const Color(0xFFE8EDF3)),
+        boxShadow: cardShadow,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(cardRadius - 1),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: accent, width: 4)),
+          ),
+          child: child,
         ),
       ),
     );

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'providers/app_auth_provider.dart';
+import 'web/landing_screen.dart';
 import 'web/login_screen.dart';
 import 'web/signup_screen.dart';
 import 'web/superadmin/superadmin_shell.dart';
@@ -17,6 +18,7 @@ import 'web/guest/guest_room_service_screen.dart';
 // ─── Route names ─────────────────────────────────────────────────────────────
 
 class AppRoutes {
+  static const landing       = '/';
   static const login         = '/login';
   static const signup        = '/signup';
   static const superadmin    = '/superadmin';
@@ -34,7 +36,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final authAsync = ref.watch(authProvider);
 
   return GoRouter(
-    initialLocation: AppRoutes.login,
+    initialLocation: AppRoutes.landing,
     refreshListenable: _AuthChangeNotifier(ref),
     redirect: (context, state) {
       final auth = authAsync.valueOrNull;
@@ -42,14 +44,19 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final loc = state.matchedLocation;
 
-      // Guest-facing public pages — no auth required
+      // Public pages — no auth required
+      if (loc == AppRoutes.landing) {
+        // If already logged in, skip the landing page
+        if (auth.isLoggedIn) return AppRoutes.app;
+        return null;
+      }
       if (loc.startsWith(AppRoutes.guestMenu)) return null;
       if (loc.startsWith(AppRoutes.roomService)) return null;
       if (loc.startsWith('/guest-registration')) return null;
 
       if (!auth.isLoggedIn) {
         if (loc == AppRoutes.login || loc == AppRoutes.signup) return null;
-        return AppRoutes.login;
+        return AppRoutes.landing;
       }
 
       // Logged in
@@ -80,12 +87,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (auth.isStaffAccount && loc == AppRoutes.propertySetup) {
         return AppRoutes.app;
       }
-      if (loc == AppRoutes.login || loc == AppRoutes.onboarding) {
+      if (loc == AppRoutes.landing || loc == AppRoutes.login || loc == AppRoutes.onboarding) {
         return AppRoutes.app;
       }
       return null;
     },
     routes: [
+      GoRoute(
+        path: AppRoutes.landing,
+        builder: (_, __) => const LandingScreen(),
+      ),
       GoRoute(
         path: AppRoutes.login,
         builder: (_, __) => const LoginScreen(),
