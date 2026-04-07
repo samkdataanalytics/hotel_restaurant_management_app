@@ -652,6 +652,9 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _buildSidebarLogo(OrgProperty? property, bool expanded) {
+    final logoUrl = provider_pkg.Provider.of<HotelSession>(context, listen: false)
+        .settings
+        ?.logoUrl ?? '';
     return Container(
       height: 72,
       padding: EdgeInsets.symmetric(
@@ -660,11 +663,27 @@ class _AppShellState extends ConsumerState<AppShell> {
       alignment: Alignment.centerLeft,
       child: Row(
         children: [
-          Image.asset(
-            'assets/images/hotrest_logo.png',
-            width: 40,
-            height: 40,
-            fit: BoxFit.contain,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: logoUrl.isNotEmpty
+                ? Image.network(
+                    logoUrl,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => Image.asset(
+                      'assets/images/hotrest_logo.png',
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.contain,
+                    ),
+                  )
+                : Image.asset(
+                    'assets/images/hotrest_logo.png',
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.contain,
+                  ),
           ),
           if (expanded) ...[
             const SizedBox(width: 12),

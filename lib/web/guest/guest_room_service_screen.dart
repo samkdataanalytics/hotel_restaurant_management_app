@@ -70,8 +70,9 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
   final _fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
   late TabController _tabCtrl;
 
-  // Brand color (loaded from DB)
+  // Brand color + logo (loaded from DB)
   Color _accent = _C.gold;
+  String _logoUrl = '';
 
   // Data
   bool _loading = true;
@@ -125,7 +126,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
       ]);
 
       final items    = results[0] as List<MenuItem>;
-      final settings = results[1] as ({double taxRate, double serviceChargeRate, String primaryColorHex});
+      final settings = results[1] as ({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl});
       final name     = results[2] as String;
 
       final cats = items.map((i) => i.category).toSet().toList()..sort();
@@ -137,7 +138,8 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
         _selectedCategory = cats.isNotEmpty ? cats.first : '';
         _taxRate = settings.taxRate;
         _serviceRate = settings.serviceChargeRate;
-        _accent = hexToColor(settings.primaryColorHex);
+        _accent  = hexToColor(settings.primaryColorHex);
+        _logoUrl = settings.logoUrl;
         _propertyName = name;
         _loading = false;
         _tabCtrl.dispose();
@@ -271,12 +273,29 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
     return _menuView();
   }
 
+  // ── Logo helper ──────────────────────────────────────────────────────────────
+  Widget _logoWidget(double size) {
+    if (_logoUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.2),
+        child: Image.network(
+          _logoUrl,
+          width: size, height: size,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => Image.asset(
+            'assets/images/hotrest_logo.png', width: size, height: size),
+        ),
+      );
+    }
+    return Image.asset('assets/images/hotrest_logo.png', width: size, height: size);
+  }
+
   // ── Loading ───────────────────────────────────────────────────────────────────
 
   Widget _loadingView() => Scaffold(
     backgroundColor: _C.bg,
     body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Image.asset('assets/images/hotrest_logo.png', width: 80, height: 80),
+      _logoWidget(80),
       const SizedBox(height: 24),
       CircularProgressIndicator(color: _accent),
       const SizedBox(height: 16),
@@ -615,7 +634,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
     body: SafeArea(child: Center(child: Padding(
       padding: const EdgeInsets.all(28),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Image.asset('assets/images/hotrest_logo.png', width: 64, height: 64),
+        _logoWidget(64),
         const SizedBox(height: 20),
         const Text('How was your room service?',
             style: TextStyle(color: _C.text, fontSize: 20, fontWeight: FontWeight.w800),
@@ -685,7 +704,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
     body: Center(child: Padding(
       padding: const EdgeInsets.all(32),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Image.asset('assets/images/hotrest_logo.png', width: 80, height: 80),
+        _logoWidget(80),
         const SizedBox(height: 24),
         Icon(Icons.check_circle_rounded, color: _accent, size: 56),
         const SizedBox(height: 16),

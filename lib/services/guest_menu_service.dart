@@ -66,16 +66,16 @@ class GuestMenuService {
 
   // ─── Settings (tax / service charge) ──────────────────────────────────────
 
-  Future<({double taxRate, double serviceChargeRate, String primaryColorHex})>
+  Future<({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl})>
       getSettings(String propertyId) async {
     try {
       final rows = await _db
           .from('hotel_settings')
-          .select('tax_rate, service_charge_rate, primary_color')
+          .select('tax_rate, service_charge_rate, primary_color, logo_url')
           .eq('hotel_id', propertyId)
           .limit(1);
       if (rows.isEmpty) {
-        return (taxRate: 0.0, serviceChargeRate: 0.0, primaryColorHex: '#D4A853');
+        return (taxRate: 0.0, serviceChargeRate: 0.0, primaryColorHex: '#D4A853', logoUrl: '');
       }
       final r = rows.first;
       return (
@@ -83,9 +83,10 @@ class GuestMenuService {
         serviceChargeRate:
             (r['service_charge_rate'] as num?)?.toDouble() ?? 0.0,
         primaryColorHex: r['primary_color'] as String? ?? '#D4A853',
+        logoUrl: r['logo_url'] as String? ?? '',
       );
     } catch (_) {
-      return (taxRate: 0.0, serviceChargeRate: 0.0, primaryColorHex: '#D4A853');
+      return (taxRate: 0.0, serviceChargeRate: 0.0, primaryColorHex: '#D4A853', logoUrl: '');
     }
   }
 
