@@ -5,6 +5,7 @@ import '../models/check_in.dart';
 import '../models/guest.dart';
 import '../models/room.dart';
 import '../models/expense.dart';
+import 'notification_service.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -204,6 +205,7 @@ class BookingService {
       'booking': booking,
       'guest': guestRows.isNotEmpty ? _guestFromRow(guestRows.first) : null,
       'room': roomRows.isNotEmpty ? _roomFromRow(roomRows.first) : null,
+      'hotelId': rows.first['hotel_id'] as String? ?? '',
     };
   }
 
@@ -243,22 +245,36 @@ class BookingService {
         .eq('id', booking.roomId)
         .limit(1);
 
+    final room =
+        roomRows.isNotEmpty ? _roomFromRow(roomRows.first) : null;
+
+    // Fire check-in notification (non-blocking)
+    if (hotelId != null && room != null) {
+      NotificationService(hotelId!).notifyCheckIn(
+        guestName: guest.fullName,
+        roomNumber: room.roomNumber,
+        bookingRef: booking.bookingRef,
+      );
+    }
+
     return {
       'checkIn': checkIn,
       'booking': updatedBooking,
       'guest': guest,
-      'room': roomRows.isNotEmpty ? _roomFromRow(roomRows.first) : null,
+      'room': room,
     };
   }
 
   Future<void> performCheckOut(String bookingId) async {
     final rows = await _db
         .from('bookings')
-        .select('room_id')
+        .select('room_id, booking_ref, guest_id')
         .eq('id', bookingId)
         .limit(1);
     if (rows.isEmpty) return;
     final roomId = rows.first['room_id'] as String;
+    final bookingRef = rows.first['booking_ref'] as String? ?? '';
+    final guestId = rows.first['guest_id'] as String? ?? '';
 
     await _db
         .from('bookings')
@@ -268,6 +284,36 @@ class BookingService {
         .from('rooms')
         .update({'status': 'available'})
         .eq('id', roomId);
+
+    // Fire check-out notification (non-blocking)
+    if (hotelId != null) {
+      _fireCheckOutNotification(
+          roomId: roomId, guestId: guestId, bookingRef: bookingRef);
+    }
+  }
+
+  Future<void> _fireCheckOutNotification({
+    required String roomId,
+    required String guestId,
+    required String bookingRef,
+  }) async {
+    try {
+      final results = await Future.wait([
+        _db.from('guests').select('full_name').eq('id', guestId).limit(1),
+        _db.from('rooms').select('room_number').eq('id', roomId).limit(1),
+      ]);
+      final guestName = (results[0] as List).isNotEmpty
+          ? (results[0] as List).first['full_name'] as String
+          : 'Guest';
+      final roomNumber = (results[1] as List).isNotEmpty
+          ? (results[1] as List).first['room_number'] as String
+          : '—';
+      await NotificationService(hotelId!).notifyCheckOut(
+        guestName: guestName,
+        roomNumber: roomNumber,
+        bookingRef: bookingRef,
+      );
+    } catch (_) {}
   }
 
   // ─── Enriched Data ────────────────────────────────────────────────────────
@@ -409,6 +455,48 @@ class BookingService {
   Future<void> addReservation(Booking booking) async {
     await _db.from('bookings').insert(_bookingToRow(booking));
     await _syncBookingEffects(booking);
+    _fireReservationNotification(booking); // non-blocking
+  }
+
+  Future<void> _fireReservationNotification(Booking booking) async {
+    if (hotelId == null) return;
+    try {
+      final results = await Future.wait([
+        _db.from('guests').select('full_name').eq('id', booking.guestId).limit(1),
+        _db.from('rooms').select('room_number').eq('id', booking.roomId).limit(1),
+        _db.from('rooms').select('id').eq('hotel_id', hotelId!).eq('status', 'available'),
+        _db.from('rooms').select('id').eq('hotel_id', hotelId!),
+      ]);
+      final guestName = (results[0] as List).isNotEmpty
+          ? (results[0] as List).first['full_name'] as String
+          : 'Guest';
+      final roomNumber = (results[1] as List).isNotEmpty
+          ? (results[1] as List).first['room_number'] as String
+          : '—';
+      final checkIn = booking.checkInDate.toIso8601String().substring(0, 10);
+      final checkOut = booking.checkOutDate.toIso8601String().substring(0, 10);
+
+      final ns = NotificationService(hotelId!);
+      await ns.notifyNewReservation(
+        guestName: guestName,
+        roomNumber: roomNumber,
+        bookingRef: booking.bookingRef,
+        checkIn: checkIn,
+        checkOut: checkOut,
+      );
+
+      // Low availability alert: warn when ≤ 20% rooms are available
+      final available = (results[2] as List).length;
+      final total = (results[3] as List).length;
+      if (total > 0 && available / total <= 0.20) {
+        await ns.notifyLowAvailability(
+          availableRooms: available,
+          totalRooms: total,
+        );
+      }
+    } catch (_) {
+      // Non-critical — never block main flow
+    }
   }
 
   Future<void> updateBooking(Booking booking) async {

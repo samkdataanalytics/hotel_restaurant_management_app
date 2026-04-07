@@ -1,8 +1,26 @@
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../app_theme.dart';
+import '../providers/hotel_session.dart' show hexToColor;
 import '../services/organization_service.dart';
+
+// ─── Preset brand colours ─────────────────────────────────────────────────────
+const _kPresetColors = [
+  '#D4A853', // Gold (default)
+  '#2563EB', // Royal Blue
+  '#059669', // Emerald Green
+  '#7C3AED', // Deep Purple
+  '#EF4444', // Red
+  '#0891B2', // Cyan
+  '#F97316', // Orange
+  '#EC4899', // Pink
+  '#64748B', // Slate
+  '#10B981', // Green
+  '#8B5CF6', // Violet
+  '#1D4ED8', // Navy Blue
+];
 
 // ─── Timezones (shared with property_setup_screen) ────────────────────────────
 
@@ -55,8 +73,10 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
 
   Uint8List? _newLogoBytes;
   String? _newLogoFileName;
-  bool _clearLogo = false; // user explicitly cleared the existing logo
+  bool _clearLogo = false;
   bool _saving = false;
+  late String _primaryColor;   // hex e.g. '#D4A853'
+  late final TextEditingController _hexCtrl;
 
   @override
   void initState() {
@@ -68,8 +88,10 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
     _countryCtrl = TextEditingController(text: p.country);
     _phoneCtrl   = TextEditingController(text: p.phone);
     _emailCtrl   = TextEditingController(text: p.email);
-    _timezone = _kTimezones.contains(p.timezone) ? p.timezone : 'UTC';
-    _currency = kCurrencies.any((c) => c.code == p.currency) ? p.currency : 'USD';
+    _timezone     = _kTimezones.contains(p.timezone) ? p.timezone : 'UTC';
+    _currency     = kCurrencies.any((c) => c.code == p.currency) ? p.currency : 'USD';
+    _primaryColor = p.primaryColor.isNotEmpty ? p.primaryColor : '#D4A853';
+    _hexCtrl      = TextEditingController(text: _primaryColor);
   }
 
   @override
@@ -80,6 +102,7 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
     _countryCtrl.dispose();
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
+    _hexCtrl.dispose();
     super.dispose();
   }
 
@@ -104,15 +127,16 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
     setState(() => _saving = true);
     try {
       await OrganizationService().updateProperty(
-        propertyId: widget.property.id,
-        name:       _nameCtrl.text.trim(),
-        address:    _addressCtrl.text.trim(),
-        city:       _cityCtrl.text.trim(),
-        country:    _countryCtrl.text.trim(),
-        phone:      _phoneCtrl.text.trim(),
-        email:      _emailCtrl.text.trim(),
-        timezone:   _timezone,
-        currency:   _currency,
+        propertyId:   widget.property.id,
+        name:         _nameCtrl.text.trim(),
+        address:      _addressCtrl.text.trim(),
+        city:         _cityCtrl.text.trim(),
+        country:      _countryCtrl.text.trim(),
+        phone:        _phoneCtrl.text.trim(),
+        email:        _emailCtrl.text.trim(),
+        timezone:     _timezone,
+        currency:     _currency,
+        primaryColor: _primaryColor,
       );
 
       if (_newLogoBytes != null && _newLogoFileName != null) {
@@ -312,6 +336,12 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
                       ),
                       const SizedBox(height: 14),
 
+                      // Brand colour
+                      _label('Brand Colour'),
+                      const SizedBox(height: 8),
+                      _buildColorPicker(),
+                      const SizedBox(height: 14),
+
                       // Logo
                       _label('Property Logo  (optional)'),
                       const SizedBox(height: 8),
@@ -362,6 +392,102 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildColorPicker() {
+    final currentColor = hexToColor(_primaryColor);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Preset swatches
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _kPresetColors.map((hex) {
+            final selected = hex.toLowerCase() == _primaryColor.toLowerCase();
+            final c = hexToColor(hex);
+            return GestureDetector(
+              onTap: () => setState(() {
+                _primaryColor = hex;
+                _hexCtrl.text = hex;
+              }),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: c,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected ? const Color(0xFF1E293B) : Colors.transparent,
+                    width: 2.5,
+                  ),
+                  boxShadow: selected
+                      ? [BoxShadow(color: c.withValues(alpha: 0.5), blurRadius: 6)]
+                      : null,
+                ),
+                child: selected
+                    ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+                    : null,
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 10),
+
+        // Custom hex input
+        Row(
+          children: [
+            // Live preview swatch
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: currentColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: _hexCtrl,
+                decoration: InputDecoration(
+                  hintText: '#D4A853',
+                  prefixText: '',
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.copy_rounded, size: 16),
+                    tooltip: 'Copy',
+                    onPressed: () =>
+                        Clipboard.setData(ClipboardData(text: _primaryColor)),
+                  ),
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[#0-9a-fA-F]')),
+                  LengthLimitingTextInputFormatter(7),
+                ],
+                onChanged: (v) {
+                  if (v.length == 7 && v.startsWith('#')) {
+                    setState(() => _primaryColor = v);
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 

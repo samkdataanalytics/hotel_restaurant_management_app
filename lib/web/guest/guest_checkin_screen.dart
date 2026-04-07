@@ -4,13 +4,16 @@ import '../../models/booking.dart';
 import '../../models/guest.dart';
 import '../../models/room.dart';
 import '../../services/booking_service.dart';
+import '../../services/guest_menu_service.dart';
+import '../../providers/hotel_session.dart' show hexToColor;
 
 // ─── Colour palette ────────────────────────────────────────────────────────────
 class _C {
   static const bg      = Color(0xFF0F172A);
   static const surface = Color(0xFF1E293B);
   static const card    = Color(0xFF263245);
-  static const gold    = Color(0xFFD4A853);
+  // accent is now dynamic — see _GuestCheckinScreenState._accent
+  static const gold    = Color(0xFFD4A853); // fallback only
   static const text    = Colors.white;
   static const subtext = Color(0xFF94A3B8);
   static const divider = Color(0xFF334155);
@@ -36,6 +39,9 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
   final _bookingService = BookingService();
   final _dateFmt = DateFormat('EEE, MMM d yyyy');
   final _refCtrl = TextEditingController();
+
+  // ── Brand colour (loaded from hotel_settings after booking lookup) ──────────
+  Color _accent = _C.gold;
 
   // ── State ──────────────────────────────────────────────────────────────────
   bool _loading = true;
@@ -109,6 +115,15 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
     final booking = data['booking'] as Booking;
     final guest   = data['guest']   as Guest;
     final room    = data['room']    as Room?;
+    final hotelId = data['hotelId'] as String? ?? '';
+
+    // Load brand colour (non-blocking — fall back to default gold if it fails)
+    if (hotelId.isNotEmpty) {
+      try {
+        final settings = await GuestMenuService().getSettings(hotelId);
+        if (mounted) setState(() => _accent = hexToColor(settings.primaryColorHex));
+      } catch (_) {}
+    }
 
     if (booking.isGuestFormSubmitted) {
       setState(() { _alreadySubmitted = true; _booking = booking; _guest = guest; _room = room; _loading = false; });
@@ -211,7 +226,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
     body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
       Image.asset('assets/images/hotrest_logo.png', width: 80, height: 80),
       const SizedBox(height: 24),
-      const CircularProgressIndicator(color: _C.gold),
+      CircularProgressIndicator(color: _accent),
       const SizedBox(height: 16),
       const Text('Looking up your booking…', style: TextStyle(color: _C.subtext, fontSize: 14)),
     ])),
@@ -250,7 +265,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
           child: ElevatedButton(
             onPressed: () => _lookupBooking(_refCtrl.text),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _C.gold, foregroundColor: _C.bg,
+              backgroundColor: _accent, foregroundColor: _C.bg,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             ),
             child: const Text('Find My Booking', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
@@ -312,18 +327,18 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
           decoration: BoxDecoration(
             color: _C.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _C.gold.withOpacity(0.3)),
+            border: Border.all(color: _accent.withOpacity(0.3)),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _C.gold.withOpacity(0.15), borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _C.gold.withOpacity(0.3)),
+                  color: _accent.withOpacity(0.15), borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _accent.withOpacity(0.3)),
                 ),
                 child: Text(b.bookingRef,
-                    style: const TextStyle(color: _C.gold, fontWeight: FontWeight.w700, fontSize: 13)),
+                    style: TextStyle(color: _accent, fontWeight: FontWeight.w700, fontSize: 13)),
               ),
             ]),
             const SizedBox(height: 16),
@@ -417,11 +432,11 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: _C.gold.withOpacity(0.15), borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _C.gold.withOpacity(0.3)),
+            color: _accent.withOpacity(0.15), borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _accent.withOpacity(0.3)),
           ),
           child: Text(_booking!.bookingRef,
-              style: const TextStyle(color: _C.gold, fontSize: 12, fontWeight: FontWeight.w600)),
+              style: TextStyle(color: _accent, fontSize: 12, fontWeight: FontWeight.w600)),
         ),
       ]),
     )),
@@ -442,9 +457,9 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
               Container(
                 width: 28, height: 28,
                 decoration: BoxDecoration(
-                  color: done ? _C.success : current ? _C.gold : _C.card,
+                  color: done ? _C.success : current ? _accent : _C.card,
                   shape: BoxShape.circle,
-                  border: Border.all(color: done ? _C.success : current ? _C.gold : _C.divider),
+                  border: Border.all(color: done ? _C.success : current ? _accent : _C.divider),
                 ),
                 child: Center(child: done
                     ? const Icon(Icons.check_rounded, color: Colors.white, size: 14)
@@ -454,7 +469,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
               ),
               const SizedBox(height: 4),
               Text(labels[i], style: TextStyle(
-                  color: current ? _C.gold : done ? _C.success : _C.subtext,
+                  color: current ? _accent : done ? _C.success : _C.subtext,
                   fontSize: 10, fontWeight: current ? FontWeight.w700 : FontWeight.w400)),
             ])),
             if (i < steps.length - 1)
@@ -494,18 +509,18 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [_C.gold.withOpacity(0.2), _C.gold.withOpacity(0.05)],
+              colors: [_accent.withOpacity(0.2), _accent.withOpacity(0.05)],
               begin: Alignment.topLeft, end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: _C.gold.withOpacity(0.3)),
+            border: Border.all(color: _accent.withOpacity(0.3)),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: _C.gold.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.meeting_room_outlined, color: _C.gold, size: 22),
+                decoration: BoxDecoration(color: _accent.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+                child: Icon(Icons.meeting_room_outlined, color: _accent, size: 22),
               ),
               const SizedBox(width: 14),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -561,15 +576,15 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
       Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: _C.gold.withOpacity(0.08), borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _C.gold.withOpacity(0.2)),
+          color: _accent.withOpacity(0.08), borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _accent.withOpacity(0.2)),
         ),
-        child: const Row(children: [
-          Icon(Icons.info_outline_rounded, color: _C.gold, size: 16),
+        child: Row(children: [
+          Icon(Icons.info_outline_rounded, color: _accent, size: 16),
           SizedBox(width: 10),
           Expanded(child: Text(
             'Please complete your online check-in at least 2 hours before arrival to ensure a smooth welcome.',
-            style: TextStyle(color: _C.gold, fontSize: 12),
+            style: TextStyle(color: _accent, fontSize: 12),
           )),
         ]),
       ),
@@ -647,7 +662,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
       lastDate: DateTime.now(),
       builder: (ctx, child) => Theme(
         data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(primary: _C.gold, onPrimary: _C.bg),
+          colorScheme: ColorScheme.dark(primary: _accent, onPrimary: _C.bg),
         ),
         child: child!,
       ),
@@ -768,15 +783,15 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _C.surface, borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _agreedToTerms ? _C.gold.withOpacity(0.4) : _C.divider),
+        border: Border.all(color: _agreedToTerms ? _accent.withOpacity(0.4) : _C.divider),
       ),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Checkbox(
           value: _agreedToTerms,
           onChanged: (v) => setState(() => _agreedToTerms = v ?? false),
-          activeColor: _C.gold,
+          activeColor: _accent,
           checkColor: _C.bg,
-          side: BorderSide(color: _agreedToTerms ? _C.gold : _C.subtext),
+          side: BorderSide(color: _agreedToTerms ? _accent : _C.subtext),
         ),
         const SizedBox(width: 8),
         const Expanded(child: Padding(
@@ -838,9 +853,9 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
               ? (_agreedToTerms && !_submitting ? _submit : null)
               : (canNext ? _next : null),
           style: ElevatedButton.styleFrom(
-            backgroundColor: _C.gold,
+            backgroundColor: _accent,
             foregroundColor: _C.bg,
-            disabledBackgroundColor: _C.gold.withOpacity(0.3),
+            disabledBackgroundColor: _accent.withOpacity(0.3),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             minimumSize: const Size(0, 48),
           ),
@@ -858,7 +873,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
 
   // ── Shared helpers ─────────────────────────────────────────────────────────
   Widget _sectionTitle(String title, IconData icon) => Row(children: [
-    Icon(icon, color: _C.gold, size: 20),
+    Icon(icon, color: _accent, size: 20),
     const SizedBox(width: 8),
     Text(title, style: const TextStyle(color: _C.text, fontSize: 18, fontWeight: FontWeight.w700)),
   ]);

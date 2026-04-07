@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
@@ -16,6 +17,14 @@ StaffRole _parseRole(String? raw) {
   }
 }
 
+// ─── Brand color helper ───────────────────────────────────────────────────────
+Color hexToColor(String hex) {
+  final h = hex.replaceFirst('#', '');
+  if (h.length == 6) return Color(int.parse('FF$h', radix: 16));
+  if (h.length == 8) return Color(int.parse(h,     radix: 16));
+  return const Color(0xFFD4A853); // fallback gold
+}
+
 // ─── Immutable settings snapshot ──────────────────────────────────────────────
 class HotelSettings {
   final String hotelId;
@@ -27,6 +36,8 @@ class HotelSettings {
   final double taxRate;
   final double serviceChargeRate;
   final String logoUrl;
+  /// Hex string e.g. '#D4A853'. Use [primaryColor] for a Flutter Color.
+  final String primaryColorHex;
 
   const HotelSettings({
     required this.hotelId,
@@ -38,7 +49,10 @@ class HotelSettings {
     required this.taxRate,
     required this.serviceChargeRate,
     required this.logoUrl,
+    this.primaryColorHex = '#D4A853',
   });
+
+  Color get primaryColor => hexToColor(primaryColorHex);
 
   factory HotelSettings.fromRow(Map<String, dynamic> r) => HotelSettings(
         hotelId:           r['hotel_id']             as String,
@@ -50,6 +64,7 @@ class HotelSettings {
         taxRate:           (r['tax_rate']            as num?)?.toDouble() ?? 0.0,
         serviceChargeRate: (r['service_charge_rate'] as num?)?.toDouble() ?? 0.00,
         logoUrl:           r['logo_url']             as String? ?? '',
+        primaryColorHex:   r['primary_color']        as String? ?? '#D4A853',
       );
 }
 
