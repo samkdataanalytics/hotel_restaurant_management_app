@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../services/plan_service.dart';
+import '../services/lead_service.dart';
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 class _C {
@@ -854,7 +856,16 @@ class _PricingCard extends StatelessWidget {
                         style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                   )
                 : OutlinedButton(
-                    onPressed: () => context.go(isEnterprise ? '/login' : '/signup'),
+                    onPressed: () {
+                      if (isEnterprise) {
+                        showDialog(
+                          context: context,
+                          builder: (_) => const _EnterpriseContactDialog(),
+                        );
+                      } else {
+                        context.go('/signup');
+                      }
+                    },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _C.text,
                       side: const BorderSide(color: _C.border),
@@ -1099,4 +1110,244 @@ class _GoldButton extends StatelessWidget {
           )),
     );
   }
+}
+
+// ─── Enterprise Contact Dialog ────────────────────────────────────────────────
+
+class _EnterpriseContactDialog extends StatefulWidget {
+  const _EnterpriseContactDialog();
+
+  @override
+  State<_EnterpriseContactDialog> createState() => _EnterpriseContactDialogState();
+}
+
+class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
+  final _formKey   = GlobalKey<FormState>();
+  final _name      = TextEditingController();
+  final _company   = TextEditingController();
+  final _email     = TextEditingController();
+  final _phone     = TextEditingController();
+  final _message   = TextEditingController();
+  final _propCount = TextEditingController();
+  final _service   = LeadService();
+  bool _submitting = false;
+  bool _submitted  = false;
+
+  @override
+  void dispose() {
+    _name.dispose(); _company.dispose(); _email.dispose();
+    _phone.dispose(); _message.dispose(); _propCount.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _submitting = true);
+    try {
+      await _service.submitLead(
+        name:          _name.text.trim(),
+        company:       _company.text.trim(),
+        email:         _email.text.trim(),
+        phone:         _phone.text.trim(),
+        propertyCount: int.tryParse(_propCount.text.trim()),
+        message:       _message.text.trim(),
+      );
+      if (mounted) setState(() { _submitting = false; _submitted = true; });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: _submitted ? _buildSuccess() : _buildForm(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSuccess() => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 64, height: 64,
+        decoration: BoxDecoration(
+          color: const Color(0xFF22C55E).withAlpha(20),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.check_rounded, color: Color(0xFF22C55E), size: 36),
+      ),
+      const SizedBox(height: 20),
+      const Text('Request Received!',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _C.text)),
+      const SizedBox(height: 10),
+      const Text(
+        'Thank you for reaching out. Our team will contact you within 1–2 business days to discuss your requirements.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.5),
+      ),
+      const SizedBox(height: 28),
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: () => Navigator.of(context).pop(),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _C.gold,
+            foregroundColor: _C.bg,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 0,
+          ),
+          child: const Text('Close', style: TextStyle(fontWeight: FontWeight.w700)),
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildForm() => Form(
+    key: _formKey,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Row(children: [
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: _C.gold.withAlpha(20),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.business_rounded, color: _C.gold, size: 22),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Enterprise Enquiry',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _C.text)),
+              Text('We\'ll get back to you within 1–2 business days.',
+                  style: TextStyle(fontSize: 12, color: _C.subtext)),
+            ]),
+          ),
+          IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close_rounded, color: _C.subtext),
+            splashRadius: 20,
+          ),
+        ]),
+        const SizedBox(height: 24),
+        const Divider(color: _C.border),
+        const SizedBox(height: 20),
+
+        // Row: Name + Company
+        Row(children: [
+          Expanded(child: _field(_name,  'Full Name *', validator: _required)),
+          const SizedBox(width: 12),
+          Expanded(child: _field(_company, 'Company Name *', validator: _required)),
+        ]),
+        const SizedBox(height: 12),
+
+        // Row: Email + Phone
+        Row(children: [
+          Expanded(child: _field(_email, 'Work Email *',
+              keyboardType: TextInputType.emailAddress,
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return 'Required';
+                if (!v.contains('@')) return 'Invalid email';
+                return null;
+              })),
+          const SizedBox(width: 12),
+          Expanded(child: _field(_phone, 'Phone (optional)',
+              keyboardType: TextInputType.phone)),
+        ]),
+        const SizedBox(height: 12),
+
+        // Properties
+        _field(_propCount, 'Estimated number of properties',
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+        const SizedBox(height: 12),
+
+        // Message
+        _field(_message, 'Tell us about your requirements (optional)',
+            maxLines: 4),
+        const SizedBox(height: 24),
+
+        // Submit
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _submitting ? null : _submit,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _C.gold,
+              foregroundColor: _C.bg,
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 0,
+            ),
+            child: _submitting
+                ? const SizedBox(width: 20, height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: _C.bg))
+                : const Text('Send Enquiry',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  String? _required(String? v) =>
+      (v == null || v.trim().isEmpty) ? 'Required' : null;
+
+  Widget _field(
+    TextEditingController ctrl,
+    String hint, {
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    int maxLines = 1,
+    String? Function(String?)? validator,
+  }) =>
+      TextFormField(
+        controller: ctrl,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        maxLines: maxLines,
+        validator: validator,
+        style: const TextStyle(fontSize: 13, color: _C.text),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: const TextStyle(color: _C.muted, fontSize: 13),
+          filled: true,
+          fillColor: _C.surface,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _C.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _C.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: _C.gold, width: 1.5),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: const BorderSide(color: Colors.red),
+          ),
+        ),
+      );
 }

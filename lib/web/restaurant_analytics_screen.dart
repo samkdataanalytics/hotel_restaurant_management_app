@@ -13,6 +13,38 @@ const _kBlue = AppTheme.statusBlue;
 const _kGreen = AppTheme.statusGreen;
 const _kPurple = AppTheme.statusPurple;
 
+// ─── Time scale ───────────────────────────────────────────────────────────────
+
+enum _TimeScale { today, sevenDays, thirtyDays, ninetyDays, custom }
+
+extension _TimeScaleX on _TimeScale {
+  String get label => switch (this) {
+    _TimeScale.today       => 'Today',
+    _TimeScale.sevenDays   => '7 Days',
+    _TimeScale.thirtyDays  => '30 Days',
+    _TimeScale.ninetyDays  => '90 Days',
+    _TimeScale.custom      => 'Custom',
+  };
+
+  String barTitle(DateTime start, DateTime end) => switch (this) {
+    _TimeScale.today      => 'Revenue — Today (hourly)',
+    _TimeScale.sevenDays  => 'Revenue — Last 7 Days',
+    _TimeScale.thirtyDays => 'Revenue — Last 30 Days',
+    _TimeScale.ninetyDays => 'Revenue — Last 90 Days (weekly)',
+    _TimeScale.custom     =>
+      'Revenue — ${DateFormat('MMM d').format(start)} – ${DateFormat('MMM d, y').format(end)}',
+  };
+
+  /// Start of the period relative to [now]. Not used for [custom].
+  DateTime start(DateTime now) => switch (this) {
+    _TimeScale.today       => DateTime(now.year, now.month, now.day),
+    _TimeScale.sevenDays   => now.subtract(const Duration(days: 6)),
+    _TimeScale.thirtyDays  => now.subtract(const Duration(days: 29)),
+    _TimeScale.ninetyDays  => now.subtract(const Duration(days: 89)),
+    _TimeScale.custom      => now, // overridden by _customStart
+  };
+}
+
 class RestaurantAnalyticsScreen extends StatefulWidget {
   const RestaurantAnalyticsScreen({super.key});
 
@@ -30,35 +62,36 @@ class _RestaurantAnalyticsScreenState
   String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   bool _isLoading = true;
+  _TimeScale _selectedScale = _TimeScale.sevenDays;
+  DateTime? _customStart;
+  DateTime? _customEnd;
 
-  // KPIs
-  double _todayRevenue = 0;
-  double _weekRevenue = 0;
-  double _monthRevenue = 0;
+  // KPIs (period-scoped)
+  double _periodRevenue = 0;
   double _aov = 0;
   double _cancellationRate = 0;
   int _totalOrders = 0;
-  int _todayCovers = 0; // number of dine-in orders today (proxy for covers)
-  double _totalRefundedAmount = 0; // gross refund value across all orders
+  int _periodCovers = 0;
+  double _totalRefundedAmount = 0;
   int _refundedOrdersCount = 0;
 
-  // Revenue bar chart
-  List<double> _last7Rev = List.filled(7, 0);
-  List<String> _last7Labels = [];
+  // Revenue bar chart (adapts to scale)
+  List<double> _barData = [];
+  List<String> _barLabels = [];
 
-  // Order type mix
+  // Order type mix (period-scoped)
   int _dineInCount = 0;
   int _takeawayCount = 0;
 
-  // Peak hours
+  // Peak hours (period-scoped)
   List<int> _peakHours = List.filled(24, 0);
 
-  // Top items
+  // Top items (period-scoped)
   List<MapEntry<String, double>> _topItems = [];
   Map<String, String> _itemNames = {};
   Map<String, int> _itemCounts = {};
 
-  // Food cost
+  // Food cost (static — not period-dependent)
   List<Map<String, dynamic>> _foodCostData = [];
 
   @override
@@ -70,120 +103,175 @@ class _RestaurantAnalyticsScreenState
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-    final allOrders = await _service.getOrders();
-    final valid = allOrders
-        .where((o) => o.status != OrderStatus.cancelled)
-        .toList();
+      final allOrders = await _service.getOrders();
+      final now = DateTime.now();
 
-    final now = DateTime.now();
-
-    bool sameDay(DateTime a, DateTime b) =>
-        a.year == b.year && a.month == b.month && a.day == b.day;
-
-    final todayOrders =
-        valid.where((o) => sameDay(o.createdAt, now)).toList();
-    final weekOrders =
-        valid.where((o) => now.difference(o.createdAt).inDays < 7).toList();
-    final monthOrders = valid
-        .where((o) =>
-            o.createdAt.month == now.month &&
-            o.createdAt.year == now.year)
-        .toList();
-
-    _todayRevenue = todayOrders.fold(0.0, (s, o) => s + o.totalAmount);
-    _weekRevenue = weekOrders.fold(0.0, (s, o) => s + o.totalAmount);
-    _monthRevenue = monthOrders.fold(0.0, (s, o) => s + o.totalAmount);
-    _totalOrders = valid.length;
-    _aov = valid.isNotEmpty
-        ? valid.fold(0.0, (s, o) => s + o.totalAmount) / valid.length
-        : 0;
-    _cancellationRate = allOrders.isNotEmpty
-        ? allOrders
-                .where((o) => o.status == OrderStatus.cancelled)
-                .length /
-            allOrders.length *
-            100
-        : 0;
-    _todayCovers = todayOrders
-        .where((o) => o.type == OrderType.dineIn)
-        .length;
-
-    // Last 7 days bar chart
-    _last7Rev = List.generate(7, (i) {
-      final day = now.subtract(Duration(days: 6 - i));
-      return valid
-          .where((o) => sameDay(o.createdAt, day))
-          .fold(0.0, (s, o) => s + o.totalAmount);
-    });
-    _last7Labels = List.generate(7, (i) {
-      final day = now.subtract(Duration(days: 6 - i));
-      return DateFormat('EEE').format(day);
-    });
-
-    // Order type mix
-    _dineInCount = valid.where((o) => o.type == OrderType.dineIn).length;
-    _takeawayCount = valid.where((o) => o.type == OrderType.takeaway).length;
-
-    // Peak hours (0-23)
-    _peakHours = List.filled(24, 0);
-    for (final o in valid) {
-      _peakHours[o.createdAt.hour]++;
-    }
-
-    // Refund totals (across all non-cancelled orders)
-    _totalRefundedAmount = 0;
-    _refundedOrdersCount = 0;
-    for (final o in valid) {
-      final refundedInOrder = o.items.fold(
-          0.0, (s, i) => s + i.menuItem.price * o.discountFactor * i.refundedQuantity);
-      if (refundedInOrder > 0) {
-        _totalRefundedAmount += refundedInOrder;
-        _refundedOrdersCount++;
+      // Resolve period boundaries
+      final DateTime periodStart;
+      final DateTime periodEnd;
+      if (_selectedScale == _TimeScale.custom &&
+          _customStart != null && _customEnd != null) {
+        periodStart = DateTime(_customStart!.year, _customStart!.month, _customStart!.day);
+        periodEnd   = DateTime(_customEnd!.year, _customEnd!.month, _customEnd!.day, 23, 59, 59);
+      } else {
+        periodStart = _selectedScale.start(now);
+        periodEnd   = now;
       }
-    }
 
-    // Top selling items by net revenue (after refunds, using activeQuantity)
-    final itemRev = <String, double>{};
-    final itemCnt = <String, int>{};
-    final itemNames = <String, String>{};
-    for (final o in valid) {
-      for (final item in o.items) {
-        final qty = item.activeQuantity;
-        if (qty <= 0) continue; // fully refunded — exclude entirely
-        itemRev[item.menuItem.id] =
-            (itemRev[item.menuItem.id] ?? 0) + item.subtotal;
-        itemCnt[item.menuItem.id] =
-            (itemCnt[item.menuItem.id] ?? 0) + qty;
-        itemNames[item.menuItem.id] = item.menuItem.name;
+      bool sameDay(DateTime a, DateTime b) =>
+          a.year == b.year && a.month == b.month && a.day == b.day;
+
+      // All non-cancelled orders in the selected period
+      final valid = allOrders
+          .where((o) =>
+              o.status != OrderStatus.cancelled &&
+              !o.createdAt.isBefore(periodStart) &&
+              !o.createdAt.isAfter(periodEnd))
+          .toList();
+
+      // KPIs
+      _periodRevenue = valid.fold(0.0, (s, o) => s + o.totalAmount);
+      _totalOrders   = valid.length;
+      _aov           = valid.isNotEmpty ? _periodRevenue / valid.length : 0;
+      _cancellationRate = allOrders.isNotEmpty
+          ? allOrders.where((o) => o.status == OrderStatus.cancelled).length /
+                allOrders.length * 100
+          : 0;
+      _periodCovers = valid.where((o) => o.type == OrderType.dineIn).length;
+
+      // Refunds
+      _totalRefundedAmount = 0;
+      _refundedOrdersCount = 0;
+      for (final o in valid) {
+        final refundedInOrder = o.items.fold(
+            0.0, (s, i) => s + i.menuItem.price * o.discountFactor * i.refundedQuantity);
+        if (refundedInOrder > 0) {
+          _totalRefundedAmount += refundedInOrder;
+          _refundedOrdersCount++;
+        }
       }
-    }
-    _topItems = (itemRev.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value)))
-        .take(5)
-        .toList();
-    _itemNames = itemNames;
-    _itemCounts = itemCnt;
 
-    // Food cost % per menu item
-    final menuItems = await _service.getMenuItems();
-    final foodCostList = <Map<String, dynamic>>[];
-    for (final item in menuItems) {
-      if (item.ingredients.isEmpty) continue;
-      final cost = await _service.getCurrentCostForItem(item.id);
-      if (cost != null && item.price > 0) {
-        foodCostList.add({
-          'name': item.name,
-          'cost': cost,
-          'price': item.price,
-          'costPct': (cost / item.price * 100).clamp(0.0, 100.0),
-        });
+      // Bar chart — granularity depends on scale
+      final spanDays = periodEnd.difference(periodStart).inDays + 1;
+      switch (_selectedScale) {
+        case _TimeScale.today:
+          // Hourly buckets: 0–23
+          _barData = List.generate(24, (h) =>
+              valid.where((o) => o.createdAt.hour == h).fold(0.0, (s, o) => s + o.totalAmount));
+          _barLabels = List.generate(24, (h) => '${h}h');
+
+        case _TimeScale.sevenDays:
+          _barData = List.generate(7, (i) {
+            final day = now.subtract(Duration(days: 6 - i));
+            return valid.where((o) => sameDay(o.createdAt, day)).fold(0.0, (s, o) => s + o.totalAmount);
+          });
+          _barLabels = List.generate(7, (i) =>
+              DateFormat('EEE').format(now.subtract(Duration(days: 6 - i))));
+
+        case _TimeScale.thirtyDays:
+          _barData = List.generate(30, (i) {
+            final day = now.subtract(Duration(days: 29 - i));
+            return valid.where((o) => sameDay(o.createdAt, day)).fold(0.0, (s, o) => s + o.totalAmount);
+          });
+          _barLabels = List.generate(30, (i) {
+            final day = now.subtract(Duration(days: 29 - i));
+            return i % 5 == 0 ? DateFormat('MMM d').format(day) : '';
+          });
+
+        case _TimeScale.ninetyDays:
+          // Group into 13 weekly buckets
+          _barData = List.generate(13, (i) {
+            final weekStart = now.subtract(Duration(days: (12 - i) * 7 + 6));
+            final weekEnd   = now.subtract(Duration(days: (12 - i) * 7));
+            return valid.where((o) =>
+                !o.createdAt.isBefore(weekStart) && !o.createdAt.isAfter(weekEnd))
+              .fold(0.0, (s, o) => s + o.totalAmount);
+          });
+          _barLabels = List.generate(13, (i) {
+            final weekEnd = now.subtract(Duration(days: (12 - i) * 7));
+            return DateFormat('MMM d').format(weekEnd);
+          });
+
+        case _TimeScale.custom:
+          if (spanDays <= 1) {
+            // Single day → hourly
+            _barData = List.generate(24, (h) =>
+                valid.where((o) => o.createdAt.hour == h).fold(0.0, (s, o) => s + o.totalAmount));
+            _barLabels = List.generate(24, (h) => '${h}h');
+          } else if (spanDays <= 31) {
+            // Daily
+            _barData = List.generate(spanDays, (i) {
+              final day = periodStart.add(Duration(days: i));
+              return valid.where((o) => sameDay(o.createdAt, day)).fold(0.0, (s, o) => s + o.totalAmount);
+            });
+            final labelEvery = spanDays > 14 ? 5 : 1;
+            _barLabels = List.generate(spanDays, (i) {
+              final day = periodStart.add(Duration(days: i));
+              return i % labelEvery == 0 ? DateFormat('MMM d').format(day) : '';
+            });
+          } else {
+            // Weekly
+            final weeks = (spanDays / 7).ceil();
+            _barData = List.generate(weeks, (i) {
+              final wStart = periodStart.add(Duration(days: i * 7));
+              final wEnd   = wStart.add(const Duration(days: 6));
+              return valid.where((o) =>
+                  !o.createdAt.isBefore(wStart) && !o.createdAt.isAfter(wEnd))
+                .fold(0.0, (s, o) => s + o.totalAmount);
+            });
+            _barLabels = List.generate(weeks, (i) {
+              final wStart = periodStart.add(Duration(days: i * 7));
+              return DateFormat('MMM d').format(wStart);
+            });
+          }
       }
-    }
-    foodCostList.sort(
-        (a, b) => (b['costPct'] as double).compareTo(a['costPct'] as double));
-    _foodCostData = foodCostList;
 
-    if (mounted) setState(() => _isLoading = false);
+      // Order type mix
+      _dineInCount   = valid.where((o) => o.type == OrderType.dineIn).length;
+      _takeawayCount = valid.where((o) => o.type == OrderType.takeaway).length;
+
+      // Peak hours
+      _peakHours = List.filled(24, 0);
+      for (final o in valid) { _peakHours[o.createdAt.hour]++; }
+
+      // Top selling items
+      final itemRev   = <String, double>{};
+      final itemCnt   = <String, int>{};
+      final itemNames = <String, String>{};
+      for (final o in valid) {
+        for (final item in o.items) {
+          final qty = item.activeQuantity;
+          if (qty <= 0) continue;
+          itemRev[item.menuItem.id]   = (itemRev[item.menuItem.id] ?? 0) + item.subtotal;
+          itemCnt[item.menuItem.id]   = (itemCnt[item.menuItem.id] ?? 0) + qty;
+          itemNames[item.menuItem.id] = item.menuItem.name;
+        }
+      }
+      _topItems   = (itemRev.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(5).toList();
+      _itemNames  = itemNames;
+      _itemCounts = itemCnt;
+
+      // Food cost — not period-dependent, load once
+      if (_foodCostData.isEmpty) {
+        final menuItems = await _service.getMenuItems();
+        final foodCostList = <Map<String, dynamic>>[];
+        for (final item in menuItems) {
+          if (item.ingredients.isEmpty) continue;
+          final cost = await _service.getCurrentCostForItem(item.id);
+          if (cost != null && item.price > 0) {
+            foodCostList.add({
+              'name': item.name,
+              'cost': cost,
+              'price': item.price,
+              'costPct': (cost / item.price * 100).clamp(0.0, 100.0),
+            });
+          }
+        }
+        foodCostList.sort((a, b) => (b['costPct'] as double).compareTo(a['costPct'] as double));
+        _foodCostData = foodCostList;
+      }
+
+      if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
@@ -243,7 +331,66 @@ class _RestaurantAnalyticsScreenState
           Text('Restaurant Analytics',
               style: Theme.of(context).textTheme.displayMedium),
           const Spacer(),
-          Text('$_totalOrders total orders',
+          // ─── Time scale selector ───────────────────────
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: const EdgeInsets.all(3),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: _TimeScale.values.map((scale) {
+                final selected = _selectedScale == scale;
+                return GestureDetector(
+                  onTap: () async {
+                    if (scale == _TimeScale.custom) {
+                      await _pickDateRange();
+                      return;
+                    }
+                    if (_selectedScale == scale) return;
+                    setState(() { _selectedScale = scale; _foodCostData = []; });
+                    _loadData();
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: selected ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: selected
+                          ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 1))]
+                          : null,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (scale == _TimeScale.custom)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 5),
+                            child: Icon(Icons.calendar_month_rounded, size: 13,
+                                color: selected ? _kOrange : Colors.black45),
+                          ),
+                        Text(
+                          // Show chosen range when custom is active
+                          selected && scale == _TimeScale.custom && _customStart != null
+                              ? '${DateFormat('MMM d').format(_customStart!)} – ${DateFormat('MMM d').format(_customEnd!)}'
+                              : scale.label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                            color: selected ? _kOrange : Colors.black45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Text('$_totalOrders orders',
               style: const TextStyle(
                   color: Colors.black38,
                   fontSize: 13,
@@ -262,37 +409,69 @@ class _RestaurantAnalyticsScreenState
     );
   }
 
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 2),
+      lastDate: now,
+      initialDateRange: (_customStart != null && _customEnd != null)
+          ? DateTimeRange(start: _customStart!, end: _customEnd!)
+          : DateTimeRange(
+              start: now.subtract(const Duration(days: 6)),
+              end: now,
+            ),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(
+            primary: _kOrange,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() {
+      _selectedScale = _TimeScale.custom;
+      _customStart   = picked.start;
+      _customEnd     = picked.end;
+      _foodCostData  = [];
+    });
+    _loadData();
+  }
+
   // ─── KPI Row ─────────────────────────────────────────
 
   Widget _buildKpiRow() {
+    final periodLabel = (_selectedScale == _TimeScale.custom &&
+            _customStart != null && _customEnd != null)
+        ? '${DateFormat('MMM d').format(_customStart!)} – ${DateFormat('MMM d').format(_customEnd!)}'
+        : _selectedScale.label;
     return Wrap(
       spacing: 14,
       runSpacing: 14,
       children: [
         SizedBox(
           width: 180,
-          child: _kpiCard("Today's Revenue", _currency.format(_todayRevenue),
-              Icons.today_rounded, _kGreen),
+          child: _kpiCard('Revenue ($periodLabel)', _currency.format(_periodRevenue),
+              Icons.payments_rounded, _kGreen),
         ),
         SizedBox(
           width: 180,
-          child: _kpiCard("This Week", _currency.format(_weekRevenue),
-              Icons.date_range_rounded, _kBlue),
+          child: _kpiCard('Orders ($periodLabel)', '$_totalOrders',
+              Icons.receipt_long_rounded, _kBlue),
         ),
         SizedBox(
           width: 180,
-          child: _kpiCard("This Month", _currency.format(_monthRevenue),
-              Icons.calendar_month_rounded, _kOrange),
-        ),
-        SizedBox(
-          width: 180,
-          child: _kpiCard("Avg Order Value", _currency.format(_aov),
+          child: _kpiCard('Avg Order Value', _currency.format(_aov),
               Icons.show_chart_rounded, _kPurple),
         ),
         SizedBox(
           width: 180,
           child: _kpiCard(
-              "Cancel Rate",
+              'Cancel Rate',
               '${_cancellationRate.toStringAsFixed(1)}%',
               Icons.cancel_outlined,
               _cancellationRate > 10 ? Colors.red : _kGreen,
@@ -300,13 +479,13 @@ class _RestaurantAnalyticsScreenState
         ),
         SizedBox(
           width: 180,
-          child: _kpiCard("Today's Covers", '$_todayCovers dine-ins',
+          child: _kpiCard('Dine-in Covers', '$_periodCovers',
               Icons.people_rounded, Colors.teal),
         ),
         SizedBox(
           width: 180,
           child: _kpiCard(
-              "Total Refunds",
+              'Refunds ($periodLabel)',
               _currency.format(_totalRefundedAmount),
               Icons.undo_rounded,
               Colors.deepOrange,
@@ -374,12 +553,17 @@ class _RestaurantAnalyticsScreenState
   }
 
   Widget _revenueBarChart() {
-    final maxY = _last7Rev.fold(0.0, (a, b) => a > b ? a : b);
+    final maxY = _barData.fold(0.0, (a, b) => a > b ? a : b);
     final chartMax = maxY > 0 ? maxY * 1.3 : 100.0;
     final allZero = maxY == 0;
+    final count = _barData.length;
+    // Bar width shrinks for larger datasets
+    final barW = count <= 7 ? 22.0 : count <= 30 ? 10.0 : 14.0;
 
     return _card(
-      title: 'Revenue — Last 7 Days',
+      title: _selectedScale.barTitle(
+          _customStart ?? _selectedScale.start(DateTime.now()),
+          _customEnd   ?? DateTime.now()),
       icon: Icons.bar_chart_rounded,
       height: 240,
       child: allZero
@@ -389,18 +573,18 @@ class _RestaurantAnalyticsScreenState
                 alignment: BarChartAlignment.spaceAround,
                 maxY: chartMax,
                 barGroups: List.generate(
-                  7,
+                  count,
                   (i) => BarChartGroupData(
                     x: i,
                     barRods: [
                       BarChartRodData(
-                        toY: _last7Rev[i],
-                        color: i == 6
+                        toY: _barData[i],
+                        color: i == count - 1
                             ? _kOrange
                             : _kOrange.withOpacity(0.4),
-                        width: 22,
+                        width: barW,
                         borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(6)),
+                            top: Radius.circular(4)),
                       ),
                     ],
                   ),
@@ -411,9 +595,8 @@ class _RestaurantAnalyticsScreenState
                       showTitles: true,
                       reservedSize: 48,
                       getTitlesWidget: (value, meta) => Text(
-                        '${_sym}${value.toInt()}',
-                        style: const TextStyle(
-                            fontSize: 9, color: Colors.black38),
+                        '$_sym${value.toInt()}',
+                        style: const TextStyle(fontSize: 9, color: Colors.black38),
                       ),
                     ),
                   ),
@@ -422,31 +605,25 @@ class _RestaurantAnalyticsScreenState
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
-                        if (idx < 0 || idx >= _last7Labels.length) {
-                          return const SizedBox();
-                        }
+                        if (idx < 0 || idx >= _barLabels.length) return const SizedBox();
+                        final label = _barLabels[idx];
+                        if (label.isEmpty) return const SizedBox();
                         return SideTitleWidget(
                           meta: meta,
                           child: Text(
-                            _last7Labels[idx],
+                            label,
                             style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: idx == 6
-                                  ? FontWeight.w800
-                                  : FontWeight.w500,
-                              color: idx == 6
-                                  ? _kOrange
-                                  : Colors.black54,
+                              fontSize: 9,
+                              fontWeight: idx == count - 1 ? FontWeight.w800 : FontWeight.w400,
+                              color: idx == count - 1 ? _kOrange : Colors.black45,
                             ),
                           ),
                         );
                       },
                     ),
                   ),
-                  rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 ),
                 gridData: FlGridData(
                   show: true,

@@ -173,7 +173,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
       await ref.read(authProvider.notifier).refreshAfterOnboarding();
 
       if (!mounted) return;
-      context.go('/app');
+      context.go('/app/dashboard');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -6,6 +6,7 @@ import '../../providers/app_auth_provider.dart';
 import 'superadmin_dashboard.dart';
 import 'companies_list_screen.dart';
 import 'superadmin_plans_screen.dart';
+import 'superadmin_leads_screen.dart';
 
 // ─── Nav item model ───────────────────────────────────────────────────────────
 
@@ -33,12 +34,14 @@ class _SuperadminShellState extends ConsumerState<SuperadminShell> {
     SuperadminDashboard(),
     CompaniesListScreen(),
     SuperadminPlansScreen(),
+    SuperadminLeadsScreen(),
   ];
 
   static const _navItems = <_NavItem>[
     _NavItem(Icons.dashboard_rounded, 'Dashboard', 0),
     _NavItem(Icons.business_rounded, 'Companies', 1),
     _NavItem(Icons.layers_rounded, 'Plans', 2),
+    _NavItem(Icons.mark_email_unread_rounded, 'Leads', 3),
   ];
 
   void _select(int index) => setState(() => _selectedIndex = index);

@@ -128,7 +128,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen>
       await ref.read(authProvider.notifier).reload();
 
       if (!mounted) return;
-      context.go(AppRoutes.app);
+      context.go(AppRoutes.appDashboard);
     } on AuthException catch (e) {
       setState(() { _submitting = false; _authError = e.message; });
     } catch (e) {
@@ -156,7 +156,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen>
       await ref.read(authProvider.notifier).reload();
 
       if (!mounted) return;
-      context.go(AppRoutes.app);
+      context.go(AppRoutes.appDashboard);
     } catch (e) {
       setState(() { _submitting = false; _authError = e.toString(); });
     }
