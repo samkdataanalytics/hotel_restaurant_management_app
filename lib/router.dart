@@ -10,6 +10,21 @@ import 'web/superadmin/superadmin_shell.dart';
 import 'web/onboarding/onboarding_shell.dart';
 import 'web/onboarding/property_setup_screen.dart';
 import 'web/shell/app_shell.dart';
+import 'web/dashboard_screen.dart';
+import 'web/checkins_screen.dart';
+import 'web/rooms_screen.dart';
+import 'web/reservations_screen.dart';
+import 'web/financials_screen.dart';
+import 'web/expenses_management_screen.dart';
+import 'web/pos_screen.dart';
+import 'web/table_floor_screen.dart';
+import 'web/kitchen_screen.dart';
+import 'web/restaurant_management_screen.dart';
+import 'web/orders_screen.dart';
+import 'web/restaurant_analytics_screen.dart';
+import 'web/cancellations_refunds_screen.dart';
+import 'web/users_management_screen.dart';
+import 'web/staff_schedule_screen.dart';
 import 'web/accept_invite_screen.dart';
 import 'web/guest/guest_menu_screen.dart';
 import 'web/guest/guest_checkin_screen.dart';
@@ -25,6 +40,7 @@ class AppRoutes {
   static const onboarding    = '/onboarding';
   static const propertySetup = '/property-setup';
   static const app           = '/app';
+  static const appDashboard  = '/app/dashboard';
   static const acceptInvite  = '/accept-invite';
   static const guestMenu     = '/menu';
   static const roomService   = '/room-service';
@@ -44,12 +60,14 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final loc = state.matchedLocation;
 
-      // Public pages — no auth required
+      // Landing page: send logged-in users straight to the app.
       if (loc == AppRoutes.landing) {
-        // If already logged in, skip the landing page
-        if (auth.isLoggedIn) return AppRoutes.app;
+        if (auth.isLoggedIn) return AppRoutes.appDashboard;
         return null;
       }
+
+      // /app (no subpath) → dashboard
+      if (loc == AppRoutes.app) return AppRoutes.appDashboard;
       if (loc.startsWith(AppRoutes.guestMenu)) return null;
       if (loc.startsWith(AppRoutes.roomService)) return null;
       if (loc.startsWith('/guest-registration')) return null;
@@ -64,6 +82,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (loc.startsWith(AppRoutes.superadmin)) return null;
         return AppRoutes.superadmin;
       }
+
+      // Allow any /app/* sub-route through once we've passed auth checks
+      if (loc.startsWith('${AppRoutes.app}/')) return null;
 
       // Accept-invite page is allowed regardless of org / property state
       if (loc.startsWith(AppRoutes.acceptInvite)) return null;
@@ -85,10 +106,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // propertySetup is intentionally NOT listed here — users can navigate
       // there from the app shell to add more properties.
       if (auth.isStaffAccount && loc == AppRoutes.propertySetup) {
-        return AppRoutes.app;
+        return AppRoutes.appDashboard;
       }
       if (loc == AppRoutes.landing || loc == AppRoutes.login || loc == AppRoutes.onboarding) {
-        return AppRoutes.app;
+        return AppRoutes.appDashboard;
       }
       return null;
     },
@@ -117,9 +138,25 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.propertySetup,
         builder: (_, __) => const PropertySetupScreen(isFirstProperty: true),
       ),
-      GoRoute(
-        path: AppRoutes.app,
-        builder: (_, __) => const AppShell(),
+      ShellRoute(
+        builder: (context, state, child) => AppShell(child: child),
+        routes: [
+          GoRoute(path: '/app/dashboard',     builder: (_, __) => const DashboardScreen()),
+          GoRoute(path: '/app/check-ins',     builder: (_, __) => const CheckinsScreen()),
+          GoRoute(path: '/app/rooms',         builder: (_, __) => const RoomsScreen()),
+          GoRoute(path: '/app/reservations',  builder: (_, __) => const ReservationsScreen()),
+          GoRoute(path: '/app/financials',    builder: (_, __) => const FinancialsScreen()),
+          GoRoute(path: '/app/expenses',      builder: (_, __) => const ExpensesManagementScreen()),
+          GoRoute(path: '/app/pos',           builder: (_, __) => const PosScreen()),
+          GoRoute(path: '/app/tables',        builder: (_, __) => const TableFloorScreen()),
+          GoRoute(path: '/app/kitchen',       builder: (_, __) => const KitchenScreen()),
+          GoRoute(path: '/app/restaurant',    builder: (_, __) => const RestaurantManagementScreen()),
+          GoRoute(path: '/app/orders',        builder: (_, __) => const OrdersScreen()),
+          GoRoute(path: '/app/analytics',     builder: (_, __) => const RestaurantAnalyticsScreen()),
+          GoRoute(path: '/app/cancellations', builder: (_, __) => const CancellationsRefundsScreen()),
+          GoRoute(path: '/app/team',          builder: (_, __) => const UsersManagementScreen()),
+          GoRoute(path: '/app/shifts',        builder: (_, __) => const StaffScheduleScreen()),
+        ],
       ),
       // Staff invite deep link
       GoRoute(

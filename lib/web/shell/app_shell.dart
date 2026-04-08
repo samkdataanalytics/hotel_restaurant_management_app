@@ -11,47 +11,47 @@ import '../../services/booking_service.dart';
 import '../../services/restaurant_service.dart';
 import '../../models/staff_permission.dart';
 import '../../services/staff_service.dart';
-import '../dashboard_screen.dart';
-import '../checkins_screen.dart';
-import '../rooms_screen.dart';
-import '../reservations_screen.dart';
-import '../financials_screen.dart';
-import '../expenses_management_screen.dart';
-import '../pos_screen.dart';
-import '../table_floor_screen.dart';
-import '../kitchen_screen.dart';
-import '../restaurant_management_screen.dart';
-import '../orders_screen.dart';
-import '../restaurant_analytics_screen.dart';
-import '../cancellations_refunds_screen.dart';
-import '../users_management_screen.dart';
-import '../staff_schedule_screen.dart';
 import '../edit_property_dialog.dart';
 import '../../services/notification_service.dart';
 import '../widgets/notification_bell.dart';
 
-// ─── Page list (flat index-addressed) ────────────────────────────────────────
+// ─── Route map (pageIndex ↔ URL path) ────────────────────────────────────────
 
-const List<Widget> _pages = [
-  // HOTEL (0–5)
-  DashboardScreen(),
-  CheckinsScreen(),
-  RoomsScreen(),
-  ReservationsScreen(),
-  FinancialsScreen(),
-  ExpensesManagementScreen(),
-  // RESTAURANT (6–12)
-  PosScreen(),
-  TableFloorScreen(),
-  KitchenScreen(),
-  RestaurantManagementScreen(),
-  OrdersScreen(),
-  RestaurantAnalyticsScreen(),
-  CancellationsRefundsScreen(),
-  // TEAM (13–14)
-  UsersManagementScreen(),
-  StaffScheduleScreen(),
-];
+const Map<int, String> kPageRoutes = {
+  0:  '/app/dashboard',
+  1:  '/app/check-ins',
+  2:  '/app/rooms',
+  3:  '/app/reservations',
+  4:  '/app/financials',
+  5:  '/app/expenses',
+  6:  '/app/pos',
+  7:  '/app/tables',
+  8:  '/app/kitchen',
+  9:  '/app/restaurant',
+  10: '/app/orders',
+  11: '/app/analytics',
+  12: '/app/cancellations',
+  13: '/app/team',
+  14: '/app/shifts',
+};
+
+const Map<String, int> kRoutePageIndex = {
+  '/app/dashboard':     0,
+  '/app/check-ins':     1,
+  '/app/rooms':         2,
+  '/app/reservations':  3,
+  '/app/financials':    4,
+  '/app/expenses':      5,
+  '/app/pos':           6,
+  '/app/tables':        7,
+  '/app/kitchen':       8,
+  '/app/restaurant':    9,
+  '/app/orders':        10,
+  '/app/analytics':     11,
+  '/app/cancellations': 12,
+  '/app/team':          13,
+  '/app/shifts':        14,
+};
 
 // ─── Nav models ───────────────────────────────────────────────────────────────
 
@@ -112,15 +112,14 @@ const _teamSection = _NavSection(
 // ─── App Shell ────────────────────────────────────────────────────────────────
 
 class AppShell extends ConsumerStatefulWidget {
-  const AppShell({super.key});
+  final Widget child;
+  const AppShell({super.key, required this.child});
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
-  int _selectedIndex = 0;
-  final List<int> _navHistory = [];   // back-stack of previously visited indices
   bool _sidebarExpanded = true;
   bool _isInitializing = true;
   bool _noProperties   = false; // true when a staff user has no assigned properties
@@ -182,19 +181,18 @@ class _AppShellState extends ConsumerState<AppShell> {
         return;
       }
 
-      // Compute the landing page AFTER permissions have been loaded so that
-      // _isPropertyManager and _userPermissions reflect the real values.
-      // _defaultPageIndex reads those instance variables; calling it here
-      // (outside of any setState) ensures we read the freshly-written state.
-      final landingIndex = activeProperty != null
-          ? _defaultPageIndex(activeProperty)
-          : 0;
+      // Navigate to the default route for this user/property now that
+      // permissions are loaded. Only redirect if still on a generic app path.
+      final defaultRoute = activeProperty != null
+          ? _defaultRoute(activeProperty)
+          : '/app/dashboard';
 
       if (mounted) {
-        setState(() {
-          _isInitializing = false;
-          _selectedIndex  = landingIndex;
-        });
+        setState(() { _isInitializing = false; });
+        final currentPath = GoRouterState.of(context).uri.path;
+        if (currentPath == '/app' || currentPath == '/app/dashboard') {
+          context.go(defaultRoute);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -298,30 +296,25 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   Future<void> _switchToProperty(OrgProperty property) async {
     await _applyActiveProperty(property);
-    // Compute after await so permissions are already updated in instance state
-    final landing = _defaultPageIndex(property);
-    setState(() {
-      _navHistory.clear(); // new property → fresh history
-      _selectedIndex = landing;
-    });
+    final defaultRoute = _defaultRoute(property);
+    if (mounted) {
+      setState(() {});
+      context.go(defaultRoute);
+    }
   }
 
-  /// Navigate to [pageIndex], pushing the current page onto the back-stack.
+  /// Navigate to the URL for [pageIndex].
   void _navigateTo(int pageIndex) {
-    if (pageIndex == _selectedIndex) return;
-    setState(() {
-      _navHistory.add(_selectedIndex);
-      _selectedIndex = pageIndex;
-    });
+    final route = kPageRoutes[pageIndex] ?? '/app/dashboard';
+    context.go(route);
   }
 
-  /// Returns the page index the user should land on for [property].
-  /// Finds the first page in the first visible nav section so restaurant-only
-  /// staff on a combined property don't land on the hotel Dashboard.
-  int _defaultPageIndex(OrgProperty property) {
+  /// Returns the default route for [property] based on the user's permissions.
+  /// Finds the first visible nav item so restaurant-only staff land correctly.
+  String _defaultRoute(OrgProperty property) {
     final sections = _activeSections(property);
     final firstItem = sections.expand((s) => s.items).firstOrNull;
-    return firstItem?.pageIndex ?? 0;
+    return kPageRoutes[firstItem?.pageIndex ?? 0] ?? '/app/dashboard';
   }
 
   /// Builds the hotel nav section with the property's brand color.
@@ -474,49 +467,40 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     final sections = _activeSections(activeProperty);
 
-    return PopScope(
-      // Intercept back: navigate to previous section instead of leaving the app.
-      canPop: _navHistory.isEmpty,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _navHistory.isNotEmpty) {
-          setState(() => _selectedIndex = _navHistory.removeLast());
-        }
-      },
-      child: Scaffold(
-        key: _scaffoldKey,
-        drawer: isMobile ? Drawer(child: _buildSidebar(activeProperty, authState, sections, isDrawer: true)) : null,
-        bottomNavigationBar: isMobile ? _buildBottomNav(activeProperty) : null,
-        body: Row(
-          children: [
-            if (!isMobile) _buildSidebar(activeProperty, authState, sections),
-            Expanded(
-              child: Column(
-                children: [
-                  _buildTopBar(activeProperty, authState, isMobile),
-                  Expanded(
-                    key: ValueKey(activeProperty?.id ?? 'none'),
-                    child: activeProperty?.status == 'inactive'
-                        ? _InactivePropertyScreen(
-                            property: activeProperty!,
-                            onReactivate: () async {
-                              await OrganizationService()
-                                  .updatePropertyStatus(activeProperty!.id, 'active');
-                              await ref.read(authProvider.notifier).reload();
-                              final updated = await OrganizationService()
-                                  .getActiveProperty();
-                              if (updated != null) {
-                                ref.read(activePropertyProvider.notifier)
-                                    .setProperty(updated);
-                              }
-                            },
-                          )
-                        : _pages[_selectedIndex],
-                  ),
-                ],
-              ),
+    return Scaffold(
+      key: _scaffoldKey,
+      drawer: isMobile ? Drawer(child: _buildSidebar(activeProperty, authState, sections, isDrawer: true)) : null,
+      bottomNavigationBar: isMobile ? _buildBottomNav(activeProperty) : null,
+      body: Row(
+        children: [
+          if (!isMobile) _buildSidebar(activeProperty, authState, sections),
+          Expanded(
+            child: Column(
+              children: [
+                _buildTopBar(activeProperty, authState, isMobile),
+                Expanded(
+                  key: ValueKey(activeProperty?.id ?? 'none'),
+                  child: activeProperty?.status == 'inactive'
+                      ? _InactivePropertyScreen(
+                          property: activeProperty!,
+                          onReactivate: () async {
+                            await OrganizationService()
+                                .updatePropertyStatus(activeProperty!.id, 'active');
+                            await ref.read(authProvider.notifier).reload();
+                            final updated = await OrganizationService()
+                                .getActiveProperty();
+                            if (updated != null) {
+                              ref.read(activePropertyProvider.notifier)
+                                  .setProperty(updated);
+                            }
+                          },
+                        )
+                      : widget.child,
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -555,7 +539,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     final navItems = _mobileNavItems(activeProperty);
     // Which bottom-nav tab is active? Falls back to the "More" slot (last)
     // if the currently viewed page is not in the shortcut list.
-    int selectedIdx = navItems.indexWhere((i) => i.pageIndex == _selectedIndex);
+    final currentPath    = GoRouterState.of(context).uri.path;
+    final currentPageIdx = kRoutePageIndex[currentPath] ?? -1;
+    int selectedIdx = navItems.indexWhere((i) => i.pageIndex == currentPageIdx);
     if (selectedIdx < 0) selectedIdx = navItems.length; // "More" slot
 
     return BottomNavigationBar(
@@ -869,8 +855,9 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _buildNavItem(_NavItem item, _NavSection section, bool expanded) {
-    final isSelected = _selectedIndex == item.pageIndex;
-    final count      = _badgeCounts[item.pageIndex] ?? 0;
+    final currentPath = GoRouterState.of(context).uri.path;
+    final isSelected  = currentPath == kPageRoutes[item.pageIndex];
+    final count       = _badgeCounts[item.pageIndex] ?? 0;
 
     return Padding(
       padding: EdgeInsets.symmetric(
