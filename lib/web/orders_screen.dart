@@ -33,11 +33,20 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   bool _isLoading = true;
   _DateFilter _dateFilter = _DateFilter.today;
   OrderStatus? _statusFilter;
+  
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -71,7 +80,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         dateOk = now.difference(o.createdAt).inDays < 7;
       }
       final statusOk = _statusFilter == null || o.status == _statusFilter;
-      return dateOk && statusOk;
+      final searchOk = _searchQuery.isEmpty || 
+          o.orderNumber.toLowerCase().contains(_searchQuery.toLowerCase());
+      return dateOk && statusOk && searchOk;
     }).toList();
   }
 
@@ -435,32 +446,54 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         children: [
           const Divider(height: 1),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              for (final f in _DateFilter.values)
-                ChoiceChip(
-                  label: Text(_dateLbl(f),
-                      style: TextStyle(
-                          color: _dateFilter == f ? Colors.white : Colors.black87,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600)),
-                  selected: _dateFilter == f,
-                  onSelected: (_) => setState(() => _dateFilter = f),
-                  selectedColor: _kOrange,
-                  backgroundColor: Colors.grey.shade100,
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    for (final f in _DateFilter.values)
+                      ChoiceChip(
+                        label: Text(_dateLbl(f),
+                            style: TextStyle(
+                                color: _dateFilter == f ? Colors.white : Colors.black87,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                        selected: _dateFilter == f,
+                        onSelected: (_) => setState(() => _dateFilter = f),
+                        selectedColor: _kOrange,
+                        backgroundColor: Colors.grey.shade100,
+                      ),
+                    const SizedBox(width: 8),
+                    Text('Status:',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.black45,
+                            fontWeight: FontWeight.w600)),
+                    _statusChip(null, 'All', Colors.blueGrey),
+                    for (final s in OrderStatus.values)
+                      _statusChip(s, _statusLbl(s), _statusColor(s)),
+                  ],
                 ),
-              const SizedBox(width: 8),
-              Text('Status:',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.black45,
-                      fontWeight: FontWeight.w600)),
-              _statusChip(null, 'All', Colors.blueGrey),
-              for (final s in OrderStatus.values)
-                _statusChip(s, _statusLbl(s), _statusColor(s)),
+              ),
+              const SizedBox(width: 16),
+              SizedBox(
+                width: 240,
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search order #...',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                ),
+              ),
             ],
           ),
         ],

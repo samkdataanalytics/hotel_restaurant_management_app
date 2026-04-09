@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart' as pkg_provider;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../providers/hotel_session.dart';
 import '../models/booking.dart';
@@ -526,19 +528,199 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
   String? _selectedTableId;
   bool _isAddingItems = false;
   bool _isProcessing = false;
+  
+  // ── Realtime
+  Timer? _refreshTimer;
+  RealtimeChannel? _realtimeChannel;
 
   // ── Item picker state
-  String? _selectedCategory;
-  final Map<String, int> _addCart = {}; // menuItemId → qty
+  String? _selectedCategory; // null = All
+  final List<OrderItem> _addCart = []; 
+  String _itemSearchQuery = '';
+  final _itemSearchController = TextEditingController();
+
+  int _findCartItemIndex(MenuItem item, Map<String, List<String>> mods) {
+    return _addCart.indexWhere((e) {
+      if (e.menuItem.id != item.id) return false;
+      if (e.selectedModifiers.length != mods.length) return false;
+      for (final k in mods.keys) {
+        if (!e.selectedModifiers.containsKey(k)) return false;
+        final listA = List<String>.from(e.selectedModifiers[k]!)..sort();
+        final listB = List<String>.from(mods[k]!)..sort();
+        if (listA.join('|') != listB.join('|')) return false;
+      }
+      return true;
+    });
+  }
+
+  void _addToCart(MenuItem item, {Map<String, List<String>>? selectedModifiers}) {
+    if (!item.isAvailable || !canEditSection(ref, 'restaurant_tables')) return;
+    if (item.modifiers.isNotEmpty && selectedModifiers == null) {
+      _showModifierDialog(item);
+      return;
+    }
+    final mods = selectedModifiers ?? {};
+    setState(() {
+      final idx = _findCartItemIndex(item, mods);
+      if (idx >= 0) {
+        _addCart[idx].quantity++;
+      } else {
+        _addCart.add(OrderItem(
+          id: _uuid.v4(),
+          menuItem: item,
+          quantity: 1,
+          selectedModifiers: mods,
+        ));
+      }
+    });
+  }
+
+  void _removeFromCart(MenuItem item) {
+    if (!item.isAvailable || !canEditSection(ref, 'restaurant_tables')) return;
+    setState(() {
+      final idx = _addCart.lastIndexWhere((e) => e.menuItem.id == item.id);
+      if (idx >= 0) {
+        if (_addCart[idx].quantity > 1) {
+          _addCart[idx].quantity--;
+        } else {
+          _addCart.removeAt(idx);
+        }
+      }
+    });
+  }
+
+  Future<void> _showModifierDialog(MenuItem item) async {
+    final Map<String, List<String>> selections = {};
+    for (final mod in item.modifiers) selections[mod.name] = [];
+    
+    final result = await showDialog<Map<String, List<String>>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          bool isValid = true;
+          for (final mod in item.modifiers) {
+            if (mod.isRequired && selections[mod.name]!.isEmpty) {
+              isValid = false; break;
+            }
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text('Customize ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: item.modifiers.map((mod) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(mod.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              if (mod.isRequired)
+                                const Text(' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                              const Spacer(),
+                              Text(mod.allowMultiple ? '(Choose multiple)' : '(Choose 1)',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          ...mod.options.map((opt) {
+                            final isSelected = selections[mod.name]!.contains(opt.name);
+                            final priceText = opt.priceAdjustment > 0 ? ' (+${_currency.format(opt.priceAdjustment)})' : '';
+                            return InkWell(
+                              onTap: () {
+                                setSt(() {
+                                  if (mod.allowMultiple) {
+                                    if (isSelected) selections[mod.name]!.remove(opt.name);
+                                    else selections[mod.name]!.add(opt.name);
+                                  } else {
+                                    selections[mod.name] = [opt.name];
+                                  }
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      mod.allowMultiple 
+                                          ? (isSelected ? Icons.check_box : Icons.check_box_outline_blank)
+                                          : (isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+                                      color: isSelected ? _kOrange : Colors.grey.shade400,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(opt.name + priceText, style: const TextStyle(fontSize: 14)),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: isValid ? () => Navigator.pop(ctx, selections) : null,
+                style: ElevatedButton.styleFrom(backgroundColor: _kOrange, foregroundColor: Colors.white),
+                child: const Text('Add Item'),
+              )
+            ],
+          );
+        }
+      )
+    );
+
+    if (result != null) {
+      _addToCart(item, selectedModifiers: result);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _load();
+    _refreshTimer = Timer.periodic(
+        const Duration(seconds: 10), (_) => _load(silent: true));
+    
+    _realtimeChannel = Supabase.instance.client
+        .channel('tables_orders_rt')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'restaurant_orders',
+          callback: (_) => _load(silent: true),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'restaurant_tables',
+          callback: (_) => _load(silent: true),
+        )
+        .subscribe();
   }
 
-  Future<void> _load() async {
-    setState(() => _isLoading = true);
+  @override
+  void dispose() {
+    _itemSearchController.dispose();
+    _refreshTimer?.cancel();
+    _realtimeChannel?.unsubscribe();
+    super.dispose();
+  }
+
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) setState(() => _isLoading = true);
 
     final tables = await _service.getTables();
     final orders = await _service.getOrders();
@@ -546,15 +728,25 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
 
     // Build map of tableId → all open (unpaid, non-cancelled) orders oldest-first
     final allTableOrders = <String, List<RestaurantOrder>>{};
+    final staleOrderIds = <String>[]; // fully-refunded ghosts to auto-cancel
     for (final o in orders) {
       if (o.tableId == null) continue;
       if (o.status == OrderStatus.cancelled) continue;
       if (o.paymentStatus == PaymentStatus.paid ||
           o.paymentStatus == PaymentStatus.chargedToRoom) continue;
+      // Skip orders where every item has been fully refunded ($0 ghosts)
+      if (o.items.isNotEmpty && o.items.every((i) => i.isFullyRefunded)) {
+        staleOrderIds.add(o.id);
+        continue;
+      }
       allTableOrders.putIfAbsent(o.tableId!, () => []).add(o);
     }
     for (final list in allTableOrders.values) {
       list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    }
+    // Auto-cancel stale fully-refunded orders in background
+    for (final id in staleOrderIds) {
+      _service.cancelOrder(id).catchError((_) {});
     }
 
     final cats =
@@ -567,7 +759,6 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
       _allTableOrders = allTableOrders;
       _menuItems = menuItems;
       _categories = cats;
-      _selectedCategory ??= cats.isNotEmpty ? cats.first : null;
       _isLoading = false;
     });
   }
@@ -580,6 +771,8 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
       _selectedTableId = table.id;
       _isAddingItems = !hasOpenTab; // available → open item picker immediately
       _addCart.clear();
+      _itemSearchQuery = '';
+      _itemSearchController.clear();
     });
   }
 
@@ -590,14 +783,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
     setState(() => _isProcessing = true);
 
     try {
-      final newItems = _addCart.entries
-          .where((e) => e.value > 0)
-          .map((e) {
-            final menuItem = _menuItems.firstWhere((m) => m.id == e.key);
-            return OrderItem(
-                id: _uuid.v4(), menuItem: menuItem, quantity: e.value);
-          })
-          .toList();
+      final newItems = List<OrderItem>.from(_addCart);
 
       final openOrders = _allTableOrders[_selectedTableId!];
       final latestOrder = openOrders?.isNotEmpty == true ? openOrders!.last : null;
@@ -857,12 +1043,26 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
     final isSelected = _selectedTableId == table.id;
 
     // Use the oldest order's createdAt for elapsed time (session start)
+    int elapsedMinutes = 0;
     String timeLabel = '';
     if (isOccupied) {
       final elapsed = DateTime.now().difference(openOrders!.first.createdAt);
-      timeLabel = elapsed.inMinutes < 60
-          ? '${elapsed.inMinutes}m'
-          : '${elapsed.inHours}h ${elapsed.inMinutes % 60}m';
+      elapsedMinutes = elapsed.inMinutes;
+      timeLabel = elapsedMinutes < 60
+          ? '${elapsedMinutes}m'
+          : '${elapsed.inHours}h ${elapsedMinutes % 60}m';
+    }
+
+    Color timeBadgeBgColor = Colors.green.shade50;
+    Color timeBadgeTextColor = Colors.green.shade700;
+    if (isOccupied) {
+      if (elapsedMinutes >= 30) {
+        timeBadgeBgColor = Colors.red.shade50;
+        timeBadgeTextColor = Colors.red.shade700;
+      } else if (elapsedMinutes >= 15) {
+        timeBadgeBgColor = Colors.orange.shade50;
+        timeBadgeTextColor = Colors.orange.shade700;
+      }
     }
 
     final cardColor = isSelected
@@ -922,13 +1122,13 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
+                          color: timeBadgeBgColor,
                           borderRadius: BorderRadius.circular(4)),
                       child: Text(timeLabel,
                           style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.w700,
-                              color: Colors.orange.shade700)),
+                              color: timeBadgeTextColor)),
                     ),
                 ],
               ),
@@ -1287,15 +1487,18 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
         (existingOrderForPicker.status == OrderStatus.preparing ||
             existingOrderForPicker.status == OrderStatus.ready ||
             existingOrderForPicker.status == OrderStatus.served);
-    final filteredItems = _selectedCategory == null
+    var filteredItems = _selectedCategory == null
         ? _menuItems
         : _menuItems.where((m) => m.category == _selectedCategory).toList();
-    final cartCount = _addCart.values.fold(0, (s, v) => s + v);
-    final cartTotal = _addCart.entries.fold(0.0, (s, e) {
-      if (e.value <= 0) return s;
-      return s +
-          _menuItems.firstWhere((m) => m.id == e.key).price * e.value;
-    });
+    // Apply search filter
+    if (_itemSearchQuery.isNotEmpty) {
+      final q = _itemSearchQuery.toLowerCase();
+      filteredItems = filteredItems
+          .where((m) => m.name.toLowerCase().contains(q))
+          .toList();
+    }
+    final cartCount = _addCart.fold(0, (s, v) => s + v.quantity);
+    final cartTotal = _addCart.fold(0.0, (s, e) => s + e.subtotal);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1341,33 +1544,90 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
             ],
           ),
         ),
-        // Category chips
+        // Search bar + Category chips
         Container(
           color: Colors.white,
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: _categories.map((cat) {
-                final sel = _selectedCategory == cat;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(cat,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: sel ? Colors.white : Colors.black54)),
-                    selected: sel,
-                    onSelected: (_) =>
-                        setState(() => _selectedCategory = cat),
-                    selectedColor: _kOrange,
-                    backgroundColor: Colors.grey.shade100,
-                    visualDensity: VisualDensity.compact,
+          child: Column(
+            children: [
+              // Search bar
+              SizedBox(
+                height: 38,
+                child: TextField(
+                  controller: _itemSearchController,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Search menu items…',
+                    hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                    prefixIcon: Icon(Icons.search_rounded, size: 18, color: Colors.grey.shade400),
+                    suffixIcon: _itemSearchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.close_rounded, size: 16, color: Colors.grey.shade400),
+                            onPressed: () => setState(() {
+                              _itemSearchQuery = '';
+                              _itemSearchController.clear();
+                            }),
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: const Color(0xFFF1F5F9),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
                   ),
-                );
-              }).toList(),
-            ),
+                  onChanged: (v) => setState(() => _itemSearchQuery = v.trim()),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Category chips with 'All'
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    // 'All' chip
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text('All',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: _selectedCategory == null
+                                    ? Colors.white
+                                    : Colors.black54)),
+                        selected: _selectedCategory == null,
+                        onSelected: (_) =>
+                            setState(() => _selectedCategory = null),
+                        selectedColor: _kOrange,
+                        backgroundColor: Colors.grey.shade100,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                    ..._categories.map((cat) {
+                      final sel = _selectedCategory == cat;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(cat,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: sel ? Colors.white : Colors.black54)),
+                          selected: sel,
+                          onSelected: (_) =>
+                              setState(() => _selectedCategory = cat),
+                          selectedColor: _kOrange,
+                          backgroundColor: Colors.grey.shade100,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
         const Divider(height: 1),
@@ -1464,7 +1724,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
 
   Widget _buildMenuCard(MenuItem item) {
     final unavailable = !item.isAvailable;
-    final qty = _addCart[item.id] ?? 0;
+    final qty = _addCart.where((e) => e.menuItem.id == item.id).fold(0, (s, e) => s + e.quantity);
     final inCart = qty > 0;
 
     return Opacity(
@@ -1517,6 +1777,18 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                           color: unavailable
                               ? Colors.red.shade400
                               : Colors.grey.shade600)),
+                  if (item.modifiers.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('+ Variants', style: TextStyle(fontSize: 9, color: Colors.blue.shade700, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
                   const SizedBox(height: 8),
                   // Qty stepper — disabled when unavailable
                   Row(
@@ -1525,8 +1797,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                       _stepBtn(
                         icon: Icons.remove_rounded,
                         enabled: !unavailable && qty > 0,
-                        onTap: () =>
-                            setState(() => _addCart[item.id] = qty - 1),
+                        onTap: () => _removeFromCart(item),
                       ),
                       Text('$qty',
                           style: TextStyle(
@@ -1536,8 +1807,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                       _stepBtn(
                         icon: Icons.add_rounded,
                         enabled: !unavailable,
-                        onTap: () =>
-                            setState(() => _addCart[item.id] = qty + 1),
+                        onTap: () => _addToCart(item),
                       ),
                     ],
                   ),

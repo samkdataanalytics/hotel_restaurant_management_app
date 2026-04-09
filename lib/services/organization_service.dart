@@ -193,10 +193,7 @@ String _currencySymbol(String code) =>
     kCurrencies.firstWhere((c) => c.code == code,
         orElse: () => const AppCurrency('USD', '', '\$')).symbol;
 
-// ─── Plan limits ─────────────────────────────────────────────────────────────
-
-const _maxProperties = {'free': 2, 'pro': 5, 'enterprise': -1};
-const _maxStaff      = {'free': 5, 'pro': 20, 'enterprise': -1};
+// (Plan limits are fetched dynamically from the `plans` table)
 
 // ─── Service ─────────────────────────────────────────────────────────────────
 
@@ -435,52 +432,130 @@ class OrganizationService {
     });
   }
 
+  // ── Plan management ──────────────────────────────────────────────────────────
+
+  Future<void> updateOrgPlan(String orgId, String planSlug) async {
+    await _db
+        .from('organizations')
+        .update({'plan': planSlug})
+        .eq('id', orgId);
+  }
+
   // ── Plan limits ──────────────────────────────────────────────────────────────
 
+  // Maps plan field names to org custom_* column names
+  static const _customLimitCol = {
+    'max_properties': 'custom_max_properties',
+    'max_users':      'custom_max_users',
+    'max_rooms':      'custom_max_rooms',
+    'max_tables':     'custom_max_tables',
+  };
+
+  /// Fetches the effective limit for [planField].
+  /// Per-org custom overrides (custom_max_*) take precedence over the plan table.
+  Future<int> _getPlanLimit(String orgId, String planField) async {
+    try {
+      final customCol = _customLimitCol[planField]!;
+      final orgRow = await _db
+          .from('organizations')
+          .select('plan, $customCol')
+          .eq('id', orgId)
+          .single();
+
+      // Custom override wins if set
+      final custom = orgRow[customCol] as int?;
+      if (custom != null) return custom;
+
+      final slug = orgRow['plan'] as String? ?? 'free';
+      final planRows = await _db
+          .from('plans')
+          .select(planField)
+          .eq('slug', slug)
+          .limit(1);
+      if (planRows.isEmpty) return 1;
+      return planRows.first[planField] as int;
+    } catch (_) {
+      return 1;
+    }
+  }
+
+  // ── Custom plan provisioning ─────────────────────────────────────────────────
+
+  /// Finds the organization that owns [email], upgrades their plan to 'enterprise'
+  /// and sets per-org custom limits. Throws if no matching user/org is found.
+  Future<void> provisionCustomAccess({
+    required String email,
+    required int maxProperties,
+    required int maxUsers,
+    required int maxRooms,
+    required int maxTables,
+    double? priceMonthly,
+    double? priceAnnually,
+    String? billingCycle, // 'monthly' | 'annually'
+  }) async {
+    // 1. Find user by email
+    final profileRows = await _db
+        .from('profiles')
+        .select('id')
+        .eq('email', email.trim().toLowerCase())
+        .limit(1);
+    if (profileRows.isEmpty) {
+      throw Exception('No account found for "$email". '
+          'Ask the customer to sign up first.');
+    }
+    final userId = profileRows.first['id'] as String;
+
+    // 2. Find their organization
+    final memberRows = await _db
+        .from('organization_members')
+        .select('org_id')
+        .eq('user_id', userId)
+        .limit(1);
+    if (memberRows.isEmpty) {
+      throw Exception('User "$email" has no organization. '
+          'Ask them to complete onboarding first.');
+    }
+    final orgId = memberRows.first['org_id'] as String;
+
+    // 3. Apply custom limits + upgrade plan
+    await _db.from('organizations').update({
+      'plan':                  'enterprise',
+      'custom_max_properties': maxProperties,
+      'custom_max_users':      maxUsers,
+      'custom_max_rooms':      maxRooms,
+      'custom_max_tables':     maxTables,
+      if (priceMonthly  != null) 'custom_price_monthly':  priceMonthly,
+      if (priceAnnually != null) 'custom_price_annually': priceAnnually,
+      if (billingCycle  != null) 'billing_cycle':         billingCycle,
+    }).eq('id', orgId);
+  }
+
   Future<bool> canAddProperty(String orgId) async {
-    // TODO: Uncomment to enforce pro/enterprise plan limits
-    return true;
-
-    // final orgRows = await _db
-    //     .from('organizations')
-    //     .select('plan')
-    //     .eq('id', orgId)
-    //     .single();
-
-    // final plan  = orgRows['plan'] as String? ?? 'free';
-    // final limit = _maxProperties[plan] ?? 1;
-    // if (limit == -1) return true; // enterprise unlimited
-
-    // final count = await _db
-    //     .from('hotels')
-    //     .select('id')
-    //     .eq('org_id', orgId)
-    //     .count();
-
-    // return count.count < limit;
+    final limit = await _getPlanLimit(orgId, 'max_properties');
+    if (limit == -1) return true;
+    final count = await _db.from('hotels').select('id').eq('org_id', orgId).count();
+    return count.count < limit;
   }
 
   Future<bool> canAddStaff(String orgId) async {
-    // TODO: Uncomment to enforce pro/enterprise plan limits
-    return true;
+    final limit = await _getPlanLimit(orgId, 'max_users');
+    if (limit == -1) return true;
+    final count = await _db.from('organization_members').select('id').eq('org_id', orgId).count();
+    return count.count < limit;
+  }
 
-    // final orgRows = await _db
-    //     .from('organizations')
-    //     .select('plan')
-    //     .eq('id', orgId)
-    //     .single();
+  Future<bool> canAddRoom(String orgId, String propertyId) async {
+    final limit = await _getPlanLimit(orgId, 'max_rooms');
+    if (limit == -1) return true;
+    final count = await _db.from('rooms').select('id').eq('hotel_id', propertyId).count();
+    return count.count < limit;
+  }
 
-    // final plan  = orgRows['plan'] as String? ?? 'free';
-    // final limit = _maxStaff[plan] ?? 5;
-    // if (limit == -1) return true;
-
-    // final count = await _db
-    //     .from('organization_members')
-    //     .select('id')
-    //     .eq('org_id', orgId)
-    //     .count();
-
-    // return count.count < limit;
+  Future<bool> canAddTable(String orgId, String propertyId) async {
+    final limit = await _getPlanLimit(orgId, 'max_tables');
+    if (limit == -1) return true;
+    final count = await _db.from('restaurant_tables').select('id').eq('hotel_id', propertyId).count();
+    return count.count < limit;
   }
 
   // ── Superadmin queries ───────────────────────────────────────────────────────

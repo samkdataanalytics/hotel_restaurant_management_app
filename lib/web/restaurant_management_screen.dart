@@ -15,6 +15,9 @@ import '../models/restaurant_table.dart';
 import '../models/restaurant_order.dart';
 import '../models/inventory_item.dart';
 import '../models/staff_permission.dart';
+import '../providers/app_auth_provider.dart';
+import '../services/organization_service.dart';
+import 'widgets/upgrade_plan_dialog.dart';
 import '../services/restaurant_service.dart';
 import '../services/menu_pdf_service.dart';
 import '../services/menu_doc_service.dart';
@@ -675,6 +678,7 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
   late String _category;
   late bool _available;
   late List<MenuItemIngredient> _recipeIngredients;
+  late List<MenuModifier> _itemModifiers;
   bool _saving = false;
 
   final _categories = ['Breakfast', 'Starters', 'Mains', 'Lunch', 'Dessert', 'Beverages', 'Other'];
@@ -690,6 +694,7 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
     _category = item?.category ?? 'Mains';
     _available = item?.isAvailable ?? true;
     _recipeIngredients = List.from(item?.ingredients ?? []);
+    _itemModifiers = List.from(item?.modifiers ?? []);
   }
 
   @override
@@ -710,6 +715,7 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
       imageUrl: _emoji.text.trim(),
       isAvailable: _available,
       ingredients: _recipeIngredients,
+      modifiers: _itemModifiers,
     );
     await widget.service.saveMenuItem(item);
     if (!mounted) return;
@@ -723,6 +729,19 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
         MenuItemIngredient(ingredientId: widget.ingredients.first.id, quantity: 1),
       );
     });
+  }
+
+  void _editModifierDialog(int index, MenuModifier? initial) async {
+    final res = await showDialog<MenuModifier>(
+      context: context,
+      builder: (ctx) => _ModifierDialog(initial: initial),
+    );
+    if (res != null) {
+      setState(() {
+        if (index >= 0) _itemModifiers[index] = res;
+        else _itemModifiers.add(res);
+      });
+    }
   }
 
   @override
@@ -867,6 +886,70 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
                           ),
                         ),
                       ],
+                      const SizedBox(height: 20),
+                      // ─── Modifiers Section ───
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Modifiers & Variants',
+                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                          TextButton.icon(
+                            onPressed: () => _editModifierDialog(-1, null),
+                            icon: const Icon(Icons.add_rounded, size: 16),
+                            label: const Text('Add Modifier'),
+                            style: TextButton.styleFrom(foregroundColor: _RC.accent),
+                          ),
+                        ],
+                      ),
+                      if (_itemModifiers.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Text('No modifiers (e.g. Size, Milk Type) for this item.',
+                              style: TextStyle(color: Colors.black38, fontSize: 12)),
+                        )
+                      else
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade200),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Column(
+                            children: _itemModifiers.asMap().entries.map((entry) {
+                              final idx = entry.key;
+                              final mod = entry.value;
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  border: idx == 0 ? null : Border(top: BorderSide(color: Colors.grey.shade100))
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(mod.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                          Text(
+                                            '${mod.options.length} options • ${mod.isRequired ? "Required" : "Optional"} • ${mod.allowMultiple ? "Multiple" : "Single"}',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      onPressed: () => _editModifierDialog(idx, mod),
+                                      icon: const Icon(Icons.edit_rounded, color: Colors.blue, size: 18),
+                                    ),
+                                    IconButton(
+                                      onPressed: () => setState(() => _itemModifiers.removeAt(idx)),
+                                      icon: Icon(Icons.remove_circle_outline_rounded, color: Colors.red.shade300, size: 18),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -970,6 +1053,196 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
             borderSide: BorderSide(color: Colors.grey.shade300)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       );
+}
+
+class _ModifierDialog extends StatefulWidget {
+  final MenuModifier? initial;
+  const _ModifierDialog({this.initial});
+
+  @override
+  State<_ModifierDialog> createState() => _ModifierDialogState();
+}
+
+class _ModifierDialogState extends State<_ModifierDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _nameCtrl;
+  late bool _isRequired;
+  late bool _allowMultiple;
+  late List<MenuModifierOption> _options;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.initial?.name ?? '');
+    _isRequired = widget.initial?.isRequired ?? false;
+    _allowMultiple = widget.initial?.allowMultiple ?? false;
+    _options = List.from(widget.initial?.options ?? [MenuModifierOption(name: '', priceAdjustment: 0.0)]);
+  }
+
+  void _save() {
+    if (!_formKey.currentState!.validate()) return;
+    
+    // Clean up empty options
+    final validOptions = _options.where((o) => o.name.trim().isNotEmpty).toList();
+    if (validOptions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('At least one option is required')));
+      return;
+    }
+
+    Navigator.pop(context, MenuModifier(
+      name: _nameCtrl.text.trim(),
+      isRequired: _isRequired,
+      allowMultiple: _allowMultiple,
+      options: validOptions,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: _RC.accentLight,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.list_alt_rounded, color: _RC.accent),
+                  const SizedBox(width: 12),
+                  Text(widget.initial == null ? 'Add Modifier' : 'Edit Modifier', style: AppTheme.dmSerif(fontSize: 18)),
+                  const Spacer(),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded, size: 20)),
+                ],
+              ),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextFormField(
+                        controller: _nameCtrl,
+                        decoration: InputDecoration(
+                          labelText: 'Modifier Name (e.g. Size, Add-ons)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        ),
+                        validator: (v) => v!.isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: CheckboxListTile(
+                              title: const Text('Required', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                              subtitle: const Text('Guest must pick', style: TextStyle(fontSize: 11)),
+                              value: _isRequired,
+                              onChanged: (v) => setState(() => _isRequired = v ?? false),
+                              contentPadding: EdgeInsets.zero,
+                              controlAffinity: ListTileControlAffinity.leading,
+                            ),
+                          ),
+                          Expanded(
+                            child: CheckboxListTile(
+                              title: const Text('Multiple', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                              subtitle: const Text('Guest can pick many', style: TextStyle(fontSize: 11)),
+                              value: _allowMultiple,
+                              onChanged: (v) => setState(() => _allowMultiple = v ?? false),
+                              contentPadding: EdgeInsets.zero,
+                              controlAffinity: ListTileControlAffinity.leading,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Options', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                          TextButton.icon(
+                            onPressed: () => setState(() => _options.add(MenuModifierOption(name: ''))),
+                            icon: const Icon(Icons.add_rounded, size: 16),
+                            label: const Text('Add Option'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ..._options.asMap().entries.map((entry) {
+                        final idx = entry.key;
+                        final opt = entry.value;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: TextFormField(
+                                  initialValue: opt.name,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Option (e.g. Large)',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onChanged: (v) => _options[idx] = _options[idx].copyWith(name: v),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextFormField(
+                                  initialValue: opt.priceAdjustment == 0 ? '' : opt.priceAdjustment.toString(),
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    hintText: '+ \$0.00',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onChanged: (v) {
+                                    final p = double.tryParse(v) ?? 0.0;
+                                    _options[idx] = _options[idx].copyWith(priceAdjustment: p);
+                                  },
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () => setState(() => _options.removeAt(idx)),
+                                icon: Icon(Icons.remove_circle_outline_rounded, color: Colors.red.shade300),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: ElevatedButton(
+                onPressed: _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _RC.accent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: const Text('Save Modifier'),
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ─── Cost History Dialog ──────────────────────────────────────────────────────
@@ -1782,11 +2055,27 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
   }
 
   void _addTableDialog() async {
+    final authState = ref.read(authProvider).valueOrNull;
+    final property = ref.read(activePropertyProvider);
+    final orgId = authState?.organization?.id;
+    if (orgId != null && property != null) {
+      final canAdd = await OrganizationService().canAddTable(orgId, property.id);
+      if (!canAdd && mounted) {
+        _showPlanLimitDialog('tables');
+        return;
+      }
+    }
+
+    if (!mounted) return;
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => _AddTableDialog(service: widget.service, existingCount: _tables.length),
     );
     if (result == true) _load();
+  }
+
+  void _showPlanLimitDialog(String resource) {
+    showUpgradePlanDialog(context, ref, blockedResource: resource);
   }
 
   Future<void> _deleteTable(RestaurantTable table) async {

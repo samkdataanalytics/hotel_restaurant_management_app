@@ -89,8 +89,12 @@ class AuthNotifier extends AsyncNotifier<AppAuthState> {
       List<OrgProperty> properties = [];
 
       if (!isSuperadmin) {
-        org = await OrganizationService().getMyOrganization();
-        properties = await OrganizationService().getMyProperties();
+        final results = await Future.wait([
+          OrganizationService().getMyOrganization(),
+          OrganizationService().getMyProperties(),
+        ]);
+        org        = results[0] as Organization?;
+        properties = results[1] as List<OrgProperty>;
       }
 
       return AppAuthState(

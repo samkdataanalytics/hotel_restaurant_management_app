@@ -7,10 +7,13 @@ import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
 import '../providers/hotel_session.dart';
+import '../providers/app_auth_provider.dart';
 import '../models/room.dart';
 import '../models/staff_permission.dart';
 import '../services/booking_service.dart';
+import '../services/organization_service.dart';
 import 'room_expenses_dialog.dart';
+import 'widgets/upgrade_plan_dialog.dart';
 
 class RoomsScreen extends ConsumerStatefulWidget {
   const RoomsScreen({super.key});
@@ -132,7 +135,23 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
     });
   }
 
+  void _showPlanLimitDialog(String resource) {
+    showUpgradePlanDialog(context, ref, blockedResource: resource);
+  }
+
   Future<void> _showAddRoomDialog() async {
+    final authState = ref.read(authProvider).valueOrNull;
+    final property = ref.read(activePropertyProvider);
+    final orgId = authState?.organization?.id;
+    if (orgId != null && property != null) {
+      final canAdd = await OrganizationService().canAddRoom(orgId, property.id);
+      if (!canAdd && mounted) {
+        _showPlanLimitDialog('rooms');
+        return;
+      }
+    }
+
+    if (!mounted) return;
     final result = await showDialog<Room>(
       context: context,
       builder: (context) => const _RoomFormDialog(title: 'Add New Room'),

@@ -29,6 +29,7 @@ import 'web/accept_invite_screen.dart';
 import 'web/guest/guest_menu_screen.dart';
 import 'web/guest/guest_checkin_screen.dart';
 import 'web/guest/guest_room_service_screen.dart';
+import 'web/legal_screen.dart';
 
 // ─── Route names ─────────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (loc.startsWith(AppRoutes.guestMenu)) return null;
       if (loc.startsWith(AppRoutes.roomService)) return null;
       if (loc.startsWith('/guest-registration')) return null;
+      if (loc == '/terms' || loc == '/returns' || loc == '/privacy') return null;
 
       if (!auth.isLoggedIn) {
         if (loc == AppRoutes.login || loc == AppRoutes.signup) return null;
@@ -182,6 +184,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           roomNumber: state.pathParameters['roomNumber']!,
         ),
       ),
+      // Legal pages — public, no auth required
+      GoRoute(path: '/terms',   builder: (_, __) => const LegalScreen(page: LegalPage.terms)),
+      GoRoute(path: '/returns', builder: (_, __) => const LegalScreen(page: LegalPage.returns)),
+      GoRoute(path: '/privacy', builder: (_, __) => const LegalScreen(page: LegalPage.privacy)),
+
       // Guest self check-in portal — /guest-registration?ref=BK-0001
       GoRoute(
         path: '/guest-registration',
