@@ -113,7 +113,7 @@ class _NavBar extends StatelessWidget {
               ],
             ),
             child: Image.asset(
-              'assets/images/hotrest_logo.png',
+              'assets/images/hotrest_logo.webp',
               width: 88,
               height: 88,
               fit: BoxFit.contain,
@@ -184,7 +184,7 @@ class _HeroSection extends StatelessWidget {
               ],
             ),
             child: Image.asset(
-              'assets/images/hotrest_logo.png',
+              'assets/images/hotrest_logo.webp',
               width: isMobile ? 220 : 300,
               height: isMobile ? 220 : 300,
               fit: BoxFit.contain,
@@ -931,7 +931,7 @@ class _CtaSection extends StatelessWidget {
                   border: Border.all(color: _C.gold.withAlpha(80), width: 2),
                 ),
                 padding: const EdgeInsets.all(16),
-                child: Image.asset('assets/images/hotrest_logo.png', fit: BoxFit.contain),
+                child: Image.asset('assets/images/hotrest_logo.webp', fit: BoxFit.contain),
               ),
               const SizedBox(height: 24),
               Text(
@@ -1019,7 +1019,7 @@ class _Footer extends StatelessWidget {
         shape: BoxShape.circle,
         boxShadow: [BoxShadow(color: _C.gold.withAlpha(80), blurRadius: 12, spreadRadius: 1)],
       ),
-      child: Image.asset('assets/images/hotrest_logo.png', width: 40, height: 40, fit: BoxFit.contain),
+      child: Image.asset('assets/images/hotrest_logo.webp', width: 40, height: 40, fit: BoxFit.contain),
     ),
     const SizedBox(width: 10),
     ShaderMask(

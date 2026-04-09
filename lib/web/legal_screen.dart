@@ -54,7 +54,7 @@ class LegalScreen extends StatelessWidget {
                 GestureDetector(
                   onTap: () => context.go('/'),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Image.asset('assets/images/hotrest_logo.png',
+                    Image.asset('assets/images/hotrest_logo.webp',
                         width: 34, height: 34, fit: BoxFit.contain),
                     const SizedBox(width: 8),
                     ShaderMask(
@@ -411,7 +411,7 @@ class _PrivacyContent extends StatelessWidget {
         _Section(heading: '5. Third-Party Services', children: [
           const _Body('HotRest uses trusted third-party services that may process your data:'),
           const _Bullet('Supabase — database and authentication infrastructure.'),
-          const _Bullet('Stripe / payment processors — payment handling.'),
+          const _Bullet('Payhere / payment processors — payment handling.'),
           const _Bullet('Google Fonts — font delivery (no personal data shared).'),
           const _Body(
               'Each third-party provider has their own privacy policy. We encourage you to review them.'),

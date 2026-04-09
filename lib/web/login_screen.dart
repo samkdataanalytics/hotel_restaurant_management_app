@@ -172,7 +172,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Image.asset(
-                  'assets/images/hotrest_logo.png',
+                  'assets/images/hotrest_logo.webp',
                   width: 160,
                   height: 160,
                 ),
@@ -229,7 +229,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 children: [
                   // Logo
                   Image.asset(
-                    'assets/images/hotrest_logo.png',
+                    'assets/images/hotrest_logo.webp',
                     width: 180,
                     height: 180,
                   ),
