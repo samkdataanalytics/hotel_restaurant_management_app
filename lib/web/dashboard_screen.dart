@@ -1,29 +1,46 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
 import '../models/check_in.dart';
 import '../models/guest.dart';
 import '../models/room.dart';
 import '../models/booking.dart';
+import '../models/restaurant_order.dart';
+import '../providers/app_auth_provider.dart';
+import '../providers/hotel_session.dart';
 import '../services/booking_service.dart';
+import '../services/restaurant_service.dart';
 
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   final _bookingService = BookingService();
+  final _restaurantService = RestaurantService();
   final _timeFormat = DateFormat('hh:mm a');
   final _dateFormat = DateFormat('MMM dd, yyyy');
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
 
   Map<String, int> _stats = {};
   List<Map<String, dynamic>> _recentCheckIns = [];
   bool _isLoading = true;
   String? _error;
+
+  // Restaurant stats
+  int _resTodayOrders = 0;
+  double _resTodayRevenue = 0;
+  int _resActiveKitchen = 0;
+  int _resTablesOccupied = 0;
+  int _resTotalTables = 0;
 
   @override
   void initState() {
@@ -35,6 +52,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final stats = await _bookingService.getDashboardStats();
       final checkIns = await _bookingService.getEnrichedCheckIns();
+
+      // Load restaurant stats only if property has both hotel and restaurant
+      final property = ref.read(activePropertyProvider);
+      if (property != null && property.type == 'both') {
+        await _loadRestaurantStats();
+      }
 
       if (!mounted) return;
       setState(() {
@@ -48,6 +71,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _error = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadRestaurantStats() async {
+    try {
+      final orders = await _restaurantService.getOrders();
+      final tables = await _restaurantService.getTables();
+      final now = DateTime.now();
+
+      final todayOrders = orders.where((o) =>
+          o.createdAt.year == now.year &&
+          o.createdAt.month == now.month &&
+          o.createdAt.day == now.day &&
+          o.status != OrderStatus.cancelled).toList();
+
+      final todayRevenue = todayOrders
+          .where((o) => o.paymentStatus == PaymentStatus.paid ||
+                        o.paymentStatus == PaymentStatus.chargedToRoom)
+          .fold(0.0, (s, o) => s + o.totalAmount);
+
+      final activeKitchen = todayOrders
+          .where((o) => o.status == OrderStatus.pending ||
+                        o.status == OrderStatus.preparing)
+          .length;
+
+      // Tables occupied = tables that have at least one open (unpaid) order today
+      final occupiedTableIds = todayOrders
+          .where((o) => o.tableId != null &&
+                        o.paymentStatus == PaymentStatus.unpaid &&
+                        o.status != OrderStatus.cancelled)
+          .map((o) => o.tableId)
+          .toSet();
+
+      if (!mounted) return;
+      setState(() {
+        _resTodayOrders = todayOrders.length;
+        _resTodayRevenue = todayRevenue;
+        _resActiveKitchen = activeKitchen;
+        _resTablesOccupied = occupiedTableIds.length;
+        _resTotalTables = tables.length;
+      });
+    } catch (_) {
+      // Non-critical — restaurant stats are best-effort
     }
   }
 
@@ -171,6 +237,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
 
             const SizedBox(height: 32),
+
+            // Restaurant stats (only when property has both hotel and restaurant)
+            if (ref.watch(activePropertyProvider)?.type == 'both') ...[
+              Text(
+                'Restaurant Overview',
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
+              const SizedBox(height: 16),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cardWidth = constraints.maxWidth > 900
+                      ? (constraints.maxWidth - 48) / 4
+                      : constraints.maxWidth > 600
+                          ? (constraints.maxWidth - 24) / 2
+                          : constraints.maxWidth;
+
+                  return Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: [
+                      _statCard(
+                        'Today\'s Orders',
+                        '$_resTodayOrders',
+                        Icons.receipt_long_rounded,
+                        AppTheme.restaurantAccent,
+                        cardWidth,
+                      ),
+                      _statCard(
+                        'Today\'s Revenue',
+                        _currency.format(_resTodayRevenue),
+                        Icons.trending_up_rounded,
+                        AppTheme.success,
+                        cardWidth,
+                      ),
+                      _statCard(
+                        'Active Kitchen',
+                        '$_resActiveKitchen',
+                        Icons.restaurant_menu_rounded,
+                        _resActiveKitchen > 0 ? AppTheme.warning : const Color(0xFF8B5CF6),
+                        cardWidth,
+                      ),
+                      _statCard(
+                        'Tables Occupied',
+                        '$_resTablesOccupied / $_resTotalTables',
+                        Icons.table_restaurant_rounded,
+                        const Color(0xFF0EA5E9),
+                        cardWidth,
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 32),
+            ],
 
             // Room occupancy bar
             Card(

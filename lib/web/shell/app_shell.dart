@@ -14,6 +14,7 @@ import '../../services/staff_service.dart';
 import '../edit_property_dialog.dart';
 import '../../services/notification_service.dart';
 import '../widgets/notification_bell.dart';
+import '../widgets/upgrade_plan_dialog.dart';
 
 // ─── Route map (pageIndex ↔ URL path) ────────────────────────────────────────
 
@@ -163,13 +164,17 @@ class _AppShellState extends ConsumerState<AppShell> {
 
       OrgProperty? activeProperty;
 
-      // Try to restore the previously active property
-      final saved = await OrganizationService().getActiveProperty();
-      if (saved != null && properties.any((p) => p.id == saved.id)) {
-        activeProperty = saved;
-      } else if (properties.isNotEmpty) {
-        activeProperty = properties.first;
+      // Resolve the active property from the already-loaded list — no extra
+      // DB round-trip. SharedPreferences is local and fast.
+      final savedId = await OrganizationService().getActivePropertyId();
+      if (savedId != null) {
+        try {
+          activeProperty = properties.firstWhere((p) => p.id == savedId);
+        } catch (_) {
+          // saved ID no longer valid (property deleted/unassigned)
+        }
       }
+      activeProperty ??= properties.isNotEmpty ? properties.first : null;
 
       if (activeProperty != null) {
         await _applyActiveProperty(activeProperty);
@@ -1260,38 +1265,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   void _showUpgradeDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: [
-            Icon(Icons.lock_rounded, color: AppTheme.warning, size: 24),
-            const SizedBox(width: 10),
-            const Text('Property Limit Reached'),
-          ],
-        ),
-        content: const Text(
-          'Your current plan does not allow adding more properties. '
-          'Upgrade to Pro or Enterprise to unlock additional properties.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.adminPrimary,
-              foregroundColor: Colors.white,
-              elevation: 0,
-            ),
-            child: const Text('Upgrade Plan'),
-          ),
-        ],
-      ),
-    );
+    showUpgradePlanDialog(context, ref, blockedResource: 'properties');
   }
 
   void _showManagePropertiesDialog(

@@ -601,38 +601,40 @@ class _FeatureCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _C.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-          width: 38, height: 38,
-          decoration: BoxDecoration(
-            color: color.withAlpha(25),
-            borderRadius: BorderRadius.circular(10),
+      child: SingleChildScrollView(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Container(
+            width: 38, height: 38,
+            decoration: BoxDecoration(
+              color: color.withAlpha(25),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 19),
           ),
-          child: Icon(icon, color: color, size: 19),
-        ),
-        const SizedBox(height: 10),
-        Text(title, style: const TextStyle(color: _C.text, fontSize: 14, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 9),
-        ...bullets.map((b) => Padding(
-          padding: const EdgeInsets.only(bottom: 5),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Container(
-                  width: 5, height: 5,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          const SizedBox(height: 10),
+          Text(title, style: const TextStyle(color: _C.text, fontSize: 14, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 9),
+          ...bullets.map((b) => Padding(
+            padding: const EdgeInsets.only(bottom: 5),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 5),
+                  child: Container(
+                    width: 5, height: 5,
+                    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(b, style: const TextStyle(color: _C.subtext, fontSize: 12.5, height: 1.45)),
-              ),
-            ],
-          ),
-        )),
-      ]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(b, style: const TextStyle(color: _C.subtext, fontSize: 12.5, height: 1.45)),
+                ),
+              ],
+            ),
+          )),
+        ]),
+      ),
     );
   }
 }
@@ -1037,9 +1039,13 @@ class _Footer extends StatelessWidget {
 
   Widget _links(BuildContext context) => Wrap(
     spacing: 24,
+    runSpacing: 8,
     children: [
       _footerLink('Sign In', () => context.go('/login')),
       _footerLink('Get Started', () => context.go('/signup')),
+      _footerLink('Terms of Service', () => context.go('/terms')),
+      _footerLink('Return Policy', () => context.go('/returns')),
+      _footerLink('Privacy Policy', () => context.go('/privacy')),
     ],
   );
 

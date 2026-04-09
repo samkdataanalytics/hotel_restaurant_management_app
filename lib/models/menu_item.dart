@@ -1,3 +1,69 @@
+class MenuModifierOption {
+  final String name;
+  final double priceAdjustment;
+
+  MenuModifierOption({required this.name, this.priceAdjustment = 0.0});
+
+  MenuModifierOption copyWith({String? name, double? priceAdjustment}) {
+    return MenuModifierOption(
+      name: name ?? this.name,
+      priceAdjustment: priceAdjustment ?? this.priceAdjustment,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {'name': name, 'priceAdjustment': priceAdjustment};
+
+  factory MenuModifierOption.fromMap(Map<String, dynamic> map) => MenuModifierOption(
+        name: map['name'] ?? '',
+        priceAdjustment: (map['priceAdjustment'] as num?)?.toDouble() ?? 0.0,
+      );
+}
+
+class MenuModifier {
+  final String name; 
+  final bool isRequired;
+  final bool allowMultiple;
+  final List<MenuModifierOption> options;
+
+  MenuModifier({
+    required this.name,
+    this.isRequired = false,
+    this.allowMultiple = false,
+    required this.options,
+  });
+
+  MenuModifier copyWith({
+    String? name,
+    bool? isRequired,
+    bool? allowMultiple,
+    List<MenuModifierOption>? options,
+  }) {
+    return MenuModifier(
+      name: name ?? this.name,
+      isRequired: isRequired ?? this.isRequired,
+      allowMultiple: allowMultiple ?? this.allowMultiple,
+      options: options ?? this.options,
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'name': name,
+        'isRequired': isRequired,
+        'allowMultiple': allowMultiple,
+        'options': options.map((e) => e.toMap()).toList(),
+      };
+
+  factory MenuModifier.fromMap(Map<String, dynamic> map) => MenuModifier(
+        name: map['name'] ?? '',
+        isRequired: map['isRequired'] ?? false,
+        allowMultiple: map['allowMultiple'] ?? false,
+        options: (map['options'] as List<dynamic>?)
+                ?.map((e) => MenuModifierOption.fromMap(e))
+                .toList() ??
+            [],
+      );
+}
+
 class MenuItemIngredient {
   final String ingredientId;
   final double quantity;
@@ -30,6 +96,7 @@ class MenuItem {
   final String imageUrl;
   final bool isAvailable;
   final List<MenuItemIngredient> ingredients;
+  final List<MenuModifier> modifiers;
 
   MenuItem({
     required this.id,
@@ -40,6 +107,7 @@ class MenuItem {
     this.imageUrl = '',
     this.isAvailable = true,
     this.ingredients = const [],
+    this.modifiers = const [],
   });
 
   MenuItem copyWith({
@@ -51,6 +119,7 @@ class MenuItem {
     String? imageUrl,
     bool? isAvailable,
     List<MenuItemIngredient>? ingredients,
+    List<MenuModifier>? modifiers,
   }) {
     return MenuItem(
       id: id ?? this.id,
@@ -61,6 +130,7 @@ class MenuItem {
       imageUrl: imageUrl ?? this.imageUrl,
       isAvailable: isAvailable ?? this.isAvailable,
       ingredients: ingredients ?? this.ingredients,
+      modifiers: modifiers ?? this.modifiers,
     );
   }
 
@@ -74,6 +144,7 @@ class MenuItem {
       'imageUrl': imageUrl,
       'isAvailable': isAvailable,
       'ingredients': ingredients.map((e) => e.toMap()).toList(),
+      'modifiers': modifiers.map((e) => e.toMap()).toList(),
     };
   }
 
@@ -88,6 +159,10 @@ class MenuItem {
       isAvailable: map['isAvailable'] ?? true,
       ingredients: (map['ingredients'] as List<dynamic>?)
               ?.map((e) => MenuItemIngredient.fromMap(e))
+              .toList() ??
+          [],
+      modifiers: (map['modifiers'] as List<dynamic>?)
+              ?.map((e) => MenuModifier.fromMap(e))
               .toList() ??
           [],
     );

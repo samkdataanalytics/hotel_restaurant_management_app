@@ -82,6 +82,15 @@ class _RestaurantAnalyticsScreenState
   // Order type mix (period-scoped)
   int _dineInCount = 0;
   int _takeawayCount = 0;
+  int _deliveryCount = 0;
+
+  // Delivery platform breakdown (period-scoped)
+  int    _uberEatsCount   = 0;
+  int    _pickMeCount     = 0;
+  int    _otherCount      = 0;
+  double _uberEatsRevenue = 0;
+  double _pickMeRevenue   = 0;
+  double _otherRevenue    = 0;
 
   // Peak hours (period-scoped)
   List<int> _peakHours = List.filled(24, 0);
@@ -229,6 +238,16 @@ class _RestaurantAnalyticsScreenState
       // Order type mix
       _dineInCount   = valid.where((o) => o.type == OrderType.dineIn).length;
       _takeawayCount = valid.where((o) => o.type == OrderType.takeaway).length;
+      _deliveryCount = valid.where((o) => o.type == OrderType.delivery).length;
+
+      // Delivery platform breakdown
+      final deliveryOrders = valid.where((o) => o.type == OrderType.delivery).toList();
+      _uberEatsCount   = deliveryOrders.where((o) => o.deliveryPlatform == 'UberEats').length;
+      _pickMeCount     = deliveryOrders.where((o) => o.deliveryPlatform == 'PickMe').length;
+      _otherCount      = deliveryOrders.where((o) => o.deliveryPlatform == 'Other').length;
+      _uberEatsRevenue = deliveryOrders.where((o) => o.deliveryPlatform == 'UberEats').fold(0.0, (s, o) => s + o.totalAmount);
+      _pickMeRevenue   = deliveryOrders.where((o) => o.deliveryPlatform == 'PickMe').fold(0.0, (s, o) => s + o.totalAmount);
+      _otherRevenue    = deliveryOrders.where((o) => o.deliveryPlatform == 'Other').fold(0.0, (s, o) => s + o.totalAmount);
 
       // Peak hours
       _peakHours = List.filled(24, 0);
@@ -301,6 +320,10 @@ class _RestaurantAnalyticsScreenState
                       _buildChartsRow(),
                       const SizedBox(height: 20),
                       _buildBottomRow(),
+                      if (_deliveryCount > 0) ...[
+                        const SizedBox(height: 20),
+                        _buildDeliveryBreakdown(),
+                      ],
                       if (_foodCostData.isNotEmpty) ...[
                         const SizedBox(height: 20),
                         _buildFoodCostSection(),
@@ -638,7 +661,8 @@ class _RestaurantAnalyticsScreenState
   }
 
   Widget _orderTypePie() {
-    final total = _dineInCount + _takeawayCount;
+    const _kDeliveryGreen = Color(0xFF06C167);
+    final total = _dineInCount + _takeawayCount + _deliveryCount;
     return _card(
       title: 'Order Type Mix',
       icon: Icons.donut_large_rounded,
@@ -651,28 +675,33 @@ class _RestaurantAnalyticsScreenState
                   child: PieChart(
                     PieChartData(
                       sections: [
-                        PieChartSectionData(
-                          value: _dineInCount.toDouble(),
-                          color: _kOrange,
-                          title:
-                              '${(_dineInCount * 100 / total).round()}%',
-                          radius: 70,
-                          titleStyle: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white),
-                        ),
-                        PieChartSectionData(
-                          value: _takeawayCount.toDouble(),
-                          color: _kBlue,
-                          title:
-                              '${(_takeawayCount * 100 / total).round()}%',
-                          radius: 70,
-                          titleStyle: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white),
-                        ),
+                        if (_dineInCount > 0)
+                          PieChartSectionData(
+                            value: _dineInCount.toDouble(),
+                            color: _kOrange,
+                            title: '${(_dineInCount * 100 / total).round()}%',
+                            radius: 70,
+                            titleStyle: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
+                        if (_takeawayCount > 0)
+                          PieChartSectionData(
+                            value: _takeawayCount.toDouble(),
+                            color: _kBlue,
+                            title: '${(_takeawayCount * 100 / total).round()}%',
+                            radius: 70,
+                            titleStyle: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
+                        if (_deliveryCount > 0)
+                          PieChartSectionData(
+                            value: _deliveryCount.toDouble(),
+                            color: _kDeliveryGreen,
+                            title: '${(_deliveryCount * 100 / total).round()}%',
+                            radius: 70,
+                            titleStyle: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
                       ],
                       sectionsSpace: 3,
                       centerSpaceRadius: 36,
@@ -680,12 +709,14 @@ class _RestaurantAnalyticsScreenState
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 16,
+                  runSpacing: 6,
                   children: [
-                    _legend(_kOrange, 'Dine-in ($_dineInCount)'),
-                    const SizedBox(width: 20),
-                    _legend(_kBlue, 'Takeaway ($_takeawayCount)'),
+                    if (_dineInCount > 0)   _legend(_kOrange,        'Dine-in ($_dineInCount)'),
+                    if (_takeawayCount > 0) _legend(_kBlue,          'Takeaway ($_takeawayCount)'),
+                    if (_deliveryCount > 0) _legend(_kDeliveryGreen, 'Delivery ($_deliveryCount)'),
                   ],
                 ),
               ],
@@ -881,6 +912,134 @@ class _RestaurantAnalyticsScreenState
                 borderData: FlBorderData(show: false),
               ),
             ),
+    );
+  }
+
+  // ─── Delivery Platform Breakdown ─────────────────────
+
+  Widget _buildDeliveryBreakdown() {
+    const _kUber   = Color(0xFF06C167);
+    const _kPickMe = Color(0xFFFF6B35);
+    const _kOther  = Color(0xFF6B7280);
+
+    final platforms = [
+      (
+        label: 'UberEats',
+        icon: Icons.delivery_dining_rounded,
+        color: _kUber,
+        count: _uberEatsCount,
+        revenue: _uberEatsRevenue,
+      ),
+      (
+        label: 'PickMe',
+        icon: Icons.moped_rounded,
+        color: _kPickMe,
+        count: _pickMeCount,
+        revenue: _pickMeRevenue,
+      ),
+      (
+        label: 'Other',
+        icon: Icons.storefront_rounded,
+        color: _kOther,
+        count: _otherCount,
+        revenue: _otherRevenue,
+      ),
+    ];
+
+    final maxRevenue = platforms.fold(0.0, (m, p) => p.revenue > m ? p.revenue : m);
+
+    return _card(
+      title: 'Delivery Platform Breakdown',
+      icon: Icons.delivery_dining_rounded,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Summary row
+          Row(
+            children: platforms.asMap().entries.map((e) {
+              final i = e.key;
+              final p = e.value;
+              final isLast = i == platforms.length - 1;
+              return Expanded(
+                child: Container(
+                  margin: EdgeInsets.only(right: isLast ? 0 : 12),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: p.color.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: p.color.withOpacity(0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(p.icon, color: p.color, size: 18),
+                          const SizedBox(width: 6),
+                          Text(p.label,
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: p.color)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text('${p.count} orders',
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.black54)),
+                      const SizedBox(height: 2),
+                      Text(_currency.format(p.revenue),
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: p.color)),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 16),
+          // Revenue bars
+          ...platforms.where((p) => p.count > 0).map((p) {
+            final frac = maxRevenue > 0 ? p.revenue / maxRevenue : 0.0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 80,
+                    child: Text(p.label,
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: frac,
+                        backgroundColor: Colors.grey.shade100,
+                        color: p.color,
+                        minHeight: 8,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 50,
+                    child: Text('${p.count}',
+                        textAlign: TextAlign.end,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: p.color)),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
     );
   }
 

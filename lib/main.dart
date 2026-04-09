@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider, Provider;
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -11,6 +12,8 @@ import 'app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // All fonts are bundled locally — disable GoogleFonts HTTP fetching entirely.
+  GoogleFonts.config.allowRuntimeFetching = false;
 
   await Supabase.initialize(
     url: 'https://voiumrqxbsdayqmmgpew.supabase.co',
@@ -18,8 +21,10 @@ void main() async {
   );
 
   // Legacy HotelSession (still used by existing hotel screens)
+  // restoreSession() is intentionally skipped here — AppShell._initialize()
+  // calls setHotelId() which loads hotel_settings as part of its own flow,
+  // avoiding a duplicate pair of DB round-trips at startup.
   final session = HotelSession();
-  if (kIsWeb) await session.restoreSession();
 
   runApp(
     ProviderScope(

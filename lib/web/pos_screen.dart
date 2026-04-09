@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart' as pkg_provider;
@@ -42,11 +43,18 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   List<RestaurantTable> _tables = [];
   List<InventoryItem> _inventoryItems = [];
   String _selectedCategory = 'All';
+  String _menuSearchQuery = '';
+  final _menuSearchController = TextEditingController();
 
   List<OrderItem> _cart = [];
   OrderType _orderType = OrderType.dineIn;
   String? _selectedTableId;
   String? _selectedBookingId;
+
+  // Delivery fields
+  String  _deliveryPlatform = 'UberEats'; // 'UberEats' | 'PickMe' | 'Other'
+  final   _deliveryRefController = TextEditingController();
+  static const _kDeliveryPlatforms = ['UberEats', 'PickMe', 'Other'];
 
   // Discount applied to the current cart before checkout
   String  _discountType   = 'percentage'; // 'percentage' | 'flat'
@@ -68,6 +76,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   @override
   void dispose() {
     _discountController.dispose();
+    _deliveryRefController.dispose();
+    _menuSearchController.dispose();
     super.dispose();
   }
 
@@ -96,6 +106,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       if (o.status == OrderStatus.cancelled) continue;
       if (o.paymentStatus == PaymentStatus.paid ||
           o.paymentStatus == PaymentStatus.chargedToRoom) continue;
+      // Skip fully-refunded ghost orders ($0 total, all items refunded)
+      if (o.items.isNotEmpty && o.items.every((i) => i.isFullyRefunded)) continue;
       allOrders.putIfAbsent(o.tableId!, () => []).add(o);
     }
     for (final list in allOrders.values) {
@@ -132,8 +144,14 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   }
 
   List<MenuItem> get _filteredMenu {
-    if (_selectedCategory == 'All') return _menuItems;
-    return _menuItems.where((e) => e.category == _selectedCategory).toList();
+    var items = _selectedCategory == 'All'
+        ? _menuItems
+        : _menuItems.where((e) => e.category == _selectedCategory).toList();
+    if (_menuSearchQuery.isNotEmpty) {
+      final q = _menuSearchQuery.toLowerCase();
+      items = items.where((e) => e.name.toLowerCase().contains(q)).toList();
+    }
+    return items;
   }
 
   double get _cartItemsTotal => _cart.fold(0.0, (s, i) => s + i.subtotal);
@@ -146,7 +164,21 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
   double get _cartTotal => (_cartItemsTotal - _discountValue).clamp(0.0, double.infinity);
 
-  void _addToCart(MenuItem item) {
+  int _findCartItemIndex(MenuItem item, Map<String, List<String>> mods) {
+    return _cart.indexWhere((e) {
+      if (e.menuItem.id != item.id) return false;
+      if (e.selectedModifiers.length != mods.length) return false;
+      for (final k in mods.keys) {
+        if (!e.selectedModifiers.containsKey(k)) return false;
+        final listA = List<String>.from(e.selectedModifiers[k]!)..sort();
+        final listB = List<String>.from(mods[k]!)..sort();
+        if (listA.join('|') != listB.join('|')) return false;
+      }
+      return true;
+    });
+  }
+
+  void _addToCart(MenuItem item, {Map<String, List<String>>? selectedModifiers}) {
     if (!item.isAvailable) return;
     if (_isIngredientOutOfStock(item)) {
       ScaffoldMessenger.of(context).clearSnackBars();
@@ -159,14 +191,127 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       );
       return;
     }
+
+    if (item.modifiers.isNotEmpty && selectedModifiers == null) {
+      _showModifierDialog(item);
+      return;
+    }
+
+    final mods = selectedModifiers ?? {};
+
     setState(() {
-      final idx = _cart.indexWhere((e) => e.menuItem.id == item.id);
+      final idx = _findCartItemIndex(item, mods);
       if (idx >= 0) {
         _cart[idx].quantity++;
       } else {
-        _cart.add(OrderItem(id: _uuid.v4(), menuItem: item, quantity: 1));
+        _cart.add(OrderItem(
+          id: _uuid.v4(),
+          menuItem: item,
+          quantity: 1,
+          selectedModifiers: mods,
+        ));
       }
     });
+  }
+
+  Future<void> _showModifierDialog(MenuItem item) async {
+    final Map<String, List<String>> selections = {};
+    for (final mod in item.modifiers) {
+      selections[mod.name] = [];
+    }
+    
+    final result = await showDialog<Map<String, List<String>>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          bool isValid = true;
+          for (final mod in item.modifiers) {
+            if (mod.isRequired && selections[mod.name]!.isEmpty) {
+              isValid = false; break;
+            }
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text('Customize ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: item.modifiers.map((mod) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(mod.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              if (mod.isRequired)
+                                const Text(' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                              const Spacer(),
+                              Text(mod.allowMultiple ? '(Choose multiple)' : '(Choose 1)',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          ...mod.options.map((opt) {
+                            final isSelected = selections[mod.name]!.contains(opt.name);
+                            final priceText = opt.priceAdjustment > 0 ? ' (+${_currencyFormat.format(opt.priceAdjustment)})' : '';
+                            return InkWell(
+                              onTap: () {
+                                setSt(() {
+                                  if (mod.allowMultiple) {
+                                    if (isSelected) selections[mod.name]!.remove(opt.name);
+                                    else selections[mod.name]!.add(opt.name);
+                                  } else {
+                                    selections[mod.name] = [opt.name];
+                                  }
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      mod.allowMultiple 
+                                          ? (isSelected ? Icons.check_box : Icons.check_box_outline_blank)
+                                          : (isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked),
+                                      color: isSelected ? _kOrange : Colors.grey.shade400,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(opt.name + priceText, style: const TextStyle(fontSize: 14)),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: isValid ? () => Navigator.pop(ctx, selections) : null,
+                style: ElevatedButton.styleFrom(backgroundColor: _kOrange, foregroundColor: Colors.white),
+                child: const Text('Add to Cart'),
+              )
+            ],
+          );
+        }
+      )
+    );
+
+    if (result != null) {
+      _addToCart(item, selectedModifiers: result);
+    }
   }
 
   void _updateQuantity(int index, int delta) {
@@ -195,6 +340,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
     setState(() => _isLoading = true);
 
+    final isDelivery = _orderType == OrderType.delivery;
     final order = RestaurantOrder(
       id: _uuid.v4(),
       orderNumber: 'ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
@@ -205,11 +351,27 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       bookingId: bookingId,
       createdAt: DateTime.now(),
       items: List.from(_cart),
-      discountType:   _discountAmount > 0 ? _discountType : null,
-      discountAmount: _discountAmount,
+      discountType:     _discountAmount > 0 ? _discountType : null,
+      discountAmount:   _discountAmount,
+      deliveryPlatform: isDelivery ? _deliveryPlatform : null,
+      deliveryOrderRef: isDelivery ? _deliveryRefController.text.trim() : null,
     );
 
-    await _restaurantService.saveOrder(order); // also deducts inventory
+    try {
+      await _restaurantService.saveOrder(order); // also deducts inventory
+    } catch (e) {
+      if (!mounted) return null;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save order: $e'),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+      return null;
+    }
 
     if (paymentStatus == PaymentStatus.chargedToRoom && bookingId != null) {
       final s = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
@@ -236,6 +398,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       _selectedBookingId = null;
       _discountAmount = 0.0;
       _discountController.clear();
+      _deliveryRefController.clear();
       _showDiscount = false;
       _mobileCartExpanded = false;
       _isLoading = false;
@@ -353,21 +516,17 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
     final isMobile = MediaQuery.of(context).size.width < 600;
 
-    if (isMobile) {
-      return ColoredBox(
-        color: const Color(0xFFF1F5F9),
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildCategoryTabs(),
-            Expanded(child: _buildMenuGrid()),
-            _buildMobileCartBar(),
-          ],
-        ),
-      );
-    }
-
-    return ColoredBox(
+    final content = isMobile ? ColoredBox(
+      color: const Color(0xFFF1F5F9),
+      child: Column(
+        children: [
+          _buildHeader(),
+          _buildCategoryTabs(),
+          Expanded(child: _buildMenuGrid()),
+          _buildMobileCartBar(),
+        ],
+      ),
+    ) : ColoredBox(
       color: const Color(0xFFF1F5F9),
       child: Row(
         children: [
@@ -384,6 +543,27 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           _buildCart(),
         ],
       ),
+    );
+
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.escape) {
+            if (_cart.isNotEmpty) {
+              setState(() => _cart.clear());
+              return KeyEventResult.handled;
+            }
+          } else if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+            if (_cart.isNotEmpty && canEditSection(ref, 'restaurant_pos')) {
+              _handleCheckout(PaymentStatus.paid);
+              return KeyEventResult.handled;
+            }
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: content,
     );
   }
 
@@ -414,7 +594,6 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
   Widget _buildCategoryTabs() {
     return Container(
-      height: 58,
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -425,26 +604,82 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: _categories.length,
-        itemBuilder: (_, i) {
-          final cat = _categories[i];
-          final isSel = cat == _selectedCategory;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8, top: 10, bottom: 10),
-            child: ChoiceChip(
-              label: Text(cat,
-                  style: TextStyle(fontWeight: isSel ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
-              selected: isSel,
-              onSelected: (_) => setState(() => _selectedCategory = cat),
-              selectedColor: _kOrange,
-              labelStyle: TextStyle(color: isSel ? Colors.white : Colors.black87),
-              backgroundColor: Colors.grey.shade100,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      child: Row(
+        children: [
+          // Search bar
+          SizedBox(
+            width: 220,
+            height: 38,
+            child: TextField(
+              controller: _menuSearchController,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Search items…',
+                hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                prefixIcon: Icon(Icons.search_rounded, size: 18, color: Colors.grey.shade400),
+                suffixIcon: _menuSearchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.close_rounded, size: 16, color: Colors.grey.shade400),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                        onPressed: () => setState(() {
+                          _menuSearchQuery = '';
+                          _menuSearchController.clear();
+                        }),
+                      )
+                    : null,
+                filled: true,
+                fillColor: const Color(0xFFF1F5F9),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (v) => setState(() => _menuSearchQuery = v.trim()),
+              onSubmitted: (v) {
+                final items = _filteredMenu;
+                if (items.isNotEmpty) {
+                  _addToCart(items.first);
+                  setState(() {
+                    _menuSearchQuery = '';
+                    _menuSearchController.clear();
+                  });
+                }
+              },
             ),
-          );
-        },
+          ),
+          const SizedBox(width: 16),
+          // Category chips scrollable
+          Expanded(
+            child: SizedBox(
+              height: 38,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _categories.length,
+                itemBuilder: (_, i) {
+                  final cat = _categories[i];
+                  final isSel = cat == _selectedCategory;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(cat,
+                          style: TextStyle(
+                              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 13)),
+                      selected: isSel,
+                      onSelected: (_) => setState(() => _selectedCategory = cat),
+                      selectedColor: _kOrange,
+                      labelStyle: TextStyle(color: isSel ? Colors.white : Colors.black87),
+                      backgroundColor: Colors.grey.shade100,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -512,6 +747,18 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                         color: unavailable ? Colors.red.shade400 : _kOrange,
                         fontSize: 13),
                   ),
+                  if (item.modifiers.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('+ Variants', style: TextStyle(fontSize: 9, color: Colors.blue.shade700, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
                 ],
               ),
               if (unavailable)
@@ -644,10 +891,18 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
                 child: Row(children: [
                   Expanded(child: _typeBtn('Dine-in', OrderType.dineIn)),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   Expanded(child: _typeBtn('Takeaway', OrderType.takeaway)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _typeBtn('Delivery', OrderType.delivery)),
                 ]),
               ),
+              // Delivery panel
+              if (_orderType == OrderType.delivery)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  child: _buildDeliveryPanel(),
+                ),
               // Table selector (dine-in only)
               if (_orderType == OrderType.dineIn)
                 Padding(
@@ -867,10 +1122,16 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           Row(
             children: [
               Expanded(child: _typeBtn('Dine-in', OrderType.dineIn)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(child: _typeBtn('Takeaway', OrderType.takeaway)),
+              const SizedBox(width: 6),
+              Expanded(child: _typeBtn('Delivery', OrderType.delivery)),
             ],
           ),
+          if (_orderType == OrderType.delivery) ...[
+            const SizedBox(height: 12),
+            _buildDeliveryPanel(),
+          ],
           if (_orderType == OrderType.dineIn) ...[
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -922,13 +1183,16 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
   Widget _typeBtn(String label, OrderType type) {
     final sel = _orderType == type;
-    final icon = type == OrderType.dineIn
-        ? Icons.table_restaurant_rounded
-        : Icons.takeout_dining_rounded;
+    final icon = switch (type) {
+      OrderType.dineIn   => Icons.table_restaurant_rounded,
+      OrderType.takeaway => Icons.takeout_dining_rounded,
+      OrderType.delivery => Icons.delivery_dining_rounded,
+      _                  => Icons.receipt_rounded,
+    };
     return ElevatedButton.icon(
       onPressed: () => setState(() {
         _orderType = type;
-        if (type == OrderType.takeaway) _selectedTableId = null;
+        if (type != OrderType.dineIn) _selectedTableId = null;
       }),
       icon: Icon(icon, size: 15),
       label: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
@@ -942,53 +1206,238 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     );
   }
 
+  Widget _buildDeliveryPanel() {
+    const _kUber   = Color(0xFF06C167); // Uber Eats green
+    const _kPickMe = Color(0xFFFF6B35); // PickMe orange
+    const _kOther  = Color(0xFF6B7280); // grey
+
+    Color platformColor(String p) => switch (p) {
+      'UberEats' => _kUber,
+      'PickMe'   => _kPickMe,
+      _          => _kOther,
+    };
+
+    IconData platformIcon(String p) => switch (p) {
+      'UberEats' => Icons.delivery_dining_rounded,
+      'PickMe'   => Icons.two_wheeler_rounded,
+      _          => Icons.storefront_rounded,
+    };
+
+    final color = platformColor(_deliveryPlatform);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Platform picker
+          Row(children: [
+            Icon(Icons.storefront_rounded, size: 13, color: color),
+            const SizedBox(width: 6),
+            Text('Platform', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                color: color)),
+          ]),
+          const SizedBox(height: 8),
+          Row(children: _kDeliveryPlatforms.map((p) {
+            final sel = _deliveryPlatform == p;
+            final c   = platformColor(p);
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: p != _kDeliveryPlatforms.last ? 6 : 0),
+                child: GestureDetector(
+                  onTap: () => setState(() => _deliveryPlatform = p),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: sel ? c : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: sel ? c : Colors.grey.shade200, width: sel ? 2 : 1),
+                    ),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(platformIcon(p), size: 18,
+                          color: sel ? Colors.white : c),
+                      const SizedBox(height: 3),
+                      Text(p, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                          color: sel ? Colors.white : c)),
+                    ]),
+                  ),
+                ),
+              ),
+            );
+          }).toList()),
+          const SizedBox(height: 10),
+          // Order reference
+          Row(children: [
+            Icon(Icons.tag_rounded, size: 13, color: color),
+            const SizedBox(width: 6),
+            Text('Order Reference', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+            const SizedBox(width: 4),
+            Text('(optional)', style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+          ]),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _deliveryRefController,
+            style: const TextStyle(fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'e.g. #4829 from app',
+              hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              border:        OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: color.withOpacity(0.3))),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: color.withOpacity(0.3))),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: color, width: 1.5)),
+              isDense: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCartItem(OrderItem item, int index) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Qty controls
-        Container(
-          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              InkWell(
-                onTap: () => _updateQuantity(index, 1),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                child: const Padding(padding: EdgeInsets.all(5), child: Icon(Icons.add, size: 14)),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Qty controls
+            Container(
+              decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () => _updateQuantity(index, 1),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                    child: const Padding(padding: EdgeInsets.all(5), child: Icon(Icons.add, size: 14)),
+                  ),
+                  Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  InkWell(
+                    onTap: () => _updateQuantity(index, -1),
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
+                    child: const Padding(padding: EdgeInsets.all(5), child: Icon(Icons.remove, size: 14)),
+                  ),
+                ],
               ),
-              Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              InkWell(
-                onTap: () => _updateQuantity(index, -1),
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
-                child: const Padding(padding: EdgeInsets.all(5), child: Icon(Icons.remove, size: 14)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(item.menuItem.name,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      InkWell(
+                        onTap: () => _editItemNoteDialog(item, index),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Icon(Icons.edit_note_rounded, size: 16, color: Colors.grey.shade400),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(_currencyFormat.format(item.unitPrice),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                  if (item.selectedModifiers.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        item.selectedModifiers.entries
+                            .where((e) => e.value.isNotEmpty)
+                            .map((e) => e.value.join(", "))
+                            .join(' · '),
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                      ),
+                    ),
+                ],
               ),
-            ],
-          ),
+            ),
+            Text(_currencyFormat.format(item.subtotal),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item.menuItem.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-              Text(_currencyFormat.format(item.menuItem.price),
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-            ],
+        if (item.notes.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 34),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.notes_rounded, size: 12, color: _kOrange),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(item.notes,
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic)),
+                ),
+              ],
+            ),
           ),
-        ),
-        Text(_currencyFormat.format(item.subtotal),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
       ],
     );
+  }
+
+  Future<void> _editItemNoteDialog(OrderItem item, int index) async {
+    final noteCtrl = TextEditingController(text: item.notes);
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Special Instructions', style: TextStyle(fontSize: 18)),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: noteCtrl,
+            maxLines: 2,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'e.g. No onions, extra spicy...',
+              border: OutlineInputBorder(),
+            ),
+            onFieldSubmitted: (_) => Navigator.pop(ctx),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _kOrange, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Save'),
+          ),
+        ],
+      )
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _cart[index].notes = noteCtrl.text.trim();
+    });
   }
 
   Widget _buildCartFooter() {
     final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
     final taxRate  = settings?.taxRate ?? 0.0;
     final svcRate  = _orderType == OrderType.dineIn ? (settings?.serviceChargeRate ?? 0.0) : 0.0;
+    // Delivery orders: no service charge (same as takeaway)
     final taxValue = _cartTotal * taxRate;
     final svcValue = _cartTotal * svcRate;
     final grandTotal = _cartTotal + taxValue + svcValue;
@@ -1133,6 +1582,37 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             ],
           ),
           const SizedBox(height: 14),
+          // Delivery badge (shown when delivery mode active)
+          if (_orderType == OrderType.delivery)
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _deliveryRefController,
+              builder: (_, val, __) => Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF06C167).withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF06C167).withOpacity(0.3)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.delivery_dining_rounded,
+                      size: 15, color: Color(0xFF06C167)),
+                  const SizedBox(width: 8),
+                  Text(_deliveryPlatform,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                          color: Color(0xFF06C167))),
+                  if (val.text.trim().isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text('· Ref: ${val.text.trim()}',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                    ),
+                  ],
+                ]),
+              ),
+            ),
           // Cash / Card
           Row(
             children: [
@@ -1173,28 +1653,25 @@ class _PosScreenState extends ConsumerState<PosScreen> {
               ),
             ],
           ),
-          // ── Send to Kitchen (shown when selected table has an in-progress order) ──
+          // ── Send to Kitchen (Dine-In) ──
           Builder(builder: (_) {
             if (_orderType != OrderType.dineIn || _selectedTableId == null) {
               return const SizedBox.shrink();
             }
             final openOrders = _allTableOrders[_selectedTableId!];
-            if (openOrders == null || openOrders.isEmpty) return const SizedBox.shrink();
-            final latest = openOrders.last;
-            final inKitchen = latest.status == OrderStatus.preparing ||
-                latest.status == OrderStatus.ready;
-            if (!inKitchen) return const SizedBox.shrink();
+            final hasOpenOrders = openOrders != null && openOrders.isNotEmpty;
+
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _cart.isEmpty ? null : _sendAddonOrder,
+                  onPressed: _cart.isEmpty ? null : _sendDineInOrderToKitchen,
                   icon: const Icon(Icons.send_rounded, size: 18),
                   label: Text(
                     _cart.isEmpty
-                        ? 'Add items then Send to Kitchen'
-                        : 'Send Add-On to Kitchen  ·  ${_currencyFormat.format(grandTotal)}',
+                        ? (hasOpenOrders ? 'Add items then Send to Kitchen' : 'Select items to Send to Kitchen')
+                        : (hasOpenOrders ? 'Send Add-On to Kitchen  ·  ${_currencyFormat.format(grandTotal)}' : 'Send to Kitchen  ·  ${_currencyFormat.format(grandTotal)}'),
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -1399,7 +1876,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                 const SizedBox(width: 8),
                 if (_cart.isNotEmpty)
                   ElevatedButton.icon(
-                    onPressed: _sendAddonOrder,
+                    onPressed: _sendDineInOrderToKitchen,
                     icon: const Icon(Icons.send_rounded, size: 13),
                     label: const Text('Send to Kitchen', style: TextStyle(fontSize: 11)),
                     style: ElevatedButton.styleFrom(
@@ -1565,10 +2042,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     }
   }
 
-  /// Creates a new pending "add-on" order for the current table and sends
-  /// it directly to the kitchen. Called when the existing order is in
-  /// preparing/ready state.
-  Future<void> _sendAddonOrder() async {
+  /// Creates a new pending order for the current table and sends
+  /// it directly to the kitchen.
+  Future<void> _sendDineInOrderToKitchen() async {
     if (_cart.isEmpty || _selectedTableId == null) return;
     setState(() => _isLoading = true);
     try {
@@ -1602,7 +2078,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Add-on order sent to kitchen for Table $tableNum.'),
+          content: Text(openOrders.isEmpty 
+              ? 'Order sent to kitchen for Table $tableNum.'
+              : 'Add-on order sent to kitchen for Table $tableNum.'),
           backgroundColor: const Color(0xFF0D9488),
           duration: const Duration(seconds: 4),
           action: SnackBarAction(

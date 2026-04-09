@@ -162,6 +162,7 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                             OrderType.dineIn      => 'Dine-in',
                             OrderType.roomService => 'Room Service',
                             OrderType.takeaway    => 'Takeaway',
+                            OrderType.delivery    => 'Delivery',
                           })),
                         ],
                       ),

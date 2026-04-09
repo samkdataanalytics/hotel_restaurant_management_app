@@ -68,6 +68,21 @@ class RestaurantService {
         if (hotelId != null) 'hotel_id': hotelId,
       };
 
+  /// Converts a Supabase TIMESTAMPTZ string to a local [DateTime].
+  ///
+  /// The app saves `DateTime.now()` (local time) via `toIso8601String()` which
+  /// omits timezone info → Supabase stores it as UTC. On read-back the "+00:00"
+  /// suffix causes `DateTime.parse` to return a UTC DateTime whose epoch is
+  /// shifted by the local UTC-offset. Stripping the offset recovers the
+  /// original local-time value so date-range filters in analytics work.
+  static DateTime _parseLocalTimestamp(String raw) {
+    final dt = DateTime.parse(raw);
+    if (!dt.isUtc) return dt;
+    // Re-create with the same face-value but as local time.
+    return DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute,
+        dt.second, dt.millisecond, dt.microsecond);
+  }
+
   static RestaurantOrder _orderFromRow(Map<String, dynamic> r) =>
       RestaurantOrder.fromMap({
         'id': r['id'],
@@ -77,13 +92,16 @@ class RestaurantService {
         'status': r['status'] ?? 'pending',
         'paymentStatus': r['payment_status'] ?? 'unpaid',
         'bookingId': r['booking_id'],
-        'createdAt': r['created_at'],
+        'createdAt': _parseLocalTimestamp(r['created_at'] as String)
+            .toIso8601String(),
         'items': r['items'] ?? [],
         'inventoryRestored': r['inventory_restored'] ?? false,
         'parentOrderId': r['parent_order_id'],
         'discountType': r['discount_type'],
         'discountAmount': r['discount_amount'],
         'roomNumber': r['room_number'],
+        'deliveryPlatform': r['delivery_platform'],
+        'deliveryOrderRef': r['delivery_order_ref'],
       });
 
   Map<String, dynamic> _orderToRow(RestaurantOrder o) => {
@@ -100,6 +118,10 @@ class RestaurantService {
         'parent_order_id': o.parentOrderId,
         'discount_type': o.discountType,
         'discount_amount': o.discountAmount,
+        'room_number': o.roomNumber,
+        if (o.deliveryPlatform != null) 'delivery_platform': o.deliveryPlatform,
+        if (o.deliveryOrderRef != null && o.deliveryOrderRef!.isNotEmpty)
+          'delivery_order_ref': o.deliveryOrderRef,
         if (hotelId != null) 'hotel_id': hotelId,
       };
 
@@ -748,11 +770,33 @@ class RestaurantService {
       refundedQuantity: newRefundedQty,
     );
 
+    // Check if ALL items are now fully refunded → auto-cancel the order
+    final allRefunded = updatedItems.every((i) => i.isFullyRefunded);
+
     await _db.from('restaurant_orders').update({
       'items': updatedItems.map((e) => e.toMap()).toList(),
+      if (allRefunded) 'status': 'cancelled',
     }).eq('id', orderId);
 
     // NOTE: Inventory is NOT restored on refunds — food was already served.
+
+    // If fully refunded, free the table.
+    if (allRefunded && order.tableId != null) {
+      // Only free the table when there are no other open orders on it.
+      final siblingRows = await _db
+          .from('restaurant_orders')
+          .select('id')
+          .eq('table_id', order.tableId!)
+          .neq('id', orderId)
+          .neq('status', 'cancelled')
+          .not('payment_status', 'in', '("paid","chargedToRoom")');
+      if (siblingRows.isEmpty) {
+        await _db
+            .from('restaurant_tables')
+            .update({'status': 'available'})
+            .eq('id', order.tableId!);
+      }
+    }
 
     if (order.paymentStatus == PaymentStatus.chargedToRoom &&
         order.bookingId != null) {

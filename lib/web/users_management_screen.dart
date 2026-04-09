@@ -8,6 +8,7 @@ import '../models/staff_permission.dart';
 import '../providers/app_auth_provider.dart';
 import '../services/staff_service.dart';
 import '../services/organization_service.dart';
+import 'widgets/upgrade_plan_dialog.dart';
 
 class UsersManagementScreen extends ConsumerStatefulWidget {
   const UsersManagementScreen({super.key});
@@ -50,10 +51,22 @@ class _UsersManagementScreenState
     });
   }
 
+  void _showPlanLimitDialog() {
+    showUpgradePlanDialog(context, ref, blockedResource: 'team members');
+  }
+
   Future<void> _addMember() async {
     final property = ref.read(activePropertyProvider);
     final authState = ref.read(authProvider).valueOrNull;
     if (property == null || authState?.organization == null) return;
+
+    final orgId = authState!.organization!.id;
+    final canAdd = await OrganizationService().canAddStaff(orgId);
+    if (!canAdd && mounted) {
+      _showPlanLimitDialog();
+      return;
+    }
+    if (!mounted) return;
 
     final result = await showDialog<bool>(
       context: context,

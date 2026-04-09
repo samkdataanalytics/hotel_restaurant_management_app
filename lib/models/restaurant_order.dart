@@ -1,6 +1,6 @@
 import 'menu_item.dart';
 
-enum OrderType { dineIn, takeaway, roomService }
+enum OrderType { dineIn, takeaway, roomService, delivery }
 enum OrderStatus { pending, preparing, ready, served, cancelled }
 enum PaymentStatus { unpaid, paid, chargedToRoom }
 
@@ -11,6 +11,7 @@ class OrderItem {
   String notes;
   bool isRefunded;       // true = ALL units refunded (full refund)
   int refundedQuantity;  // number of units refunded so far (partial or full)
+  Map<String, List<String>> selectedModifiers; // modifier name -> list of selected option names
 
   OrderItem({
     required this.id,
@@ -19,6 +20,7 @@ class OrderItem {
     this.notes = '',
     this.isRefunded = false,
     this.refundedQuantity = 0,
+    this.selectedModifiers = const {},
   });
 
   /// Units still charged (ordered minus any refunds).
@@ -30,8 +32,24 @@ class OrderItem {
   /// True when no remaining chargeable units exist.
   bool get isFullyRefunded => isRefunded || refundedQuantity >= quantity;
 
+  /// Computed unit price factoring in modifiers.
+  double get unitPrice {
+    double modsTotal = 0.0;
+    for (final mod in menuItem.modifiers) {
+      final selected = selectedModifiers[mod.name] ?? [];
+      for (final optName in selected) {
+        final opt = mod.options.firstWhere(
+          (o) => o.name == optName,
+          orElse: () => MenuModifierOption(name: optName, priceAdjustment: 0.0),
+        );
+        modsTotal += opt.priceAdjustment;
+      }
+    }
+    return menuItem.price + modsTotal;
+  }
+
   /// Amount still due (only the un-refunded portion).
-  double get subtotal => menuItem.price * activeQuantity;
+  double get subtotal => unitPrice * activeQuantity;
 
   OrderItem copyWith({
     String? id,
@@ -40,6 +58,7 @@ class OrderItem {
     String? notes,
     bool? isRefunded,
     int? refundedQuantity,
+    Map<String, List<String>>? selectedModifiers,
   }) {
     return OrderItem(
       id: id ?? this.id,
@@ -48,6 +67,7 @@ class OrderItem {
       notes: notes ?? this.notes,
       isRefunded: isRefunded ?? this.isRefunded,
       refundedQuantity: refundedQuantity ?? this.refundedQuantity,
+      selectedModifiers: selectedModifiers ?? this.selectedModifiers,
     );
   }
 
@@ -59,6 +79,7 @@ class OrderItem {
       'notes': notes,
       'isRefunded': isRefunded,
       'refundedQuantity': refundedQuantity,
+      'selectedModifiers': selectedModifiers,
     };
   }
 
@@ -71,10 +92,13 @@ class OrderItem {
       quantity: qty,
       notes: map['notes'] ?? '',
       isRefunded: wasFullyRefunded,
-      // backwards-compat: if old record had isRefunded=true, treat all units as refunded
       refundedQuantity: wasFullyRefunded
           ? qty
           : (map['refundedQuantity']?.toInt() ?? 0),
+      selectedModifiers: (map['selectedModifiers'] as Map<String, dynamic>?)?.map(
+            (k, v) => MapEntry(k, (v as List).map((e) => e.toString()).toList()),
+          ) ??
+          {},
     );
   }
 }
@@ -105,6 +129,12 @@ class RestaurantOrder {
   /// Null for dine-in / takeaway orders.
   final String? roomNumber;
 
+  /// For delivery orders: platform name e.g. 'UberEats', 'PickMe', 'Other'.
+  final String? deliveryPlatform;
+
+  /// For delivery orders: the platform's own order reference / ID.
+  final String? deliveryOrderRef;
+
   RestaurantOrder({
     required this.id,
     required this.orderNumber,
@@ -120,6 +150,8 @@ class RestaurantOrder {
     this.discountType,
     this.discountAmount = 0.0,
     this.roomNumber,
+    this.deliveryPlatform,
+    this.deliveryOrderRef,
   });
 
   double get itemsTotal => items.fold(0.0, (sum, item) => sum + item.subtotal);
@@ -163,6 +195,8 @@ class RestaurantOrder {
     Object? discountType = _unset, // use Object? so null can be explicitly passed
     double? discountAmount,
     String? roomNumber,
+    String? deliveryPlatform,
+    String? deliveryOrderRef,
   }) {
     return RestaurantOrder(
       id: id ?? this.id,
@@ -179,6 +213,8 @@ class RestaurantOrder {
       discountType: identical(discountType, _unset) ? this.discountType : discountType as String?,
       discountAmount: discountAmount ?? this.discountAmount,
       roomNumber: roomNumber ?? this.roomNumber,
+      deliveryPlatform: deliveryPlatform ?? this.deliveryPlatform,
+      deliveryOrderRef: deliveryOrderRef ?? this.deliveryOrderRef,
     );
   }
 
@@ -198,6 +234,8 @@ class RestaurantOrder {
       'discountType': discountType,
       'discountAmount': discountAmount,
       'roomNumber': roomNumber,
+      'deliveryPlatform': deliveryPlatform,
+      'deliveryOrderRef': deliveryOrderRef,
     };
   }
 
@@ -226,6 +264,8 @@ class RestaurantOrder {
       discountType: map['discountType'] as String?,
       discountAmount: (map['discountAmount'] as num?)?.toDouble() ?? 0.0,
       roomNumber: map['roomNumber'] as String?,
+      deliveryPlatform: map['deliveryPlatform'] as String?,
+      deliveryOrderRef: map['deliveryOrderRef'] as String?,
     );
   }
 }

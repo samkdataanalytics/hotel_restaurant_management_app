@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:js_interop';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -17,6 +18,31 @@ import '../services/restaurant_service.dart';
 import '../models/staff_permission.dart';
 import '../services/booking_service.dart';
 import 'restaurant_invoice_dialog.dart';
+
+// ── Web Audio beep (JS interop) ──────────────────────────────────────────────
+@JS('eval')
+external JSAny? _jsEval(JSString code);
+
+void _playNotificationBeep() {
+  try {
+    _jsEval(r'''
+      (() => {
+        try {
+          const ctx = new AudioContext();
+          const g = ctx.createGain();
+          g.connect(ctx.destination);
+          g.gain.value = 0.25;
+          const o1 = ctx.createOscillator();
+          o1.connect(g); o1.frequency.value = 880; o1.type = 'sine';
+          o1.start(ctx.currentTime); o1.stop(ctx.currentTime + 0.12);
+          const o2 = ctx.createOscillator();
+          o2.connect(g); o2.frequency.value = 1100; o2.type = 'sine';
+          o2.start(ctx.currentTime + 0.18); o2.stop(ctx.currentTime + 0.3);
+        } catch(e) {}
+      })();
+    '''.toJS);
+  } catch (_) {}
+}
 
 class KitchenScreen extends ConsumerStatefulWidget {
   const KitchenScreen({super.key});
@@ -38,6 +64,8 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   Timer? _refreshTimer;
   RealtimeChannel? _realtimeChannel;
   bool _isLoading = true;
+  int _previousPendingCount = 0;
+  bool _soundEnabled = true;
 
   @override
   void initState() {
@@ -79,6 +107,11 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
           o.status != OrderStatus.cancelled).toList();
       todayOrders.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       if (!mounted) return;
+      final newPendingCount = todayOrders.where((o) => o.status == OrderStatus.pending).length;
+      if (_soundEnabled && newPendingCount > _previousPendingCount && _previousPendingCount >= 0) {
+        _playNotificationBeep();
+      }
+      _previousPendingCount = newPendingCount;
       setState(() {
         _allOrders = todayOrders;
         _tables = tables;
@@ -170,6 +203,15 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                 color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF0F172A),
         actions: [
+          // Sound toggle
+          IconButton(
+            icon: Icon(
+              _soundEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+              color: _soundEnabled ? Colors.green.shade300 : Colors.white38,
+            ),
+            tooltip: _soundEnabled ? 'Mute alerts' : 'Unmute alerts',
+            onPressed: () => setState(() => _soundEnabled = !_soundEnabled),
+          ),
           IconButton(
               icon: const Icon(Icons.refresh, color: Colors.white),
               onPressed: _loadData),
@@ -697,7 +739,6 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
         restaurantService: _restaurantService,
         bookingService: _bookingService,
         onComplete: () {
-          Navigator.pop(context);
           _loadData(silent: true);
         },
       ),
@@ -858,6 +899,8 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
         allOrders: updatedOrders.length > 1 ? updatedOrders : null,
       ),
     );
+    if (!mounted) return;
+    Navigator.pop(context);
     widget.onComplete();
   }
 
@@ -879,6 +922,8 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
         allOrders: updatedOrders.length > 1 ? updatedOrders : null,
       ),
     );
+    if (!mounted) return;
+    Navigator.pop(context);
     widget.onComplete();
   }
 
