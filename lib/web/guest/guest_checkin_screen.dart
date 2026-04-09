@@ -224,11 +224,11 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
           width: size, height: size,
           fit: BoxFit.contain,
           errorBuilder: (_, __, ___) => Image.asset(
-            'assets/images/hotrest_logo.png', width: size, height: size),
+            'assets/images/hotrest_logo.webp', width: size, height: size),
         ),
       );
     }
-    return Image.asset('assets/images/hotrest_logo.png', width: size, height: size);
+    return Image.asset('assets/images/hotrest_logo.webp', width: size, height: size);
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────

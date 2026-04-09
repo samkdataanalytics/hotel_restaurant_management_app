@@ -663,14 +663,14 @@ class _AppShellState extends ConsumerState<AppShell> {
                     height: 40,
                     fit: BoxFit.contain,
                     errorBuilder: (_, __, ___) => Image.asset(
-                      'assets/images/hotrest_logo.png',
+                      'assets/images/hotrest_logo.webp',
                       width: 40,
                       height: 40,
                       fit: BoxFit.contain,
                     ),
                   )
                 : Image.asset(
-                    'assets/images/hotrest_logo.png',
+                    'assets/images/hotrest_logo.webp',
                     width: 40,
                     height: 40,
                     fit: BoxFit.contain,

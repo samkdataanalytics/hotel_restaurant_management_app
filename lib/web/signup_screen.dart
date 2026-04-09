@@ -169,7 +169,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
       children: [
         // Logo
         Image.asset(
-          'assets/images/hotrest_logo.png',
+          'assets/images/hotrest_logo.webp',
           width: 140,
           height: 140,
           fit: BoxFit.contain,
