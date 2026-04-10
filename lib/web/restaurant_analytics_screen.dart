@@ -153,7 +153,7 @@ class _RestaurantAnalyticsScreenState
       _refundedOrdersCount = 0;
       for (final o in valid) {
         final refundedInOrder = o.items.fold(
-            0.0, (s, i) => s + i.menuItem.price * o.discountFactor * i.refundedQuantity);
+            0.0, (s, i) => s + i.unitPrice * o.discountFactor * i.refundedQuantity);
         if (refundedInOrder > 0) {
           _totalRefundedAmount += refundedInOrder;
           _refundedOrdersCount++;

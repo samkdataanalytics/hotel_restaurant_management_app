@@ -52,7 +52,7 @@ class _WebApp extends ConsumerWidget {
         final name = Provider.of<HotelSession>(ctx, listen: false)
             .settings
             ?.displayName;
-        return (name != null && name.isNotEmpty) ? name : 'Hotel Management';
+        return (name != null && name.isNotEmpty) ? name : 'HotRest';
       },
       debugShowCheckedModeBanner: false,
       theme: AppTheme.webTheme,

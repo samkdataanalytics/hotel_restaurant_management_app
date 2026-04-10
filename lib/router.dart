@@ -50,13 +50,16 @@ class AppRoutes {
 // ─── Router provider ─────────────────────────────────────────────────────────
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authAsync = ref.watch(authProvider);
-
+  // Do NOT watch authProvider here — that would recreate the GoRouter (and
+  // reset the nav stack) on every auth state change, disposing screens that
+  // are mid-async-operation and swallowing their error handling.
+  // Instead, the GoRouter is created once; refreshListenable fires on auth
+  // changes, triggering a re-evaluation of the redirect below.
   return GoRouter(
     initialLocation: AppRoutes.landing,
     refreshListenable: _AuthChangeNotifier(ref),
     redirect: (context, state) {
-      final auth = authAsync.valueOrNull;
+      final auth = ref.read(authProvider).valueOrNull;
       if (auth == null || auth.isLoading) return null;
 
       final loc = state.matchedLocation;

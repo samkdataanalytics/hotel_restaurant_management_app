@@ -506,6 +506,24 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                             Text(item.menuItem.name,
                                 style: const TextStyle(
                                     color: Colors.white, fontSize: 16)),
+                            if (item.selectedModifiers.isNotEmpty)
+                              ...item.selectedModifiers.entries
+                                  .where((e) => e.value.isNotEmpty)
+                                  .map((e) {
+                                    final counts = <String, int>{};
+                                    for (final n in e.value) counts[n] = (counts[n] ?? 0) + 1;
+                                    final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        '${e.key}: $summary',
+                                        style: TextStyle(
+                                          color: Colors.blue.shade200,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    );
+                                  }),
                             if (item.notes.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
@@ -632,6 +650,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                 ...visibleItems.map((item) => Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('${item.activeQuantity}x',
                               style: TextStyle(
@@ -640,9 +659,29 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                   fontSize: 15)),
                           const SizedBox(width: 10),
                           Expanded(
-                              child: Text(item.menuItem.name,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 15))),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item.menuItem.name,
+                                      style: const TextStyle(
+                                          color: Colors.white, fontSize: 15)),
+                                  if (item.selectedModifiers.isNotEmpty)
+                                    ...item.selectedModifiers.entries
+                                        .where((e) => e.value.isNotEmpty)
+                                        .map((e) {
+                                          final counts = <String, int>{};
+                                          for (final n in e.value) counts[n] = (counts[n] ?? 0) + 1;
+                                          final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
+                                          return Text(
+                                            '${e.key}: $summary',
+                                            style: TextStyle(
+                                              color: Colors.blue.shade200,
+                                              fontSize: 11,
+                                            ),
+                                          );
+                                        }),
+                                ],
+                              )),
                         ],
                       ),
                     )),

@@ -34,18 +34,23 @@ class OrderItem {
 
   /// Computed unit price factoring in modifiers.
   double get unitPrice {
-    double modsTotal = 0.0;
+    // Each option selected in a modifier group is treated as a separate unit:
+    //   e.g. Size: Medium (+$2) + Large (+$4) on a $5 item
+    //        = ($5+$2) + ($5+$4) = $16, not $5+$2+$4 = $11
+    int extraUnits = 0;
+    double adjustmentsTotal = 0.0;
     for (final mod in menuItem.modifiers) {
       final selected = selectedModifiers[mod.name] ?? [];
+      if (selected.length > 1) extraUnits += selected.length - 1;
       for (final optName in selected) {
         final opt = mod.options.firstWhere(
           (o) => o.name == optName,
           orElse: () => MenuModifierOption(name: optName, priceAdjustment: 0.0),
         );
-        modsTotal += opt.priceAdjustment;
+        adjustmentsTotal += opt.priceAdjustment;
       }
     }
-    return menuItem.price + modsTotal;
+    return menuItem.price * (1 + extraUnits) + adjustmentsTotal;
   }
 
   /// Amount still due (only the un-refunded portion).

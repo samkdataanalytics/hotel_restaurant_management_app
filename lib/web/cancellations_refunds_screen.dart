@@ -115,7 +115,7 @@ class _CancellationsRefundsScreenState
         0.0,
         (s, o) => s +
             o.items.fold(
-                0.0, (si, i) => si + i.menuItem.price * i.quantity));
+                0.0, (si, i) => si + i.unitPrice * i.quantity));
     _inventoryRestoredCount =
         cancelledOrders.where((o) => o.inventoryRestored).length;
 
@@ -135,11 +135,11 @@ class _CancellationsRefundsScreenState
             itemEmoji: item.menuItem.imageUrl.isNotEmpty
                 ? item.menuItem.imageUrl
                 : '🍽️',
-            unitPrice: item.menuItem.price,
+            unitPrice: item.unitPrice,
             orderedQty: item.quantity,
             refundedQty: item.refundedQuantity,
           ));
-          totalRefVal += item.menuItem.price * item.refundedQuantity;
+          totalRefVal += item.unitPrice * item.refundedQuantity;
           hasRefund = true;
         }
       }
@@ -320,7 +320,7 @@ class _CancellationsRefundsScreenState
   Widget _cancelledCard(_CancelledRow row) {
     final o = row.order;
     final grossValue =
-        o.items.fold(0.0, (s, i) => s + i.menuItem.price * i.quantity);
+        o.items.fold(0.0, (s, i) => s + i.unitPrice * i.quantity);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -381,7 +381,7 @@ class _CancellationsRefundsScreenState
                       ),
                     ),
                     Text(
-                      _currency.format(item.menuItem.price * item.quantity),
+                      _currency.format(item.unitPrice * item.quantity),
                       style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade400,

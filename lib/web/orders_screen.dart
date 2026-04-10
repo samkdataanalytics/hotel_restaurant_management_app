@@ -161,7 +161,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) {
           final totalRefund = refundable.fold(0.0, (sum, item) {
-            return sum + item.menuItem.price * order.discountFactor * (refundQtys[item.id] ?? 0);
+            return sum + item.unitPrice * order.discountFactor * (refundQtys[item.id] ?? 0);
           });
           final anySelected = refundQtys.values.any((q) => q > 0);
 
@@ -190,7 +190,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                   ...refundable.map((item) {
                     final qty = refundQtys[item.id] ?? 0;
                     final max = item.activeQuantity;
-                    final lineRefund = item.menuItem.price * order.discountFactor * qty;
+                    final lineRefund = item.unitPrice * order.discountFactor * qty;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Row(
@@ -204,7 +204,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600)),
                                 Text(
-                                  '${_currency.format(item.menuItem.price * order.discountFactor)} each'
+                                  '${_currency.format(item.unitPrice * order.discountFactor)} each'
                                   ' · ${item.activeQuantity} available',
                                   style: TextStyle(
                                       fontSize: 11,
@@ -673,7 +673,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     final canCancel = !isCancelled && !isServed;
     final hasRefundable = isServed && order.items.any((i) => !i.isFullyRefunded);
     final totalRefunded = order.items.fold(
-        0.0, (s, i) => s + i.menuItem.price * order.discountFactor * i.refundedQuantity);
+        0.0, (s, i) => s + i.unitPrice * order.discountFactor * i.refundedQuantity);
 
     return Container(
       margin: nested ? EdgeInsets.zero : const EdgeInsets.only(bottom: 12),

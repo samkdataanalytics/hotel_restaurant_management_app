@@ -475,11 +475,24 @@ class InvoiceService {
 
       for (final item in order.items) {
         if (item.isFullyRefunded) continue;
+        // Build description with modifier details
+        String desc = item.menuItem.name;
+        if (item.selectedModifiers.isNotEmpty) {
+          final modParts = item.selectedModifiers.entries
+              .where((e) => e.value.isNotEmpty)
+              .map((e) {
+                final counts = <String, int>{};
+                for (final n in e.value) counts[n] = (counts[n] ?? 0) + 1;
+                final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
+                return '${e.key}: $summary';
+              }).toList();
+          if (modParts.isNotEmpty) desc += '\n${modParts.join(' · ')}';
+        }
         rowData.add({
           'isSubHeader': false,
-          'desc':  item.menuItem.name,
+          'desc':  desc,
           'qty':   '${item.activeQuantity}',
-          'price': fmt.format(item.menuItem.price),
+          'price': fmt.format(item.unitPrice),
           'total': fmt.format(item.subtotal),
         });
       }
