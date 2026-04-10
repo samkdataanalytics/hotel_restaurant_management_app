@@ -38,6 +38,7 @@ class RestaurantService {
         'imageUrl': r['image_url'] ?? '',
         'isAvailable': r['is_available'] ?? true,
         'ingredients': r['ingredients'] ?? [],
+        'modifiers': r['modifiers'] ?? [],
       });
 
   Map<String, dynamic> _menuItemToRow(MenuItem item) => {
@@ -49,6 +50,7 @@ class RestaurantService {
         'image_url': item.imageUrl,
         'is_available': item.isAvailable,
         'ingredients': item.ingredients.map((e) => e.toMap()).toList(),
+        'modifiers': item.modifiers.map((e) => e.toMap()).toList(),
         if (hotelId != null) 'hotel_id': hotelId,
       };
 
@@ -800,7 +802,7 @@ class RestaurantService {
 
     if (order.paymentStatus == PaymentStatus.chargedToRoom &&
         order.bookingId != null) {
-      final refundAmount = item.menuItem.price * actualQty;
+      final refundAmount = item.unitPrice * actualQty;
       await _adjustRoomChargeForRefund(order, refundAmount);
     }
   }

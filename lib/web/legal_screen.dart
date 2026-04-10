@@ -298,7 +298,7 @@ class _TermsContent extends StatelessWidget {
         ]),
         _Section(heading: '9. Contact', children: [
           const _Body(
-              'For any questions about these Terms, please contact us at legal@hotrest.io.'),
+              'For any questions about these Terms, please contact us at kasun@ideadeck.biz.'),
         ]),
       ],
     );
@@ -327,7 +327,7 @@ class _ReturnsContent extends StatelessWidget {
           const _Body(
               'New paid subscriptions (Starter and Pro) are eligible for a full refund if requested within 14 days of the initial charge, provided the account has not exceeded reasonable usage limits (defined as fewer than 100 orders processed during the trial period).'),
           const _Body(
-              'To request a refund within the trial period, contact support@hotrest.io with your account email and reason for the refund.'),
+              'To request a refund within the trial period, contact kasun@ideadeck.biz with your account email and reason for the refund.'),
         ]),
         _Section(heading: '3. After the Trial Period', children: [
           const _Body(
@@ -349,7 +349,7 @@ class _ReturnsContent extends StatelessWidget {
               'If you initiate a chargeback or payment dispute with your bank without first contacting us, we reserve the right to suspend your account until the matter is resolved.'),
         ]),
         _Section(heading: '7. How to Request a Refund', children: [
-          const _Body('Please email support@hotrest.io with:'),
+          const _Body('Please email kasun@ideadeck.biz with:'),
           const _Bullet('Your registered email address.'),
           const _Bullet('The invoice number or date of charge.'),
           const _Bullet('The reason for the refund request.'),
@@ -428,7 +428,7 @@ class _PrivacyContent extends StatelessWidget {
           const _Bullet('Object to or restrict certain processing activities.'),
           const _Bullet('Export your data in a portable format.'),
           const _Body(
-              'To exercise any of these rights, please email privacy@hotrest.io. We will respond within 30 days.'),
+              'To exercise any of these rights, please email kasun@ideadeck.biz. We will respond within 30 days.'),
         ]),
         _Section(heading: '8. Children\'s Privacy', children: [
           const _Body(
@@ -440,7 +440,7 @@ class _PrivacyContent extends StatelessWidget {
         ]),
         _Section(heading: '10. Contact', children: [
           const _Body(
-              'For privacy-related questions or to exercise your rights, please contact our Data Protection team at privacy@hotrest.io.'),
+              'For privacy-related questions or to exercise your rights, please contact our Data Protection team at kasun@ideadeck.biz.'),
         ]),
       ],
     );

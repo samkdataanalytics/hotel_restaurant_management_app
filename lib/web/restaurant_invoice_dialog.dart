@@ -241,6 +241,24 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                                                       fontWeight:
                                                           FontWeight.w500,
                                                       fontSize: 13)),
+                                              ...item.selectedModifiers.entries
+                                                  .where((e) => e.value.isNotEmpty)
+                                                  .map((e) => Padding(
+                                                        padding: const EdgeInsets.only(top: 2),
+                                                        child: Row(
+                                                          children: [
+                                                            Text('${e.key}: ',
+                                                                style: TextStyle(
+                                                                    fontSize: 10,
+                                                                    color: Colors.grey.shade500,
+                                                                    fontWeight: FontWeight.w600)),
+                                                            Text(e.value.join(', '),
+                                                                style: TextStyle(
+                                                                    fontSize: 10,
+                                                                    color: Colors.grey.shade600)),
+                                                          ],
+                                                        ),
+                                                      )),
                                               if (item.refundedQuantity > 0)
                                                 Text(
                                                   '${item.refundedQuantity} unit(s) refunded',
@@ -266,7 +284,7 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                                   Expanded(
                                     child: Text(
                                         currency
-                                            .format(item.menuItem.price),
+                                            .format(item.unitPrice),
                                         textAlign: TextAlign.end,
                                         style: TextStyle(
                                             color: Colors.grey.shade600,

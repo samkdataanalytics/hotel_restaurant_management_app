@@ -219,8 +219,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     for (final mod in item.modifiers) {
       selections[mod.name] = [];
     }
-    
-    final result = await showDialog<Map<String, List<String>>>(
+    int qty = 1;
+
+    final result = await showDialog<({Map<String, List<String>> mods, int qty})>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) {
@@ -240,68 +241,111 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: item.modifiers.map((mod) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(mod.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                              if (mod.isRequired)
-                                const Text(' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                              const Spacer(),
-                              Text(mod.allowMultiple ? '(Choose multiple)' : '(Choose 1)',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          ...mod.options.map((opt) {
-                            final isSelected = selections[mod.name]!.contains(opt.name);
-                            final priceText = opt.priceAdjustment > 0 ? ' (+${_currencyFormat.format(opt.priceAdjustment)})' : '';
-                            return InkWell(
-                              onTap: () {
-                                setSt(() {
-                                  if (mod.allowMultiple) {
-                                    if (isSelected) selections[mod.name]!.remove(opt.name);
-                                    else selections[mod.name]!.add(opt.name);
-                                  } else {
-                                    selections[mod.name] = [opt.name];
-                                  }
-                                });
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 6),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      mod.allowMultiple 
-                                          ? (isSelected ? Icons.check_box : Icons.check_box_outline_blank)
-                                          : (isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked),
-                                      color: isSelected ? _kOrange : Colors.grey.shade400,
-                                      size: 20,
+                  children: [
+                    ...item.modifiers.map((mod) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(mod.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                if (mod.isRequired)
+                                  const Text(' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                const Spacer(),
+                                Text(mod.allowMultiple ? '(Qty per option)' : '(Choose 1)',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ...mod.options.map((opt) {
+                              final priceLabel = opt.priceAdjustment == 0
+                                  ? _currencyFormat.format(item.price)
+                                  : '+${_currencyFormat.format(opt.priceAdjustment)}';
+                              if (mod.allowMultiple) {
+                                final optQty = selections[mod.name]!.where((n) => n == opt.name).length;
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 5),
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: Text(opt.name, style: const TextStyle(fontSize: 14))),
+                                      Text(priceLabel,
+                                          style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                                      const SizedBox(width: 12),
+                                      _qtyBtn(
+                                        icon: Icons.remove_rounded,
+                                        enabled: optQty > 0,
+                                        onTap: () => setSt(() => selections[mod.name]!.remove(opt.name)),
+                                      ),
+                                      SizedBox(
+                                        width: 36,
+                                        child: Text('$optQty',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                                color: optQty > 0 ? _kOrange : Colors.black26)),
+                                      ),
+                                      _qtyBtn(
+                                        icon: Icons.add_rounded,
+                                        enabled: true,
+                                        onTap: () => setSt(() => selections[mod.name]!.add(opt.name)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              } else {
+                                final isSelected = selections[mod.name]!.contains(opt.name);
+                                return InkWell(
+                                  onTap: () => setSt(() => selections[mod.name] = [opt.name]),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                          color: isSelected ? _kOrange : Colors.grey.shade400,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(child: Text(opt.name, style: const TextStyle(fontSize: 14))),
+                                        Text(priceLabel,
+                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                                      ],
                                     ),
-                                    const SizedBox(width: 10),
-                                    Text(opt.name + priceText, style: const TextStyle(fontSize: 14)),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                                  ),
+                                );
+                              }
+                            }),
+                          ],
+                        ),
+                      );
+                    }),
+                    const Divider(),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Text('Quantity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        _qtyBtn(icon: Icons.remove_rounded, enabled: qty > 1, onTap: () => setSt(() => qty--)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text('$qty', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                        ),
+                        _qtyBtn(icon: Icons.add_rounded, enabled: true, onTap: () => setSt(() => qty++)),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
-                onPressed: isValid ? () => Navigator.pop(ctx, selections) : null,
+                onPressed: isValid ? () => Navigator.pop(ctx, (mods: selections, qty: qty)) : null,
                 style: ElevatedButton.styleFrom(backgroundColor: _kOrange, foregroundColor: Colors.white),
-                child: const Text('Add to Cart'),
+                child: Text('Add $qty to Cart'),
               )
             ],
           );
@@ -310,8 +354,25 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     );
 
     if (result != null) {
-      _addToCart(item, selectedModifiers: result);
+      for (int i = 0; i < result.qty; i++) {
+        _addToCart(item, selectedModifiers: result.mods);
+      }
     }
+  }
+
+  Widget _qtyBtn({required IconData icon, required bool enabled, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: enabled ? _kOrange.withOpacity(0.12) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, size: 18, color: enabled ? _kOrange : Colors.grey.shade400),
+      ),
+    );
   }
 
   void _updateQuantity(int index, int delta) {
@@ -693,7 +754,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       padding: EdgeInsets.all(pad),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: cols,
-        childAspectRatio: 0.85,
+        childAspectRatio: 0.72,
         crossAxisSpacing: gap,
         mainAxisSpacing: gap,
       ),
@@ -747,18 +808,39 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                         color: unavailable ? Colors.red.shade400 : _kOrange,
                         fontSize: 13),
                   ),
-                  if (item.modifiers.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text('+ Variants', style: TextStyle(fontSize: 9, color: Colors.blue.shade700, fontWeight: FontWeight.w700)),
-                      ),
+                  if (item.modifiers.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 6),
+                      child: Divider(height: 1, thickness: 0.8),
                     ),
+                    ...item.modifiers.take(2).map((mod) {
+                      // Show all option names on one line; append price only where non-zero
+                      final optLabels = mod.options.map((o) => o.priceAdjustment != 0
+                          ? '${o.name} (+${_currencyFormat.format(o.priceAdjustment)})'
+                          : o.name).join('  ·  ');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(mod.name,
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.grey.shade500)),
+                            const SizedBox(height: 2),
+                            Text(optLabels,
+                                style: TextStyle(fontSize: 9, color: Colors.grey.shade700),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      );
+                    }),
+                    if (item.modifiers.length > 2)
+                      Text('+${item.modifiers.length - 2} more groups',
+                          style: TextStyle(fontSize: 9, color: Colors.grey.shade400)),
+                  ],
                 ],
               ),
               if (unavailable)
@@ -1357,13 +1439,37 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                       style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                   if (item.selectedModifiers.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        item.selectedModifiers.entries
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: item.selectedModifiers.entries
                             .where((e) => e.value.isNotEmpty)
-                            .map((e) => e.value.join(", "))
-                            .join(' · '),
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                            .map((e) {
+                              // Collapse duplicates: ['Medium','Medium','Large'] → 'Medium ×2, Large'
+                              final counts = <String, int>{};
+                              for (final n in e.value) counts[n] = (counts[n] ?? 0) + 1;
+                              final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 2),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('${e.key}: ',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey.shade500,
+                                            fontWeight: FontWeight.w600)),
+                                    Flexible(
+                                      child: Text(summary,
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.grey.shade700)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            })
+                            .toList(),
                       ),
                     ),
                 ],
