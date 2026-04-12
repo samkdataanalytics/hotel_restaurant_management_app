@@ -2,6 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/organization_service.dart';
 
+/// Holds the Step 1 (Company Details) data while the user is mid-onboarding.
+/// Cleared once onboarding completes.
+final onboardingStep1DataProvider =
+    StateProvider<Map<String, String>>((ref) => {});
+
 SupabaseClient get _db => Supabase.instance.client;
 
 // ─── App auth state ───────────────────────────────────────────────────────────

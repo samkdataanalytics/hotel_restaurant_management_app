@@ -1068,6 +1068,47 @@ class _AppShellState extends ConsumerState<AppShell> {
           ),
         ),
 
+        // Account Settings
+        Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: expanded ? 10 : 8,
+            vertical: 2,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => context.go('/app/account'),
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: expanded ? 12 : 0,
+                  vertical: 10,
+                ),
+                child: Row(
+                  mainAxisAlignment: expanded
+                      ? MainAxisAlignment.start
+                      : MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.manage_accounts_rounded,
+                      size: 20,
+                      color: Colors.white38,
+                    ),
+                    if (expanded) ...[
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Account Settings',
+                        style: TextStyle(color: Colors.white54, fontSize: 13),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+
         // Logout
         Padding(
           padding: EdgeInsets.symmetric(
@@ -1440,9 +1481,42 @@ class _ManagePropertiesDialogState extends State<_ManagePropertiesDialog> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Property'),
-        content: Text(
-          'Permanently delete "${p.name}"?\n\nAll rooms, bookings, and data for this property will be deleted. This cannot be undone.',
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppTheme.danger),
+            const SizedBox(width: 10),
+            const Text('Deactivate Property'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Deactivate "${p.name}"?',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.danger.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.danger.withOpacity(0.2)),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('• The property will be hidden from your dashboard',
+                      style: TextStyle(fontSize: 13)),
+                  SizedBox(height: 4),
+                  Text('• All bookings and historical data are preserved',
+                      style: TextStyle(fontSize: 13)),
+                  SizedBox(height: 4),
+                  Text('• This can be reversed by contacting support',
+                      style: TextStyle(fontSize: 13)),
+                ],
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -1454,8 +1528,9 @@ class _ManagePropertiesDialogState extends State<_ManagePropertiesDialog> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.danger,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Text('Delete'),
+            child: const Text('Deactivate'),
           ),
         ],
       ),
@@ -1471,7 +1546,7 @@ class _ManagePropertiesDialogState extends State<_ManagePropertiesDialog> {
     } catch (e) {
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete property: $e')),
+        SnackBar(content: Text('Failed to deactivate property: $e')),
       );
     }
   }

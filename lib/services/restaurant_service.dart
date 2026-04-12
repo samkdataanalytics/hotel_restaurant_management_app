@@ -331,6 +331,15 @@ class RestaurantService {
     });
   }
 
+  /// Computes the current cost for [item] live from today's ingredient prices.
+  /// Always returns a fresh value — not affected by stale stored records.
+  Future<double?> getComputedCostForItem(MenuItem item) async {
+    if (item.ingredients.isEmpty) return null;
+    final allPrices = await getIngredientPrices();
+    final cost = _computeCost(item.ingredients, allPrices);
+    return cost > 0 ? cost : null;
+  }
+
   // ─── COST RECORDS ─────────────────────────────────────────────────────────
 
   Future<List<MenuItemCostRecord>> getCostRecordsForItem(

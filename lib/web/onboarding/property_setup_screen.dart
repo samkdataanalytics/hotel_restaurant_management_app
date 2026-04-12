@@ -92,7 +92,11 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
   String _selectedTimezone = 'UTC';
   String _selectedCurrency = 'USD';
 
+  // Step C — booking channels (only for hotel/both)
+  final Set<String> _selectedChannels = {'direct'};
+
   bool _isStepB = false;
+  bool _isStepC = false;
   bool _isSubmitting = false;
   Uint8List? _logoBytes;
   String? _logoFileName;
@@ -118,6 +122,11 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
     setState(() => _isStepB = true);
   }
 
+  void _proceedToStepC() {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isStepC = true);
+  }
+
   Future<void> _pickLogo() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -134,7 +143,8 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
   }
 
   Future<void> _submitProperty() async {
-    if (!_formKey.currentState!.validate()) return;
+    // Form is only mounted on Step B — skip validation when called from Step C
+    if (!_isStepC && !(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _isSubmitting = true);
 
@@ -143,16 +153,17 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
       final orgId = authState?.organization?.id ?? '';
 
       final newProperty = await OrganizationService().addProperty(
-        orgId:    orgId,
-        name:     _nameController.text.trim(),
-        type:     _selectedType!,
-        address:  _addressController.text.trim(),
-        city:     _cityController.text.trim(),
-        country:  _countryController.text.trim(),
-        phone:    _phoneController.text.trim(),
-        email:    _emailController.text.trim(),
-        timezone: _selectedTimezone,
-        currency: _selectedCurrency,
+        orgId:           orgId,
+        name:            _nameController.text.trim(),
+        type:            _selectedType!,
+        address:         _addressController.text.trim(),
+        city:            _cityController.text.trim(),
+        country:         _countryController.text.trim(),
+        phone:           _phoneController.text.trim(),
+        email:           _emailController.text.trim(),
+        timezone:        _selectedTimezone,
+        currency:        _selectedCurrency,
+        bookingChannels: _selectedChannels.isEmpty ? ['direct'] : _selectedChannels.toList(),
       );
 
       // Upload logo if one was picked
@@ -189,31 +200,41 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppTheme.sidebarDark,
-              AppTheme.sidebarBg,
-              const Color(0xFF1E3A5F),
-            ],
+    return PopScope(
+      // When on Step C, intercept back → go to Step B.
+      // On Step B/A, allow normal browser back navigation.
+      canPop: !_isStepC,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _isStepC) {
+          setState(() => _isStepC = false);
+        }
+      },
+      child: Scaffold(
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppTheme.sidebarDark,
+                AppTheme.sidebarBg,
+                const Color(0xFF1E3A5F),
+              ],
+            ),
           ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildHeader(),
-                  const SizedBox(height: 32),
-                  _buildCard(),
-                ],
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 16),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildHeader(),
+                    const SizedBox(height: 32),
+                    _buildCard(),
+                  ],
+                ),
               ),
             ),
           ),
@@ -225,25 +246,12 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
   Widget _buildHeader() {
     return Column(
       children: [
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFD4A853), Color(0xFFE8C97A)],
-            ),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.goldPrimary.withOpacity(0.4),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.domain_add_rounded, color: Color(0xFF0F172A), size: 28),
+        Image.asset(
+          'assets/images/hotrest_logo.webp',
+          width: 100,
+          height: 100,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         Text(
           widget.isFirstProperty
               ? 'Welcome! Let\'s set up your first property.'
@@ -258,9 +266,11 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          _isStepB
-              ? 'Enter the property details below.'
-              : 'What type of property are you adding?',
+          _isStepC
+              ? 'Which booking channels does this property use?'
+              : _isStepB
+                  ? 'Enter the property details below.'
+                  : 'What type of property are you adding?',
           style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.6)),
         ),
       ],
@@ -293,9 +303,11 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
                 child: child,
               ),
             ),
-            child: _isStepB
-                ? _buildStepB(key: const ValueKey('stepB'))
-                : _buildStepA(key: const ValueKey('stepA')),
+            child: _isStepC
+                ? _buildStepC(key: const ValueKey('stepC'))
+                : _isStepB
+                    ? _buildStepB(key: const ValueKey('stepB'))
+                    : _buildStepA(key: const ValueKey('stepA')),
           ),
           if (_isSubmitting)
             Positioned.fill(
@@ -718,7 +730,8 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
                 child: SizedBox(
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _submitProperty,
+                    // Hotel/both → go to channel step; restaurant-only → submit directly
+                    onPressed: _selectedType == 'restaurant' ? _submitProperty : _proceedToStepC,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.adminPrimary,
                       foregroundColor: Colors.white,
@@ -727,12 +740,18 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
                       ),
                       elevation: 0,
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('Create Property', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                        SizedBox(width: 8),
-                        Icon(Icons.check_rounded, size: 18),
+                        Text(
+                          _selectedType == 'restaurant' ? 'Create Property' : 'Continue',
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(
+                          _selectedType == 'restaurant' ? Icons.check_rounded : Icons.arrow_forward_rounded,
+                          size: 18,
+                        ),
                       ],
                     ),
                   ),
@@ -744,7 +763,207 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
       ),
     );
   }
+
+  // ─── Step C: Booking channel selection ────────────────────────────────────
+
+  Widget _buildStepC({Key? key}) {
+    return Column(
+      key: key,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Booking Channels',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.sidebarDark,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Select all channels your property accepts reservations from. You can change this later in settings.',
+          style: TextStyle(fontSize: 13, color: AppTheme.adminTextMuted),
+        ),
+        const SizedBox(height: 24),
+        ..._kChannels.map((ch) => _buildChannelCard(ch)),
+        const SizedBox(height: 28),
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 50,
+                child: OutlinedButton(
+                  onPressed: () => setState(() => _isStepC = false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.adminTextMuted,
+                    side: BorderSide(color: AppTheme.adminTextMuted.withOpacity(0.4)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.arrow_back_rounded, size: 18),
+                      SizedBox(width: 8),
+                      Text('Back', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: SizedBox(
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _submitProperty,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.adminPrimary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    elevation: 0,
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('Create Property', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      SizedBox(width: 8),
+                      Icon(Icons.check_rounded, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChannelCard(_ChannelOption ch) {
+    final isSelected = _selectedChannels.contains(ch.value);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () => setState(() {
+          if (isSelected) {
+            _selectedChannels.remove(ch.value);
+          } else {
+            _selectedChannels.add(ch.value);
+          }
+        }),
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: isSelected ? ch.color.withOpacity(0.06) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? ch.color : const Color(0xFFE2E8F0),
+              width: isSelected ? 2 : 1,
+            ),
+            boxShadow: isSelected
+                ? [BoxShadow(color: ch.color.withOpacity(0.12), blurRadius: 12)]
+                : null,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: isSelected ? ch.color.withOpacity(0.12) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(ch.icon, color: isSelected ? ch.color : AppTheme.adminTextMuted, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      ch.label,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected ? ch.color : AppTheme.sidebarDark,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(ch.description, style: TextStyle(fontSize: 12, color: AppTheme.adminTextMuted)),
+                  ],
+                ),
+              ),
+              Icon(
+                isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                color: isSelected ? ch.color : const Color(0xFFCBD5E1),
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
+
+// ─── Channel option data ──────────────────────────────────────────────────────
+
+class _ChannelOption {
+  final String value;
+  final String label;
+  final String description;
+  final IconData icon;
+  final Color color;
+
+  const _ChannelOption({
+    required this.value,
+    required this.label,
+    required this.description,
+    required this.icon,
+    required this.color,
+  });
+}
+
+const _kChannels = [
+  _ChannelOption(
+    value: 'bookingCom',
+    label: 'Booking.com',
+    description: 'World\'s largest accommodation platform',
+    icon: Icons.language_rounded,
+    color: Color(0xFF003580),
+  ),
+  _ChannelOption(
+    value: 'airbnb',
+    label: 'Airbnb',
+    description: 'Short-term rental and experience platform',
+    icon: Icons.house_rounded,
+    color: Color(0xFFFF5A5F),
+  ),
+  _ChannelOption(
+    value: 'expedia',
+    label: 'Expedia',
+    description: 'Global travel & hotel booking platform',
+    icon: Icons.flight_rounded,
+    color: Color(0xFF00355F),
+  ),
+  _ChannelOption(
+    value: 'direct',
+    label: 'Direct / Walk-in',
+    description: 'Reservations made directly with your property',
+    icon: Icons.person_rounded,
+    color: Color(0xFF16A34A),
+  ),
+  _ChannelOption(
+    value: 'other',
+    label: 'Other',
+    description: 'Any other channel or travel agent',
+    icon: Icons.more_horiz_rounded,
+    color: Color(0xFF64748B),
+  ),
+];
 
 class _FieldLabel extends StatelessWidget {
   final String text;

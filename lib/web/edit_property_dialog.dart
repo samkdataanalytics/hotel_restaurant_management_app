@@ -77,6 +77,7 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
   bool _saving = false;
   late String _primaryColor;   // hex e.g. '#D4A853'
   late final TextEditingController _hexCtrl;
+  late List<String> _selectedChannels;
 
   @override
   void initState() {
@@ -88,10 +89,13 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
     _countryCtrl = TextEditingController(text: p.country);
     _phoneCtrl   = TextEditingController(text: p.phone);
     _emailCtrl   = TextEditingController(text: p.email);
-    _timezone     = _kTimezones.contains(p.timezone) ? p.timezone : 'UTC';
-    _currency     = kCurrencies.any((c) => c.code == p.currency) ? p.currency : 'USD';
-    _primaryColor = p.primaryColor.isNotEmpty ? p.primaryColor : '#D4A853';
-    _hexCtrl      = TextEditingController(text: _primaryColor);
+    _timezone        = _kTimezones.contains(p.timezone) ? p.timezone : 'UTC';
+    _currency        = kCurrencies.any((c) => c.code == p.currency) ? p.currency : 'USD';
+    _primaryColor    = p.primaryColor.isNotEmpty ? p.primaryColor : '#D4A853';
+    _hexCtrl         = TextEditingController(text: _primaryColor);
+    _selectedChannels = List<String>.from(
+      p.bookingChannels.isNotEmpty ? p.bookingChannels : ['direct'],
+    );
   }
 
   @override
@@ -127,16 +131,17 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
     setState(() => _saving = true);
     try {
       await OrganizationService().updateProperty(
-        propertyId:   widget.property.id,
-        name:         _nameCtrl.text.trim(),
-        address:      _addressCtrl.text.trim(),
-        city:         _cityCtrl.text.trim(),
-        country:      _countryCtrl.text.trim(),
-        phone:        _phoneCtrl.text.trim(),
-        email:        _emailCtrl.text.trim(),
-        timezone:     _timezone,
-        currency:     _currency,
-        primaryColor: _primaryColor,
+        propertyId:      widget.property.id,
+        name:            _nameCtrl.text.trim(),
+        address:         _addressCtrl.text.trim(),
+        city:            _cityCtrl.text.trim(),
+        country:         _countryCtrl.text.trim(),
+        phone:           _phoneCtrl.text.trim(),
+        email:           _emailCtrl.text.trim(),
+        timezone:        _timezone,
+        currency:        _currency,
+        primaryColor:    _primaryColor,
+        bookingChannels: _selectedChannels,
       );
 
       if (_newLogoBytes != null && _newLogoFileName != null) {
@@ -342,6 +347,22 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
                       _buildColorPicker(),
                       const SizedBox(height: 14),
 
+                      // Booking Channels (hotel / both only)
+                      if (widget.property.type != 'restaurant') ...[
+                        const SizedBox(height: 4),
+                        const Divider(),
+                        const SizedBox(height: 4),
+                        _label('Booking Channels'),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Select the channels through which guests can book this property.',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                        const SizedBox(height: 10),
+                        _buildChannelPicker(),
+                        const SizedBox(height: 4),
+                      ],
+
                       // Logo
                       _label('Property Logo  (optional)'),
                       const SizedBox(height: 8),
@@ -488,6 +509,73 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
           ],
         ),
       ],
+    );
+  }
+
+  static const _kChannels = [
+    {'key': 'bookingCom', 'label': 'Booking.com', 'icon': Icons.language_rounded},
+    {'key': 'airbnb',     'label': 'Airbnb',       'icon': Icons.home_rounded},
+    {'key': 'expedia',    'label': 'Expedia',       'icon': Icons.flight_rounded},
+    {'key': 'direct',     'label': 'Direct',        'icon': Icons.phone_in_talk_rounded},
+    {'key': 'other',      'label': 'Other',         'icon': Icons.more_horiz_rounded},
+  ];
+
+  Widget _buildChannelPicker() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: _kChannels.map((ch) {
+        final key = ch['key'] as String;
+        final label = ch['label'] as String;
+        final icon = ch['icon'] as IconData;
+        final selected = _selectedChannels.contains(key);
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              if (selected) {
+                // Always keep at least one channel
+                if (_selectedChannels.length > 1) {
+                  _selectedChannels.remove(key);
+                }
+              } else {
+                _selectedChannels.add(key);
+              }
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: selected ? AppTheme.adminPrimary.withOpacity(0.08) : Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: selected ? AppTheme.adminPrimary : Colors.grey.shade300,
+                width: selected ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 16,
+                    color: selected ? AppTheme.adminPrimary : Colors.grey.shade500),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? AppTheme.adminPrimary : Colors.grey.shade700,
+                  ),
+                ),
+                if (selected) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.check_circle_rounded, size: 14, color: AppTheme.adminPrimary),
+                ],
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 

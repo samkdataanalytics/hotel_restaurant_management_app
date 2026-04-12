@@ -2,27 +2,29 @@ import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as pkg_provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
 import '../providers/hotel_session.dart';
+import '../providers/app_auth_provider.dart';
 import '../models/booking.dart';
 import '../models/room.dart';
 import '../models/expense.dart';
 import '../services/booking_service.dart';
 
-class FinancialsScreen extends StatefulWidget {
+class FinancialsScreen extends ConsumerStatefulWidget {
   const FinancialsScreen({super.key});
 
   @override
-  State<FinancialsScreen> createState() => _FinancialsScreenState();
+  ConsumerState<FinancialsScreen> createState() => _FinancialsScreenState();
 }
 
-class _FinancialsScreenState extends State<FinancialsScreen> {
+class _FinancialsScreenState extends ConsumerState<FinancialsScreen> {
   final _bookingService = BookingService();
   final _dateFormat = DateFormat('MMM dd, yyyy');
   final _shortDateFormat = DateFormat('MMM dd');
-  String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   List<Map<String, dynamic>> _enrichedBookings = [];
   List<Room> _rooms = [];
@@ -30,7 +32,13 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
   bool _isLoading = true;
 
   late DateTimeRange _dateRange;
-  Set<BookingSource> _selectedSources = BookingSource.values.toSet();
+  late Set<BookingSource> _selectedSources;
+
+  List<BookingSource> get _enabledSources {
+    final channels = ref.read(activePropertyProvider)?.bookingChannels ?? [];
+    if (channels.isEmpty) return BookingSource.values;
+    return channelsToSources(channels);
+  }
 
   @override
   void initState() {
@@ -41,6 +49,11 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
       start: DateTime(now.year, now.month, 1),
       end: DateTime(now.year, now.month + 1, 0),
     );
+    // Initialize after first frame so ref is available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() => _selectedSources = _enabledSources.toSet());
+    });
+    _selectedSources = BookingSource.values.toSet(); // safe default until frame
     _loadData();
   }
 
@@ -145,27 +158,21 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
 
   Color _sourceColor(BookingSource source) {
     switch (source) {
-      case BookingSource.bookingCom:
-        return Colors.blue.shade600;
-      case BookingSource.airbnb:
-        return Colors.red.shade500;
-      case BookingSource.direct:
-        return Colors.green.shade600;
-      case BookingSource.other:
-        return Colors.orange.shade500;
+      case BookingSource.bookingCom: return Colors.blue.shade600;
+      case BookingSource.airbnb:     return Colors.red.shade500;
+      case BookingSource.expedia:    return const Color(0xFF00355F);
+      case BookingSource.direct:     return Colors.green.shade600;
+      case BookingSource.other:      return Colors.orange.shade500;
     }
   }
 
   String _sourceLabel(BookingSource source) {
     switch (source) {
-      case BookingSource.bookingCom:
-        return 'Booking.com';
-      case BookingSource.airbnb:
-        return 'Airbnb';
-      case BookingSource.direct:
-        return 'Direct';
-      case BookingSource.other:
-        return 'Other';
+      case BookingSource.bookingCom: return 'Booking.com';
+      case BookingSource.airbnb:     return 'Airbnb';
+      case BookingSource.expedia:    return 'Expedia';
+      case BookingSource.direct:     return 'Direct';
+      case BookingSource.other:      return 'Other';
     }
   }
 
@@ -195,7 +202,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
       double dayRevenue = 0;
       
       Map<BookingSource, double> sourceRevenues = {
-        for (var s in BookingSource.values) s: 0.0
+        for (var s in _enabledSources) s: 0.0
       };
 
       for (final b in dayBookings) {
@@ -352,7 +359,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                 children: [
                   Text('Filter Platforms:', style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.adminTextMuted)),
                   const SizedBox(width: 16),
-                  ...BookingSource.values.map((source) {
+                  ..._enabledSources.map((source) {
                     final isSelected = _selectedSources.contains(source);
                     final color = _sourceColor(source);
                     return Padding(
@@ -672,7 +679,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
           List<BarChartRodStackItem> stackItems = [];
           
           // Order defined by _selectedSources or enum order to maintain consistent stacking
-          for (final source in BookingSource.values) {
+          for (final source in _enabledSources) {
             if (!_selectedSources.contains(source)) continue;
             final val = sources[source] ?? 0.0;
             if (val > 0) {
@@ -848,26 +855,23 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        value,
-                        style: _numStyle(fontSize: 28, fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(width: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          subtitle,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.adminTextMuted,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      style: _numStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.adminTextMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),

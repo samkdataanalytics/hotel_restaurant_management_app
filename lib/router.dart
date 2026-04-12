@@ -8,6 +8,7 @@ import 'web/login_screen.dart';
 import 'web/signup_screen.dart';
 import 'web/superadmin/superadmin_shell.dart';
 import 'web/onboarding/onboarding_shell.dart';
+import 'web/onboarding/onboarding_profile_screen.dart';
 import 'web/onboarding/property_setup_screen.dart';
 import 'web/shell/app_shell.dart';
 import 'web/dashboard_screen.dart';
@@ -25,6 +26,7 @@ import 'web/restaurant_analytics_screen.dart';
 import 'web/cancellations_refunds_screen.dart';
 import 'web/users_management_screen.dart';
 import 'web/staff_schedule_screen.dart';
+import 'web/account_settings_screen.dart';
 import 'web/accept_invite_screen.dart';
 import 'web/guest/guest_menu_screen.dart';
 import 'web/guest/guest_checkin_screen.dart';
@@ -38,7 +40,8 @@ class AppRoutes {
   static const login         = '/login';
   static const signup        = '/signup';
   static const superadmin    = '/superadmin';
-  static const onboarding    = '/onboarding';
+  static const onboarding        = '/onboarding';
+  static const onboardingProfile = '/onboarding/profile';
   static const propertySetup = '/property-setup';
   static const app           = '/app';
   static const appDashboard  = '/app/dashboard';
@@ -95,7 +98,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (loc.startsWith(AppRoutes.acceptInvite)) return null;
 
       if (!auth.hasOrganization) {
-        if (loc == AppRoutes.onboarding) return null;
+        if (loc == AppRoutes.onboarding || loc == AppRoutes.onboardingProfile) return null;
         return AppRoutes.onboarding;
       }
 
@@ -140,6 +143,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const OnboardingShell(),
       ),
       GoRoute(
+        path: AppRoutes.onboardingProfile,
+        builder: (_, __) => const OnboardingProfileScreen(),
+      ),
+      GoRoute(
         path: AppRoutes.propertySetup,
         builder: (_, __) => const PropertySetupScreen(isFirstProperty: true),
       ),
@@ -161,6 +168,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/app/cancellations', builder: (_, __) => const CancellationsRefundsScreen()),
           GoRoute(path: '/app/team',          builder: (_, __) => const UsersManagementScreen()),
           GoRoute(path: '/app/shifts',        builder: (_, __) => const StaffScheduleScreen()),
+          GoRoute(path: '/app/account',       builder: (_, __) => const AccountSettingsScreen()),
         ],
       ),
       // Staff invite deep link
