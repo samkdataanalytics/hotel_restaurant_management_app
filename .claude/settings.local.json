@@ -19,7 +19,8 @@
       "Bash(flutter --version)",
       "Bash(curl -s \"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\" -A \"Mozilla/5.0\")",
       "Bash(curl -s \"https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap\" -A \"Mozilla/5.0\")",
-      "Bash(curl -s \"https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap\" -A \"Mozilla/5.0\")"
+      "Bash(curl -s \"https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap\" -A \"Mozilla/5.0\")",
+      "Bash(xargs grep:*)"
     ]
   }
 }

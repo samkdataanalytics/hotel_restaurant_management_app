@@ -276,7 +276,7 @@ class _RestaurantAnalyticsScreenState
         final foodCostList = <Map<String, dynamic>>[];
         for (final item in menuItems) {
           if (item.ingredients.isEmpty) continue;
-          final cost = await _service.getCurrentCostForItem(item.id);
+          final cost = await _service.getComputedCostForItem(item);
           if (cost != null && item.price > 0) {
             foodCostList.add({
               'name': item.name,

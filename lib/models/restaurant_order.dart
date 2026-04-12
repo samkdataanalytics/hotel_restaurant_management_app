@@ -53,6 +53,23 @@ class OrderItem {
     return menuItem.price * (1 + extraUnits) + adjustmentsTotal;
   }
 
+  /// Additional cost (ingredient cost) introduced by selected modifier options.
+  /// Add this to the item's base ingredient cost to get the full variant cost.
+  double get variantCostAdjustment {
+    double total = 0.0;
+    for (final mod in menuItem.modifiers) {
+      final selected = selectedModifiers[mod.name] ?? [];
+      for (final optName in selected) {
+        final opt = mod.options.firstWhere(
+          (o) => o.name == optName,
+          orElse: () => MenuModifierOption(name: optName),
+        );
+        total += opt.costAdjustment;
+      }
+    }
+    return total;
+  }
+
   /// Amount still due (only the un-refunded portion).
   double get subtotal => unitPrice * activeQuantity;
 

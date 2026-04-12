@@ -180,7 +180,9 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
     final ingredients = await widget.service.getIngredients();
     final costs = <String, double>{};
     for (final item in items) {
-      final c = await widget.service.getCurrentCostForItem(item.id);
+      // Use live computed cost (current prices × recipe quantities) so the
+      // display is never stale from old stored records.
+      final c = await widget.service.getComputedCostForItem(item);
       if (c != null) costs[item.id] = c;
     }
     if (!mounted) return;
@@ -199,6 +201,7 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
         service: widget.service,
         item: item,
         ingredients: _ingredients,
+        baseCost: item != null ? _currentCosts[item.id] : null,
       ),
     );
     if (result == true) _load();
@@ -666,7 +669,8 @@ class _MenuItemDialog extends StatefulWidget {
   final RestaurantService service;
   final MenuItem? item;
   final List<Ingredient> ingredients;
-  const _MenuItemDialog({required this.service, this.item, required this.ingredients});
+  final double? baseCost;
+  const _MenuItemDialog({required this.service, this.item, required this.ingredients, this.baseCost});
   @override
   State<_MenuItemDialog> createState() => _MenuItemDialogState();
 }
@@ -734,7 +738,11 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
   void _editModifierDialog(int index, MenuModifier? initial) async {
     final res = await showDialog<MenuModifier>(
       context: context,
-      builder: (ctx) => _ModifierDialog(initial: initial),
+      builder: (ctx) => _ModifierDialog(
+        initial: initial,
+        baseItemPrice: double.tryParse(_price.text) ?? 0.0,
+        baseItemCost: widget.baseCost,
+      ),
     );
     if (res != null) {
       setState(() {
@@ -1057,7 +1065,9 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
 
 class _ModifierDialog extends StatefulWidget {
   final MenuModifier? initial;
-  const _ModifierDialog({this.initial});
+  final double baseItemPrice;
+  final double? baseItemCost;
+  const _ModifierDialog({this.initial, required this.baseItemPrice, this.baseItemCost});
 
   @override
   State<_ModifierDialog> createState() => _ModifierDialogState();
@@ -1081,7 +1091,7 @@ class _ModifierDialogState extends State<_ModifierDialog> {
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
-    
+
     // Clean up empty options
     final validOptions = _options.where((o) => o.name.trim().isNotEmpty).toList();
     if (validOptions.isEmpty) {
@@ -1097,12 +1107,42 @@ class _ModifierDialogState extends State<_ModifierDialog> {
     ));
   }
 
+  Widget _marginBadge(MenuModifierOption opt) {
+    final basePrice = widget.baseItemPrice;
+    final baseCost  = widget.baseItemCost;
+    // Only show if we have a base cost OR the option itself has a cost adjustment
+    if (baseCost == null && opt.costAdjustment == 0) return const SizedBox(width: 52);
+    final effectivePrice = basePrice + opt.priceAdjustment;
+    final effectiveCost  = (baseCost ?? 0.0) + opt.costAdjustment;
+    if (effectivePrice <= 0) return const SizedBox(width: 52);
+    final margin = (effectivePrice - effectiveCost) / effectivePrice * 100;
+    final color = margin >= 50
+        ? const Color(0xFF16A34A)
+        : margin >= 30
+            ? const Color(0xFFD97706)
+            : const Color(0xFFDC2626);
+    return Container(
+      width: 52,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        '${margin.toStringAsFixed(0)}%',
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
-        width: 480,
+        width: 560,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1177,7 +1217,27 @@ class _ModifierDialogState extends State<_ModifierDialog> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      // Column headers
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          children: [
+                            const Expanded(flex: 2, child: Text('Option', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500))),
+                            const SizedBox(width: 8),
+                            const Expanded(child: Text('Price +', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500))),
+                            const SizedBox(width: 8),
+                            const Expanded(child: Text('Cost +', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500))),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 52,
+                              child: widget.baseItemCost != null
+                                  ? const Text('Margin', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500), textAlign: TextAlign.center)
+                                  : null,
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                        ),
+                      ),
                       ..._options.asMap().entries.map((entry) {
                         final idx = entry.key;
                         final opt = entry.value;
@@ -1194,7 +1254,7 @@ class _ModifierDialogState extends State<_ModifierDialog> {
                                     isDense: true,
                                     border: OutlineInputBorder(),
                                   ),
-                                  onChanged: (v) => _options[idx] = _options[idx].copyWith(name: v),
+                                  onChanged: (v) => setState(() => _options[idx] = _options[idx].copyWith(name: v)),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -1203,16 +1263,34 @@ class _ModifierDialogState extends State<_ModifierDialog> {
                                   initialValue: opt.priceAdjustment == 0 ? '' : opt.priceAdjustment.toString(),
                                   keyboardType: TextInputType.number,
                                   decoration: const InputDecoration(
-                                    hintText: '+ \$0.00',
+                                    hintText: 'Price +',
                                     isDense: true,
                                     border: OutlineInputBorder(),
                                   ),
                                   onChanged: (v) {
                                     final p = double.tryParse(v) ?? 0.0;
-                                    _options[idx] = _options[idx].copyWith(priceAdjustment: p);
+                                    setState(() => _options[idx] = _options[idx].copyWith(priceAdjustment: p));
                                   },
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextFormField(
+                                  initialValue: opt.costAdjustment == 0 ? '' : opt.costAdjustment.toString(),
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    hintText: 'Cost +',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  onChanged: (v) {
+                                    final c = double.tryParse(v) ?? 0.0;
+                                    setState(() => _options[idx] = _options[idx].copyWith(costAdjustment: c));
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _marginBadge(opt),
                               IconButton(
                                 onPressed: () => setState(() => _options.removeAt(idx)),
                                 icon: Icon(Icons.remove_circle_outline_rounded, color: Colors.red.shade300),

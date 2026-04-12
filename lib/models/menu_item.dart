@@ -1,21 +1,28 @@
 class MenuModifierOption {
   final String name;
   final double priceAdjustment;
+  final double costAdjustment;
 
-  MenuModifierOption({required this.name, this.priceAdjustment = 0.0});
+  MenuModifierOption({required this.name, this.priceAdjustment = 0.0, this.costAdjustment = 0.0});
 
-  MenuModifierOption copyWith({String? name, double? priceAdjustment}) {
+  MenuModifierOption copyWith({String? name, double? priceAdjustment, double? costAdjustment}) {
     return MenuModifierOption(
       name: name ?? this.name,
       priceAdjustment: priceAdjustment ?? this.priceAdjustment,
+      costAdjustment: costAdjustment ?? this.costAdjustment,
     );
   }
 
-  Map<String, dynamic> toMap() => {'name': name, 'priceAdjustment': priceAdjustment};
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'priceAdjustment': priceAdjustment,
+    'costAdjustment': costAdjustment,
+  };
 
   factory MenuModifierOption.fromMap(Map<String, dynamic> map) => MenuModifierOption(
         name: map['name'] ?? '',
         priceAdjustment: (map['priceAdjustment'] as num?)?.toDouble() ?? 0.0,
+        costAdjustment: (map['costAdjustment'] as num?)?.toDouble() ?? 0.0,
       );
 }
 

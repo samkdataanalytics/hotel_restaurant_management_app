@@ -1,13 +1,79 @@
+import 'dart:async';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../app_theme.dart';
 import '../../providers/app_auth_provider.dart';
-import '../../services/organization_service.dart';
 import 'step1_company_details.dart';
-import 'step2_admin_profile.dart';
 
+// ─── Shared onboarding UI helpers ─────────────────────────────────────────────
+
+Widget buildOnboardingBrandHeader() {
+  return Column(
+    children: [
+      Image.asset('assets/images/hotrest_logo.webp', width: 120, height: 120),
+      const SizedBox(height: 8),
+      const Text(
+        'Welcome to HotRest',
+        style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: Colors.white, letterSpacing: -0.5),
+      ),
+      const SizedBox(height: 6),
+      Text(
+        'Set up your organization in just 2 steps',
+        style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.6)),
+      ),
+    ],
+  );
+}
+
+Widget buildOnboardingStepIndicator({required int activeStep}) {
+  return Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      _StepDot(stepNumber: 1, label: 'Company', isActive: activeStep == 0, isCompleted: activeStep > 0),
+      _StepConnector(isCompleted: activeStep > 0),
+      _StepDot(stepNumber: 2, label: 'Profile',  isActive: activeStep == 1, isCompleted: false),
+    ],
+  );
+}
+
+Widget buildOnboardingFormCard({required Widget child, bool isSubmitting = false, String submittingLabel = 'Setting up...'}) {
+  return Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 40, offset: const Offset(0, 12))],
+    ),
+    padding: const EdgeInsets.all(40),
+    child: Stack(
+      children: [
+        child,
+        if (isSubmitting)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.8), borderRadius: BorderRadius.circular(20)),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text(submittingLabel, style: const TextStyle(fontSize: 14, color: Color(0xFF64748B))),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// Step 1 of onboarding — Company Details.
+/// Pushes a dummy browser history entry on mount so the browser back button
+/// can be intercepted; back → sign out → login.
 class OnboardingShell extends ConsumerStatefulWidget {
   const OnboardingShell({super.key});
 
@@ -16,58 +82,26 @@ class OnboardingShell extends ConsumerStatefulWidget {
 }
 
 class _OnboardingShellState extends ConsumerState<OnboardingShell> {
-  int _currentStep = 0;
-  Map<String, String> _organizationData = {};
-  bool _isSubmitting = false;
+  StreamSubscription<html.PopStateEvent>? _popSub;
 
-  void _onStep1Complete(Map<String, String> data) {
-    setState(() {
-      _organizationData = data;
-      _currentStep = 1;
+  @override
+  void initState() {
+    super.initState();
+    // Push a sentinel entry so the browser has something to "go back from".
+    html.window.history.pushState({'sentinel': 'onboarding'}, '', html.window.location.href);
+
+    // When the browser fires popstate (back pressed), sign out and go to login.
+    _popSub = html.window.onPopState.listen((_) async {
+      if (!mounted) return;
+      await ref.read(authProvider.notifier).signOut();
+      if (mounted) context.go('/login');
     });
   }
 
-  Future<void> _onStep2Complete(Map<String, String> profileData) async {
-    setState(() => _isSubmitting = true);
-
-    try {
-      // 1. Create the organization
-      await OrganizationService().createOrganization(
-        name:    _organizationData['name']    ?? '',
-        slug:    _organizationData['slug']    ?? '',
-        country: _organizationData['country'] ?? '',
-        phone:   _organizationData['phone']   ?? '',
-      );
-
-      // 2. Update profile in Supabase
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId != null) {
-        await Supabase.instance.client.from('profiles').upsert({
-          'id':         userId,
-          'full_name':  profileData['fullName']  ?? '',
-          'job_title':  profileData['jobTitle']  ?? '',
-          'phone':      profileData['phone']      ?? '',
-        });
-      }
-
-      // 3. Refresh auth state so the app knows the org now exists
-      await ref.read(authProvider.notifier).refreshAfterOnboarding();
-
-      if (!mounted) return;
-
-      // 4. Navigate to property setup
-      context.go('/property-setup');
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Setup failed: ${e.toString()}'),
-          backgroundColor: AppTheme.danger,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
-    }
+  @override
+  void dispose() {
+    _popSub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -78,11 +112,7 @@ class _OnboardingShellState extends ConsumerState<OnboardingShell> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              AppTheme.sidebarDark,
-              AppTheme.sidebarBg,
-              const Color(0xFF1E3A5F),
-            ],
+            colors: [AppTheme.sidebarDark, AppTheme.sidebarBg, const Color(0xFF1E3A5F)],
           ),
         ),
         child: Center(
@@ -93,150 +123,23 @@ class _OnboardingShellState extends ConsumerState<OnboardingShell> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Logo / brand header
-                  _buildBrandHeader(),
+                  buildOnboardingBrandHeader(),
                   const SizedBox(height: 32),
-
-                  // Step indicator
-                  _buildStepIndicator(),
+                  buildOnboardingStepIndicator(activeStep: 0),
                   const SizedBox(height: 24),
-
-                  // Form card
-                  _buildFormCard(),
+                  buildOnboardingFormCard(
+                    child: Step1CompanyDetails(
+                      onNext: (data) {
+                        ref.read(onboardingStep1DataProvider.notifier).state = data;
+                        context.push('/onboarding/profile');
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildBrandHeader() {
-    return Column(
-      children: [
-        Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFD4A853), Color(0xFFE8C97A)],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.goldPrimary.withOpacity(0.4),
-                blurRadius: 20,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Icon(Icons.hotel_rounded, color: Color(0xFF0F172A), size: 32),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          'Welcome to HotRest',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-            letterSpacing: -0.5,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Set up your organization in just 2 steps',
-          style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.6)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStepIndicator() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _StepDot(
-          stepNumber: 1,
-          label: 'Company',
-          isActive: _currentStep == 0,
-          isCompleted: _currentStep > 0,
-        ),
-        _StepConnector(isCompleted: _currentStep > 0),
-        _StepDot(
-          stepNumber: 2,
-          label: 'Profile',
-          isActive: _currentStep == 1,
-          isCompleted: false,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFormCard() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 40,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(40),
-      child: Stack(
-        children: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            transitionBuilder: (child, animation) {
-              return FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0.05, 0),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                ),
-              );
-            },
-            child: _currentStep == 0
-                ? Step1CompanyDetails(
-                    key: const ValueKey('step1'),
-                    onNext: _onStep1Complete,
-                  )
-                : Step2AdminProfile(
-                    key: const ValueKey('step2'),
-                    onComplete: _onStep2Complete,
-                    onBack: () => setState(() => _currentStep = 0),
-                  ),
-          ),
-          if (_isSubmitting)
-            Positioned.fill(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text(
-                        'Setting up your organization...',
-                        style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }

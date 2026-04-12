@@ -16,6 +16,7 @@ import '../services/invoice_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'guest_responses_dialog.dart';
 import '../models/staff_permission.dart';
+import '../providers/app_auth_provider.dart';
 
 class ReservationsScreen extends ConsumerStatefulWidget {
   const ReservationsScreen({super.key});
@@ -76,40 +77,31 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
 
   Color _sourceColor(BookingSource source) {
     switch (source) {
-      case BookingSource.bookingCom:
-        return const Color(0xFF003580);
-      case BookingSource.airbnb:
-        return const Color(0xFFFF5A5F);
-      case BookingSource.direct:
-        return AppTheme.success;
-      case BookingSource.other:
-        return AppTheme.warning;
+      case BookingSource.bookingCom: return const Color(0xFF003580);
+      case BookingSource.airbnb:     return const Color(0xFFFF5A5F);
+      case BookingSource.expedia:    return const Color(0xFF00355F);
+      case BookingSource.direct:     return AppTheme.success;
+      case BookingSource.other:      return AppTheme.warning;
     }
   }
 
   IconData _sourceIcon(BookingSource source) {
     switch (source) {
-      case BookingSource.bookingCom:
-        return Icons.language_rounded;
-      case BookingSource.airbnb:
-        return Icons.house_rounded;
-      case BookingSource.direct:
-        return Icons.phone_in_talk_rounded;
-      case BookingSource.other:
-        return Icons.more_horiz_rounded;
+      case BookingSource.bookingCom: return Icons.language_rounded;
+      case BookingSource.airbnb:     return Icons.house_rounded;
+      case BookingSource.expedia:    return Icons.flight_rounded;
+      case BookingSource.direct:     return Icons.phone_in_talk_rounded;
+      case BookingSource.other:      return Icons.more_horiz_rounded;
     }
   }
 
   String _sourceLabel(BookingSource source) {
     switch (source) {
-      case BookingSource.bookingCom:
-        return 'Booking.com';
-      case BookingSource.airbnb:
-        return 'Airbnb';
-      case BookingSource.direct:
-        return 'Direct';
-      case BookingSource.other:
-        return 'Other';
+      case BookingSource.bookingCom: return 'Booking.com';
+      case BookingSource.airbnb:     return 'Airbnb';
+      case BookingSource.expedia:    return 'Expedia';
+      case BookingSource.direct:     return 'Direct';
+      case BookingSource.other:      return 'Other';
     }
   }
 
@@ -122,17 +114,20 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
   }
 
   /// Get the booking for a specific room on a specific day (filtered)
+  /// Returns the booking occupying [room] on [day], regardless of source filter.
+  /// Used for calendar cell colour / availability — a room is never "free" just
+  /// because its source is hidden in the filter panel.
   Map<String, dynamic>? _getBookingForRoomOnDay(Room room, DateTime day) {
     for (final data in _enrichedBookings) {
       final booking = data['booking'] as Booking;
       if (booking.roomId != room.id) continue;
-      if (!_activeFilters.contains(booking.source)) continue;
       if (_bookingSpansDay(booking, day)) return data;
     }
     return null;
   }
 
-  /// Get all bookings for a specific day (filtered)
+  /// Get all bookings for a specific day that match the active source filter.
+  /// Used only for the booking list / day-view counts — not for availability.
   List<Map<String, dynamic>> _getBookingsForDay(DateTime day) {
     return _enrichedBookings.where((data) {
       final booking = data['booking'] as Booking;
@@ -155,6 +150,12 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     });
   }
 
+  List<BookingSource> get _enabledSources {
+    final channels = ref.read(activePropertyProvider)?.bookingChannels ?? [];
+    if (channels.isEmpty) return BookingSource.values;
+    return channelsToSources(channels);
+  }
+
   Future<void> _showAddReservationDialog() async {
     final result = await showDialog<bool>(
       context: context,
@@ -162,6 +163,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
         rooms: _rooms,
         bookingService: _bookingService,
         enrichedBookings: _enrichedBookings,
+        enabledSources: _enabledSources,
       ),
     );
     if (result == true) await _loadData();
@@ -175,6 +177,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
         bookingService: _bookingService,
         existingData: data,
         enrichedBookings: _enrichedBookings,
+        enabledSources: _enabledSources,
       ),
     );
     if (result == true) await _loadData();
@@ -324,7 +327,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: BookingSource.values.map((source) {
+      children: _enabledSources.map((source) {
         final isActive = _activeFilters.contains(source);
         final color = _sourceColor(source);
         final count = _enrichedBookings
@@ -597,6 +600,8 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                               (_selectedCell!['room'] as Room).id == room.id &&
                               (_selectedCell!['date'] as DateTime) == date;
 
+                          final isSourceVisible = bookingData == null ||
+                              _activeFilters.contains((bookingData['booking'] as Booking).source);
                           return GestureDetector(
                             onTap: () => setState(() => _selectedCell = {'room': room, 'date': date}),
                             child: Container(
@@ -607,7 +612,9 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                                 color: isMaintenance
                                     ? Colors.orange.shade50
                                     : bookingData != null
-                                        ? _sourceColor((bookingData['booking'] as Booking).source).withOpacity(0.12)
+                                        ? isSourceVisible
+                                            ? _sourceColor((bookingData['booking'] as Booking).source).withOpacity(0.12)
+                                            : Colors.grey.shade200
                                         : isEven
                                             ? Colors.grey.shade50
                                             : Colors.white,
@@ -624,7 +631,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                                       child: Icon(Icons.build_rounded, size: 14, color: AppTheme.warning),
                                     )
                                   : bookingData != null
-                                      ? _buildCellContent(bookingData)
+                                      ? _buildCellContent(bookingData, sourceVisible: isSourceVisible)
                                       : const SizedBox.shrink(),
                             ),
                           );
@@ -678,10 +685,10 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     );
   }
 
-  Widget _buildCellContent(Map<String, dynamic> data) {
+  Widget _buildCellContent(Map<String, dynamic> data, {bool sourceVisible = true}) {
     final booking = data['booking'] as Booking;
     final guest = data['guest'] as Guest?;
-    final color = _sourceColor(booking.source);
+    final color = sourceVisible ? _sourceColor(booking.source) : Colors.grey.shade500;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -695,7 +702,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            guest?.fullName.split(' ').first ?? '?',
+            sourceVisible ? (guest?.fullName.split(' ').first ?? '?') : booking.sourceLabel,
             style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
             overflow: TextOverflow.ellipsis,
             maxLines: 1,
@@ -948,6 +955,31 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                     Text('(${booking.nights}n)', style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 11)),
                   ],
                 ),
+                if (booking.specialRequests.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.shade200),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.note_outlined, size: 13, color: Colors.amber.shade700),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            booking.specialRequests,
+                            style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (booking.totalAmount > 0) ...[
                   const SizedBox(height: 8),
                   Row(
@@ -1197,12 +1229,14 @@ class _ReservationFormDialog extends StatefulWidget {
   final BookingService bookingService;
   final Map<String, dynamic>? existingData;
   final List<Map<String, dynamic>> enrichedBookings;
+  final List<BookingSource> enabledSources;
 
   const _ReservationFormDialog({
     required this.rooms,
     required this.bookingService,
     this.existingData,
     required this.enrichedBookings,
+    required this.enabledSources,
   });
 
   @override
@@ -1242,7 +1276,8 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     _specialRequestsController = TextEditingController(text: existingBooking?.specialRequests ?? '');
     _amountController = TextEditingController(text: existingBooking?.totalAmount.toStringAsFixed(2) ?? '');
 
-    _selectedSource = existingBooking?.source ?? BookingSource.bookingCom;
+    _selectedSource = existingBooking?.source ??
+        (widget.enabledSources.isNotEmpty ? widget.enabledSources.first : BookingSource.direct);
     _selectedStatus = existingBooking?.status ?? BookingStatus.pending;
     _selectedRoomId = existingBooking?.roomId;
     _checkInDate = existingBooking?.checkInDate;
@@ -1447,7 +1482,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: BookingSource.values.map((source) {
+                    children: widget.enabledSources.map((source) {
                       final isSelected = _selectedSource == source;
                       final color = _colorForSource(source);
                       return GestureDetector(
@@ -1670,18 +1705,20 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
   Color _colorForSource(BookingSource source) {
     switch (source) {
       case BookingSource.bookingCom: return const Color(0xFF003580);
-      case BookingSource.airbnb: return const Color(0xFFFF5A5F);
-      case BookingSource.direct: return AppTheme.success;
-      case BookingSource.other: return AppTheme.warning;
+      case BookingSource.airbnb:     return const Color(0xFFFF5A5F);
+      case BookingSource.expedia:    return const Color(0xFF00355F);
+      case BookingSource.direct:     return AppTheme.success;
+      case BookingSource.other:      return AppTheme.warning;
     }
   }
 
   String _labelForSource(BookingSource source) {
     switch (source) {
       case BookingSource.bookingCom: return 'Booking.com';
-      case BookingSource.airbnb: return 'Airbnb';
-      case BookingSource.direct: return 'Direct';
-      case BookingSource.other: return 'Other';
+      case BookingSource.airbnb:     return 'Airbnb';
+      case BookingSource.expedia:    return 'Expedia';
+      case BookingSource.direct:     return 'Direct';
+      case BookingSource.other:      return 'Other';
     }
   }
 }

@@ -1,6 +1,6 @@
 enum BookingStatus { pending, checkedIn, checkedOut, cancelled }
 
-enum BookingSource { bookingCom, airbnb, direct, other }
+enum BookingSource { bookingCom, airbnb, expedia, direct, other }
 
 class Booking {
   final String id;
@@ -137,14 +137,11 @@ class Booking {
 
   String get sourceLabel {
     switch (source) {
-      case BookingSource.bookingCom:
-        return 'Booking.com';
-      case BookingSource.airbnb:
-        return 'Airbnb';
-      case BookingSource.direct:
-        return 'Direct';
-      case BookingSource.other:
-        return 'Other';
+      case BookingSource.bookingCom: return 'Booking.com';
+      case BookingSource.airbnb:     return 'Airbnb';
+      case BookingSource.expedia:    return 'Expedia';
+      case BookingSource.direct:     return 'Direct';
+      case BookingSource.other:      return 'Other';
     }
   }
 

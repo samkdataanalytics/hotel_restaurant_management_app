@@ -75,6 +75,8 @@ class OrgProperty {
   final String status;
   final String primaryColor; // hex e.g. '#D4A853'
   final DateTime createdAt;
+  /// Active booking channels e.g. ['bookingCom', 'airbnb', 'direct']
+  final List<String> bookingChannels;
 
   const OrgProperty({
     required this.id,
@@ -92,6 +94,7 @@ class OrgProperty {
     required this.status,
     this.primaryColor = '#D4A853',
     required this.createdAt,
+    this.bookingChannels = const ['direct'],
   });
 
   factory OrgProperty.fromRow(Map<String, dynamic> r) => OrgProperty(
@@ -110,6 +113,10 @@ class OrgProperty {
         status:       r['status']        as String? ?? 'active',
         primaryColor: r['primary_color'] as String? ?? '#D4A853',
         createdAt:    DateTime.parse(r['created_at'] as String),
+        bookingChannels: (r['booking_channels'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            ['direct'],
       );
 
   bool get isHotel      => type == 'hotel' || type == 'both';
@@ -302,11 +309,12 @@ class OrganizationService {
 
     if (ids.isEmpty) return [];
 
-    // 3. Fetch hotel details for all collected IDs in one query
+    // 3. Fetch hotel details for all collected IDs in one query (exclude soft-deleted)
     final hotels = await _db
         .from('hotels')
         .select()
-        .inFilter('id', ids.toList());
+        .inFilter('id', ids.toList())
+        .eq('is_deleted', false);
 
     return hotels.map((h) => OrgProperty.fromRow(h)).toList();
   }
@@ -323,6 +331,7 @@ class OrganizationService {
     required String timezone,
     String currency = 'USD',
     String logoUrl = '',
+    List<String> bookingChannels = const ['direct'],
   }) async {
     final userId = _db.auth.currentUser!.id;
 
@@ -332,19 +341,20 @@ class OrganizationService {
     final row = await _db
         .from('hotels')
         .insert({
-          'name':     name,
-          'slug':     '$slug-${DateTime.now().millisecondsSinceEpoch}',
-          'org_id':   orgId,
-          'type':     type,
-          'address':  address,
-          'city':     city,
-          'country':  country,
-          'phone':    phone,
-          'email':    email,
-          'timezone': timezone,
-          'currency': currency,
-          'logo_url': logoUrl,
-          'status':   'active',
+          'name':             name,
+          'slug':             '$slug-${DateTime.now().millisecondsSinceEpoch}',
+          'org_id':           orgId,
+          'type':             type,
+          'address':          address,
+          'city':             city,
+          'country':          country,
+          'phone':            phone,
+          'email':            email,
+          'timezone':         timezone,
+          'currency':         currency,
+          'logo_url':         logoUrl,
+          'status':           'active',
+          'booking_channels': bookingChannels,
         })
         .select()
         .single();
@@ -615,10 +625,45 @@ class OrganizationService {
         .eq('id', propertyId);
   }
 
-  /// Permanently deletes a property and all its membership/settings rows.
-  /// Uses a SECURITY DEFINER RPC to bypass RLS on related tables.
+  /// Soft-deletes a property (sets is_deleted=true). Data is preserved in DB.
   Future<void> deleteProperty(String propertyId) async {
-    await _db.rpc('delete_property', params: {'p_property_id': propertyId});
+    await _db.rpc('soft_delete_property', params: {'p_property_id': propertyId});
+  }
+
+  // ── Profile ───────────────────────────────────────────────────────────────────
+
+  /// Returns the current user's profile from the profiles table.
+  Future<Map<String, dynamic>?> getMyProfile() async {
+    final userId = _db.auth.currentUser?.id;
+    if (userId == null) return null;
+    final rows = await _db
+        .from('profiles')
+        .select('id, full_name, job_title, phone, avatar_url, email')
+        .eq('id', userId)
+        .limit(1);
+    return rows.isNotEmpty ? rows.first : null;
+  }
+
+  /// Updates the current user's profile fields.
+  Future<void> updateProfile({
+    required String fullName,
+    String? jobTitle,
+    String? phone,
+  }) async {
+    final userId = _db.auth.currentUser?.id;
+    if (userId == null) return;
+    await _db.from('profiles').update({
+      'full_name':  fullName,
+      'job_title':  jobTitle ?? '',
+      'phone':      phone ?? '',
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', userId);
+  }
+
+  /// Soft-deletes the current user's account, org (if sole owner), and properties.
+  /// The auth.users record is preserved — only application data is flagged deleted.
+  Future<void> softDeleteMyAccount() async {
+    await _db.rpc('soft_delete_profile');
   }
 
   // ── Property edit ────────────────────────────────────────────────────────────
@@ -635,8 +680,9 @@ class OrganizationService {
     required String timezone,
     required String currency,
     String primaryColor = '#D4A853',
+    List<String>? bookingChannels,
   }) async {
-    await _db.from('hotels').update({
+    final hotelUpdate = <String, dynamic>{
       'name':          name,
       'address':       address,
       'city':          city,
@@ -646,7 +692,11 @@ class OrganizationService {
       'timezone':      timezone,
       'currency':      currency,
       'primary_color': primaryColor,
-    }).eq('id', propertyId);
+    };
+    if (bookingChannels != null) {
+      hotelUpdate['booking_channels'] = bookingChannels;
+    }
+    await _db.from('hotels').update(hotelUpdate).eq('id', propertyId);
 
     await _db.from('hotel_settings').update({
       'display_name':    name,
