@@ -46,7 +46,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   String _menuSearchQuery = '';
   final _menuSearchController = TextEditingController();
 
-  List<OrderItem> _cart = [];
+  final List<OrderItem> _cart = [];
   OrderType _orderType = OrderType.dineIn;
   String? _selectedTableId;
   String? _selectedBookingId;
@@ -105,7 +105,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       if (o.tableId == null) continue;
       if (o.status == OrderStatus.cancelled) continue;
       if (o.paymentStatus == PaymentStatus.paid ||
-          o.paymentStatus == PaymentStatus.chargedToRoom) continue;
+          o.paymentStatus == PaymentStatus.chargedToRoom) {
+        continue;
+      }
       // Skip fully-refunded ghost orders ($0 total, all items refunded)
       if (o.items.isNotEmpty && o.items.every((i) => i.isFullyRefunded)) continue;
       allOrders.putIfAbsent(o.tableId!, () => []).add(o);
@@ -999,7 +1001,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 10),
                     ),
-                    value: _selectedTableId,
+                    initialValue: _selectedTableId,
                     items: _tables
                         .map((t) => DropdownMenuItem(
                               value: t.id,
@@ -1223,7 +1225,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
-              value: _selectedTableId,
+              initialValue: _selectedTableId,
               items: _tables.map((t) {
                 final hasTab = _allTableOrders.containsKey(t.id);
                 return DropdownMenuItem(
@@ -1289,14 +1291,14 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   }
 
   Widget _buildDeliveryPanel() {
-    const _kUber   = Color(0xFF06C167); // Uber Eats green
-    const _kPickMe = Color(0xFFFF6B35); // PickMe orange
-    const _kOther  = Color(0xFF6B7280); // grey
+    const kUber   = Color(0xFF06C167); // Uber Eats green
+    const kPickMe = Color(0xFFFF6B35); // PickMe orange
+    const kOther  = Color(0xFF6B7280); // grey
 
     Color platformColor(String p) => switch (p) {
-      'UberEats' => _kUber,
-      'PickMe'   => _kPickMe,
-      _          => _kOther,
+      'UberEats' => kUber,
+      'PickMe'   => kPickMe,
+      _          => kOther,
     };
 
     IconData platformIcon(String p) => switch (p) {
@@ -1447,7 +1449,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                             .map((e) {
                               // Collapse duplicates: ['Medium','Medium','Large'] → 'Medium ×2, Large'
                               final counts = <String, int>{};
-                              for (final n in e.value) counts[n] = (counts[n] ?? 0) + 1;
+                              for (final n in e.value) {
+                                counts[n] = (counts[n] ?? 0) + 1;
+                              }
                               final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 2),
@@ -1859,10 +1863,10 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     final combinedItems = openOrders.fold(0, (s, o) => s + o.items.fold(0, (si, i) => si + i.activeQuantity));
     final hasMultiple = openOrders.length > 1;
 
-    const _kPurple = Color(0xFF8B5CF6);
-    const _kPurpleBg = Color(0xFFF5F3FF);
-    const _kTeal = Color(0xFF0D9488);
-    const _kTealBg = Color(0xFFF0FDFA);
+    const kPurple = Color(0xFF8B5CF6);
+    const kPurpleBg = Color(0xFFF5F3FF);
+    const kTeal = Color(0xFF0D9488);
+    const kTealBg = Color(0xFFF0FDFA);
 
     // Determine state based on latest order
     final allServedUnpaid = openOrders.every((o) =>
@@ -1880,12 +1884,12 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     final String statusBadge;
 
     if (isPaymentDue) {
-      accentColor = _kPurple; bgColor = _kPurpleBg;
-      borderColor = _kPurple.withOpacity(0.45);
+      accentColor = kPurple; bgColor = kPurpleBg;
+      borderColor = kPurple.withOpacity(0.45);
       headerIcon = Icons.payments_rounded; statusBadge = 'PAYMENT DUE';
     } else if (isInKitchen) {
-      accentColor = _kTeal; bgColor = _kTealBg;
-      borderColor = _kTeal.withOpacity(0.45);
+      accentColor = kTeal; bgColor = kTealBg;
+      borderColor = kTeal.withOpacity(0.45);
       headerIcon = Icons.restaurant_rounded;
       statusBadge = latestOrder.status == OrderStatus.preparing ? 'PREPARING' : 'READY';
     } else {
@@ -1955,7 +1959,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _kPurple,
+                  backgroundColor: kPurple,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 10),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -1971,8 +1975,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   icon: const Icon(Icons.receipt_outlined, size: 13),
                   label: const Text('View Invoice', style: TextStyle(fontSize: 11)),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: _kTeal,
-                    side: const BorderSide(color: _kTeal),
+                    foregroundColor: kTeal,
+                    side: const BorderSide(color: kTeal),
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1986,7 +1990,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     icon: const Icon(Icons.send_rounded, size: 13),
                     label: const Text('Send to Kitchen', style: TextStyle(fontSize: 11)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _kTeal,
+                      backgroundColor: kTeal,
                       foregroundColor: Colors.white,
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -2586,7 +2590,7 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
                   ),
                   const SizedBox(height: 10),
                 ],
-                Text('Select checked-in guest',
+                const Text('Select checked-in guest',
                     style: TextStyle(
                         fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black45)),
                 const SizedBox(height: 8),

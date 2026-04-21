@@ -122,10 +122,12 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
     if (hotelId.isNotEmpty) {
       try {
         final settings = await GuestMenuService().getSettings(hotelId);
-        if (mounted) setState(() {
+        if (mounted) {
+          setState(() {
           _accent  = hexToColor(settings.primaryColorHex);
           _logoUrl = settings.logoUrl;
         });
+        }
       } catch (_) {}
     }
 
@@ -198,13 +200,13 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
 
   // ── Navigation ─────────────────────────────────────────────────────────────
   void _next() {
-    final steps = _Step.values;
+    const steps = _Step.values;
     final idx = steps.indexOf(_step);
     if (idx < steps.length - 1) setState(() => _step = steps[idx + 1]);
   }
 
   void _back() {
-    final steps = _Step.values;
+    const steps = _Step.values;
     final idx = steps.indexOf(_step);
     if (idx > 0) setState(() => _step = steps[idx - 1]);
   }
@@ -464,7 +466,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
   );
 
   Widget _stepProgress() {
-    final steps = _Step.values;
+    const steps = _Step.values;
     final labels = ['Summary', 'Details', 'Preferences', 'Confirm'];
     return Container(
       color: _C.surface,
@@ -602,7 +604,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
         ),
         child: Row(children: [
           Icon(Icons.info_outline_rounded, color: _accent, size: 16),
-          SizedBox(width: 10),
+          const SizedBox(width: 10),
           Expanded(child: Text(
             'Please complete your online check-in at least 2 hours before arrival to ensure a smooth welcome.',
             style: TextStyle(color: _accent, fontSize: 12),

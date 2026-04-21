@@ -591,7 +591,9 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
 
   Future<void> _showModifierDialog(MenuItem item) async {
     final Map<String, List<String>> selections = {};
-    for (final mod in item.modifiers) selections[mod.name] = [];
+    for (final mod in item.modifiers) {
+      selections[mod.name] = [];
+    }
     int qty = 1;
 
     final result = await showDialog<({Map<String, List<String>> mods, int qty})>(
@@ -794,7 +796,9 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
       if (o.tableId == null) continue;
       if (o.status == OrderStatus.cancelled) continue;
       if (o.paymentStatus == PaymentStatus.paid ||
-          o.paymentStatus == PaymentStatus.chargedToRoom) continue;
+          o.paymentStatus == PaymentStatus.chargedToRoom) {
+        continue;
+      }
       // Skip orders where every item has been fully refunded ($0 ghosts)
       if (o.items.isNotEmpty && o.items.every((i) => i.isFullyRefunded)) {
         staleOrderIds.add(o.id);
@@ -1107,7 +1111,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
     int elapsedMinutes = 0;
     String timeLabel = '';
     if (isOccupied) {
-      final elapsed = DateTime.now().difference(openOrders!.first.createdAt);
+      final elapsed = DateTime.now().difference(openOrders.first.createdAt);
       elapsedMinutes = elapsed.inMinutes;
       timeLabel = elapsedMinutes < 60
           ? '${elapsedMinutes}m'
@@ -1205,7 +1209,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
               const Spacer(),
               if (isOccupied) ...[
                 Text(
-                  '${openOrders!.fold(0, (s, o) => s + o.items.fold(0, (s2, i) => s2 + i.activeQuantity))} item(s)'
+                  '${openOrders.fold(0, (s, o) => s + o.items.fold(0, (s2, i) => s2 + i.activeQuantity))} item(s)'
                   '${openOrders.length > 1 ? " · ${openOrders.length} tickets" : ""}',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
@@ -1238,35 +1242,98 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
   // ─── Right panel router ───────────────────────────────
 
   Widget _buildDetailPanel() {
-    if (_selectedTableId == null) return _buildIdleState();
-    if (_isAddingItems) return _buildItemPickerPanel();
-    final openOrders = _allTableOrders[_selectedTableId!];
-    if (openOrders == null || openOrders.isEmpty) return _buildIdleState();
-    final table = _tables.firstWhere((t) => t.id == _selectedTableId);
-    return _buildOrderPanel(openOrders, table);
+    Widget content;
+    if (_selectedTableId == null) {
+      content = _buildIdleState();
+    } else if (_isAddingItems) {
+      content = _buildItemPickerPanel();
+    } else {
+      final openOrders = _allTableOrders[_selectedTableId!];
+      if (openOrders == null || openOrders.isEmpty) {
+        content = _buildIdleState();
+      } else {
+        final table = _tables.firstWhere((t) => t.id == _selectedTableId);
+        content = _buildOrderPanel(openOrders, table);
+      }
+    }
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+      child: KeyedSubtree(
+        key: ValueKey('$_selectedTableId-$_isAddingItems'),
+        child: content,
+      ),
+    );
   }
 
   Widget _buildIdleState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.table_restaurant_rounded,
-              size: 72, color: Colors.grey.shade200),
-          const SizedBox(height: 16),
-          Text('Select a table',
-              style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.grey.shade400)),
-          const SizedBox(height: 8),
-          Text(
-            'Tap an available table to start a new order,\nor an occupied table to manage the running tab.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+    final activeTabs = _allTableOrders.values.where((l) => l.isNotEmpty).length;
+    final totalRevenue = _allTableOrders.values.fold<double>(
+        0, (sum, orders) => sum + orders.fold(0, (s, o) => s + o.totalAmount));
+
+    return Container(
+      color: const Color(0xFFF8FAFC),
+      child: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 420),
+          padding: const EdgeInsets.all(32),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              )
+            ],
+            border: Border.all(color: Colors.grey.shade100),
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.analytics_rounded, size: 48, color: Color(0xFFE65100)),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Shift Overview',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Tap an available table to start a new order,\nor an occupied table to manage the tab.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Color(0xFF64748B), height: 1.4),
+              ),
+              const SizedBox(height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildStatColumn('Active Tabs', activeTabs.toString()),
+                  Container(width: 1, height: 40, color: Colors.grey.shade200),
+                  _buildStatColumn('Open Revenue', _currency.format(totalRevenue)),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildStatColumn(String label, String value) {
+    return Column(
+      children: [
+        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFFE65100))),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF94A3B8))),
+      ],
     );
   }
 
@@ -1512,7 +1579,9 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                     .where((e) => e.value.isNotEmpty)
                     .map((e) {
                       final counts = <String, int>{};
-                      for (final n in e.value) counts[n] = (counts[n] ?? 0) + 1;
+                      for (final n in e.value) {
+                        counts[n] = (counts[n] ?? 0) + 1;
+                      }
                       final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
                       return Padding(
                           padding: const EdgeInsets.only(top: 2),

@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../models/restaurant_order.dart';
 import '../providers/hotel_session.dart';
 import '../app_theme.dart';
-import '../models/restaurant_table.dart';
 import '../services/restaurant_service.dart';
 
 const _kOrange = AppTheme.restaurantAccent;

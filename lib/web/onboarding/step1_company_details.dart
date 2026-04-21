@@ -79,7 +79,7 @@ class _Step1CompanyDetailsState extends State<Step1CompanyDetails> {
           const SizedBox(height: 28),
 
           // Company name
-          _FieldLabel(text: 'Company Name *'),
+          const _FieldLabel(text: 'Company Name *'),
           const SizedBox(height: 6),
           TextFormField(
             controller: _nameController,
@@ -98,7 +98,7 @@ class _Step1CompanyDetailsState extends State<Step1CompanyDetails> {
           const SizedBox(height: 18),
 
           // Slug
-          _FieldLabel(text: 'Company Slug'),
+          const _FieldLabel(text: 'Company Slug'),
           const SizedBox(height: 4),
           Text(
             'URL-friendly identifier. Auto-generated from name.',
@@ -126,7 +126,7 @@ class _Step1CompanyDetailsState extends State<Step1CompanyDetails> {
           const SizedBox(height: 18),
 
           // Country
-          _FieldLabel(text: 'Country'),
+          const _FieldLabel(text: 'Country'),
           const SizedBox(height: 6),
           TextFormField(
             controller: _countryController,
@@ -139,7 +139,7 @@ class _Step1CompanyDetailsState extends State<Step1CompanyDetails> {
           const SizedBox(height: 18),
 
           // Phone
-          _FieldLabel(text: 'Phone'),
+          const _FieldLabel(text: 'Phone'),
           const SizedBox(height: 6),
           TextFormField(
             controller: _phoneController,

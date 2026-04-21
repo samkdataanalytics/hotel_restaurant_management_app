@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:uuid/uuid.dart';
 import '../models/guest.dart';
 import '../models/booking.dart';

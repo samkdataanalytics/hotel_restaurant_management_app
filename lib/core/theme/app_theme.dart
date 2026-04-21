@@ -110,7 +110,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       scaffoldBackgroundColor: _adminContent,
-      colorScheme: ColorScheme.light(
+      colorScheme: const ColorScheme.light(
         primary: _adminPrimary,
         secondary: _adminPrimaryLight,
         surface: _adminCard,

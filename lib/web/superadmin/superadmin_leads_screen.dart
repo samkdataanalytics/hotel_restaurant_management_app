@@ -84,8 +84,8 @@ class _LeadsContent extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
-          Row(children: [
-            const Expanded(
+          const Row(children: [
+            Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Enterprise Leads',
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Color(0xFF1E293B))),
@@ -96,11 +96,11 @@ class _LeadsContent extends StatelessWidget {
             ),
             // Status legend
             _StatusBadge(LeadStatus.newLead),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             _StatusBadge(LeadStatus.contacted),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             _StatusBadge(LeadStatus.converted),
-            const SizedBox(width: 8),
+            SizedBox(width: 8),
             _StatusBadge(LeadStatus.declined),
           ]),
           const SizedBox(height: 28),

@@ -94,6 +94,16 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
         return;
       }
 
+      // Supabase returns a fake success for existing emails (email enumeration
+      // protection). Identities list is empty when the email is already registered.
+      if (res.user!.identities != null && res.user!.identities!.isEmpty) {
+        setState(() {
+          _isLoading = false;
+          _error     = 'An account with this email already exists. Please sign in instead.';
+        });
+        return;
+      }
+
       // If session is returned immediately (email confirmation disabled),
       // load the auth context and let GoRouter redirect.
       if (res.session != null) {

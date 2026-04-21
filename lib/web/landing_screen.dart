@@ -73,9 +73,7 @@ class _LandingScreenState extends State<LandingScreen> {
               children: [
                 const SizedBox(height: 100),
                 _HeroSection(isMobile: isMobile),
-                _StatsStrip(isMobile: isMobile),
                 SizedBox(key: _featuresKey, child: _FeaturesSection(isMobile: isMobile)),
-                _TestimonialsSection(isMobile: isMobile),
                 SizedBox(key: _pricingKey, child: _PricingSection(isMobile: isMobile)),
                 _CtaSection(isMobile: isMobile),
                 _Footer(isMobile: isMobile),
@@ -123,7 +121,7 @@ class _NavBar extends StatelessWidget {
       child: Row(
         children: [
           // Animated nav logo
-          _AnimatedLogo(size: 72),
+          const _AnimatedLogo(size: 72),
           if (!isMobile) ...[
             const SizedBox(width: 8),
             ShaderMask(
@@ -298,11 +296,11 @@ class _HeroSection extends StatelessWidget {
               borderRadius: BorderRadius.circular(30),
               border: Border.all(color: _C.gold.withAlpha(60)),
             ),
-            child: Row(
+            child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.verified_rounded, color: _C.gold, size: 14),
-                const SizedBox(width: 7),
+                Icon(Icons.verified_rounded, color: _C.gold, size: 14),
+                SizedBox(width: 7),
                 Text(
                   'Trusted by 500+ Properties Worldwide',
                   style: TextStyle(
@@ -369,11 +367,11 @@ class _HeroSection extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           // No credit card note
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.lock_outline_rounded, size: 13, color: _C.muted),
-              const SizedBox(width: 5),
+              SizedBox(width: 5),
               Text(
                 'No credit card required · Free forever on Starter plan',
                 style: TextStyle(color: _C.muted, fontSize: 12.5),
@@ -409,8 +407,8 @@ class _StatsStrip extends StatelessWidget {
         horizontal: isMobile ? 24 : 80,
         vertical: 40,
       ),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
           colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
         ),
       ),
@@ -486,10 +484,10 @@ class _DashboardMockup extends StatelessWidget {
           // Browser chrome
           Container(
             height: 40,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: _C.card,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              border: const Border(bottom: BorderSide(color: _C.border)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              border: Border(bottom: BorderSide(color: _C.border)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(children: [
@@ -547,13 +545,13 @@ class _DashboardMockup extends StatelessWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    _StatCard(label: 'Occupancy', value: '87%', icon: Icons.king_bed_rounded, color: const Color(0xFF22C55E), trend: '+4%'),
+                    const _StatCard(label: 'Occupancy', value: '87%', icon: Icons.king_bed_rounded, color: Color(0xFF22C55E), trend: '+4%'),
                     const SizedBox(width: 10),
-                    _StatCard(label: "Today's Revenue", value: '\$4,280', icon: Icons.attach_money_rounded, color: _C.gold, trend: '+12%'),
+                    const _StatCard(label: "Today's Revenue", value: '\$4,280', icon: Icons.attach_money_rounded, color: _C.gold, trend: '+12%'),
                     const SizedBox(width: 10),
-                    if (!isMobile) _StatCard(label: 'Active Orders', value: '12', icon: Icons.restaurant_rounded, color: const Color(0xFFF97316), trend: '↑ Busy'),
+                    if (!isMobile) const _StatCard(label: 'Active Orders', value: '12', icon: Icons.restaurant_rounded, color: Color(0xFFF97316), trend: '↑ Busy'),
                     if (!isMobile) const SizedBox(width: 10),
-                    if (!isMobile) _StatCard(label: 'Check-Ins Today', value: '8', icon: Icons.how_to_reg_rounded, color: const Color(0xFF3B82F6), trend: '3 pending'),
+                    if (!isMobile) const _StatCard(label: 'Check-Ins Today', value: '8', icon: Icons.how_to_reg_rounded, color: Color(0xFF3B82F6), trend: '3 pending'),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -795,7 +793,7 @@ class _FeaturesSection extends StatelessWidget {
       ),
       child: Column(
         children: [
-          _SectionLabel(label: 'FEATURES'),
+          const _SectionLabel(label: 'FEATURES'),
           const SizedBox(height: 16),
           Text(
             'Everything You Need to\nRun a Great Property',
@@ -959,7 +957,7 @@ class _TestimonialsSection extends StatelessWidget {
       ),
       child: Column(
         children: [
-          _SectionLabel(label: 'TESTIMONIALS'),
+          const _SectionLabel(label: 'TESTIMONIALS'),
           const SizedBox(height: 16),
           Text(
             'Loved by Hospitality\nProfessionals',
@@ -1126,7 +1124,7 @@ class _PricingSectionState extends State<_PricingSection> {
       ),
       child: Column(
         children: [
-          _SectionLabel(label: 'PRICING'),
+          const _SectionLabel(label: 'PRICING'),
           const SizedBox(height: 16),
           Text(
             'Simple, Transparent Pricing',
@@ -1362,14 +1360,14 @@ class _CtaSection extends StatelessWidget {
                   borderRadius: BorderRadius.circular(30),
                   border: Border.all(color: _C.gold.withAlpha(80)),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.rocket_launch_rounded, color: _C.gold, size: 14),
-                    const SizedBox(width: 7),
+                    Icon(Icons.rocket_launch_rounded, color: _C.gold, size: 14),
+                    SizedBox(width: 7),
                     Text(
                       'Get started in under 5 minutes',
-                      style: const TextStyle(color: _C.gold, fontSize: 12, fontWeight: FontWeight.w700),
+                      style: TextStyle(color: _C.gold, fontSize: 12, fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),
@@ -1421,7 +1419,7 @@ class _CtaSection extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               // Trust row
-              Wrap(
+              const Wrap(
                 spacing: 24,
                 runSpacing: 8,
                 alignment: WrapAlignment.center,
@@ -1511,8 +1509,8 @@ class _Footer extends StatelessWidget {
                     const Spacer(),
                     // Product links
                     _FooterColumn(title: 'Product', items: [
-                      _FooterItem('Features', null),
-                      _FooterItem('Pricing', null),
+                      const _FooterItem('Features', null),
+                      const _FooterItem('Pricing', null),
                       _FooterItem('Sign In', () => context.go('/login')),
                       _FooterItem('Get Started', () => context.go('/signup')),
                     ]),

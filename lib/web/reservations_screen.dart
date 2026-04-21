@@ -555,7 +555,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                           height: 28,
                           alignment: Alignment.center,
                           child: Text(
-                            total > 0 ? '${_sym}${total.toStringAsFixed(0)}' : '-',
+                            total > 0 ? '$_sym${total.toStringAsFixed(0)}' : '-',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -775,7 +775,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                     _statColumn(dayReserved.toString(), 'Booked', AppTheme.danger),
                     _statColumn(dayAvailable.toString(), 'Available', AppTheme.success),
                     _statColumn(dayMaintenance.toString(), 'Maint.', AppTheme.warning),
-                    _statColumn('${_sym}${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
+                    _statColumn('$_sym${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
                   ],
                 ),
               ),
@@ -830,7 +830,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                   _statColumn(dayReserved.toString(), 'Booked', AppTheme.danger),
                   _statColumn(dayAvailable.toString(), 'Available', AppTheme.success),
                   _statColumn(dayMaintenance.toString(), 'Maint.', AppTheme.warning),
-                  _statColumn('${_sym}${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
+                  _statColumn('$_sym${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
                 ],
               ),
             ),
@@ -987,7 +987,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                       Icon(Icons.attach_money, size: 14, color: AppTheme.success),
                       const SizedBox(width: 4),
                       Text(
-                        '${_sym}${booking.totalAmount.toStringAsFixed(2)}',
+                        '$_sym${booking.totalAmount.toStringAsFixed(2)}',
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.success),
                       ),
                       const SizedBox(width: 8),
@@ -1198,17 +1198,38 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
   }
 
   Future<void> _printInvoice(Booking booking, Room room, Guest guest) async {
-    showDialog(context: context, builder: (_) => const Center(child: CircularProgressIndicator()));
+    BuildContext? dialogContext;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        dialogContext = ctx;
+        return const Center(child: CircularProgressIndicator());
+      },
+    );
 
-    final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
-    _restaurantService.hotelId = session.hotelId;
+    void dismissDialog() {
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+        dialogContext = null;
+      }
+    }
 
-    final expenses         = await _bookingService.getAllExpenses();
-    final restaurantOrders = await _restaurantService.getChargedToRoomOrders(booking.id);
+    try {
+      final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
+      _restaurantService.hotelId = session.hotelId;
 
-    if (mounted) {
-      Navigator.pop(context); // Close loading dialog
       final settings = session.settings;
+
+      // Fetch DB data + warm up fonts/logo all in parallel
+      final expensesFuture  = _bookingService.getAllExpenses();
+      final ordersFuture    = _restaurantService.getChargedToRoomOrders(booking.id);
+      final warmUpFuture    = _invoiceService.warmUp(settings?.logoUrl ?? '');
+      final expenses         = await expensesFuture;
+      final restaurantOrders = await ordersFuture;
+      await warmUpFuture;
+
+      // PDF is already warm — generation is now fast
       await _invoiceService.displayInvoicePdf(
         booking:          booking,
         room:             room,
@@ -1218,6 +1239,19 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
         currencySymbol:   settings?.currencySymbol ?? '\$',
         settings:         settings,
       );
+
+      dismissDialog();
+    } catch (e) {
+      dismissDialog();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate guest folio: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 }
@@ -1246,6 +1280,7 @@ class _ReservationFormDialog extends StatefulWidget {
 class _ReservationFormDialogState extends State<_ReservationFormDialog> {
   final _formKey = GlobalKey<FormState>();
   final _uuid = const Uuid();
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   late final TextEditingController _guestNameController;
   late final TextEditingController _emailController;
@@ -1572,7 +1607,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                       Expanded(
                         flex: 2,
                         child: DropdownButtonFormField<String>(
-                          value: _selectedRoomId,
+                          initialValue: _selectedRoomId,
                           decoration: const InputDecoration(labelText: 'Room', prefixIcon: Icon(Icons.meeting_room_outlined)),
                           items: _availableRooms.map((room) {
                             final underMaintenance = room.status == RoomStatus.maintenance;
@@ -1609,17 +1644,17 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                         child: TextFormField(
                           controller: _amountController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Total Amount (\$)',
+                          decoration: InputDecoration(
+                            labelText: 'Total Amount ($_sym)',
                             hintText: 'e.g. 450.00',
-                            prefixIcon: Icon(Icons.attach_money),
+                            prefixIcon: const Icon(Icons.attach_money),
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<BookingStatus>(
-                          value: _selectedStatus,
+                          initialValue: _selectedStatus,
                           decoration: const InputDecoration(labelText: 'Status', prefixIcon: Icon(Icons.info_outline)),
                           items: BookingStatus.values.map((status) {
                             String label;

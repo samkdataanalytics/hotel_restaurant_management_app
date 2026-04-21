@@ -586,16 +586,28 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
   }
 
   Future<void> _printInvoice(Booking booking, Room room, Guest guest) async {
-    showDialog(context: context, builder: (_) => const Center(child: CircularProgressIndicator()));
+    BuildContext? dialogContext;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        dialogContext = ctx;
+        return const Center(child: CircularProgressIndicator());
+      },
+    );
 
-    final session = Provider.of<HotelSession>(context, listen: false);
-    _restaurantService.hotelId = session.hotelId;
+    try {
+      final session = Provider.of<HotelSession>(context, listen: false);
+      _restaurantService.hotelId = session.hotelId;
 
-    final expenses        = await _bookingService.getAllExpenses();
-    final restaurantOrders = await _restaurantService.getChargedToRoomOrders(booking.id);
+      final expenses        = await _bookingService.getAllExpenses();
+      final restaurantOrders = await _restaurantService.getChargedToRoomOrders(booking.id);
 
-    if (mounted) {
-      Navigator.pop(context); // Close loading dialog
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+        dialogContext = null;
+      }
+
       final settings = session.settings;
       await _invoiceService.displayInvoicePdf(
         booking:          booking,
@@ -606,6 +618,19 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
         currencySymbol:   settings?.currencySymbol ?? '\$',
         settings:         settings,
       );
+    } catch (e) {
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load guest folio: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 }

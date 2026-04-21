@@ -58,7 +58,7 @@ class _Step2AdminProfileState extends State<Step2AdminProfile> {
           const SizedBox(height: 28),
 
           // Full name
-          _FieldLabel(text: 'Full Name *'),
+          const _FieldLabel(text: 'Full Name *'),
           const SizedBox(height: 6),
           TextFormField(
             controller: _nameController,
@@ -77,7 +77,7 @@ class _Step2AdminProfileState extends State<Step2AdminProfile> {
           const SizedBox(height: 18),
 
           // Job title
-          _FieldLabel(text: 'Job Title'),
+          const _FieldLabel(text: 'Job Title'),
           const SizedBox(height: 6),
           TextFormField(
             controller: _titleController,
@@ -90,7 +90,7 @@ class _Step2AdminProfileState extends State<Step2AdminProfile> {
           const SizedBox(height: 18),
 
           // Phone
-          _FieldLabel(text: 'Phone'),
+          const _FieldLabel(text: 'Phone'),
           const SizedBox(height: 6),
           TextFormField(
             controller: _phoneController,

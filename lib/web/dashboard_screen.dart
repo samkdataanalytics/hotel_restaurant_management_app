@@ -7,7 +7,6 @@ import 'widgets/skeleton.dart';
 import '../models/check_in.dart';
 import '../models/guest.dart';
 import '../models/room.dart';
-import '../models/booking.dart';
 import '../models/restaurant_order.dart';
 import '../providers/app_auth_provider.dart';
 import '../providers/hotel_session.dart';

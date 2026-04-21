@@ -229,7 +229,7 @@ class _GuestDetailsScreenState extends State<GuestDetailsScreen> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: DropdownButtonFormField<String>(
-                    value: _selectedIdType,
+                    initialValue: _selectedIdType,
                     dropdownColor: AppTheme.darkCard,
                     style: const TextStyle(color: Colors.white, fontSize: 16),
                     decoration: const InputDecoration(

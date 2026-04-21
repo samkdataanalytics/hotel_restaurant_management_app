@@ -17,13 +17,50 @@ class _C {
   static const divider   = Color(0xFF334155);
 }
 
-// ─── Cart entry ───────────────────────────────────────────────────────────────
 class _CartItem {
   final MenuItem item;
   int qty;
-  String notes;
-  _CartItem({required this.item, this.qty = 1, this.notes = ''});
-  double get subtotal => item.price * qty;
+  String notes = '';
+  final Map<String, List<String>> selectedModifiers;
+
+  _CartItem({
+    required this.item,
+    this.qty = 1,
+    Map<String, List<String>>? modifiers,
+  }) : selectedModifiers = modifiers ?? {};
+
+  double get subtotal {
+    // allowMultiple modifiers: each selected option = a separate unit at
+    // (item.price + adjustment).  E.g. 1× Small + 1× Medium coffee = $5 + $7 = $12.
+    // Single-select modifiers: chosen option adjusts a single base price.
+    double singleAdjustment  = 0;
+    double multiUnitTotal    = 0;
+    int    multiUnitCount    = 0;
+
+    selectedModifiers.forEach((cat, list) {
+      final mod = item.modifiers.where((m) => m.name == cat).firstOrNull;
+      if (mod == null || list.isEmpty) return;
+
+      if (mod.allowMultiple) {
+        for (final optName in list) {
+          final opt = mod.options.where((o) => o.name == optName).firstOrNull;
+          if (opt != null) {
+            multiUnitTotal += item.price + opt.priceAdjustment;
+            multiUnitCount++;
+          }
+        }
+      } else {
+        final opt = mod.options.where((o) => o.name == list.first).firstOrNull;
+        if (opt != null) singleAdjustment += opt.priceAdjustment;
+      }
+    });
+
+    if (multiUnitCount > 0) {
+      // Each multi-unit also gets any single-select adjustments
+      return (multiUnitTotal + singleAdjustment * multiUnitCount) * qty;
+    }
+    return (item.price + singleAdjustment) * qty;
+  }
 }
 
 // ─── Placed order record ──────────────────────────────────────────────────────
@@ -31,16 +68,14 @@ class _PlacedOrder {
   final String id;
   final List<_CartItem> items;
   final bool isAddOn;       // true if parentOrderId was set
-  String status;
-  String paymentStatus;
+  String status = 'pending';
+  String paymentStatus = 'pending';
   StreamSubscription<({String status, String paymentStatus})>? sub;
 
   _PlacedOrder({
     required this.id,
     required this.items,
     required this.isAddOn,
-    this.status = 'pending',
-    this.paymentStatus = 'unpaid',
   });
 
   bool get isActive =>
@@ -67,7 +102,7 @@ class GuestMenuScreen extends StatefulWidget {
 }
 
 class _GuestMenuScreenState extends State<GuestMenuScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _service = GuestMenuService();
 
   // ── Data ───────────────────────────────────────────────────────────────────
@@ -79,6 +114,8 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
   List<String> _categories = [];
   double _taxRate = 0;
   double _serviceRate = 0;
+  String _currencySymbol = '\$';
+  NumberFormat get _fmt => NumberFormat.currency(symbol: _currencySymbol, decimalDigits: 2);
   bool _loading = true;
   String? _error;
 
@@ -117,8 +154,8 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
   double get _cartSubtotal => _cart.fold(0.0, (s, c) => s + c.subtotal);
   double get _allOrdersSubtotal =>
       _orders.fold(0.0, (s, o) => s + o.subtotal);
-  double get _tax => _allOrdersSubtotal * (_taxRate / 100);
-  double get _serviceCharge => _allOrdersSubtotal * (_serviceRate / 100);
+  double get _tax => _allOrdersSubtotal * _taxRate;
+  double get _serviceCharge => _allOrdersSubtotal * _serviceRate;
   double get _grandTotal => _allOrdersSubtotal + _tax + _serviceCharge;
 
   int get _totalCartItems => _cart.fold(0, (s, c) => s + c.qty);
@@ -152,7 +189,7 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
       final items    = results[0] as List<MenuItem>;
       final table    = results[1] as RestaurantTable?;
       final name     = results[2] as String;
-      final settings = results[3] as ({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl});
+      final settings = results[3] as ({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl, String currencySymbol});
       final cats = items.map((e) => e.category).toSet().toList()..sort();
       _tabController.dispose();
       _tabController = TabController(length: cats.length, vsync: this)
@@ -165,10 +202,11 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
         _items         = items;
         _table         = table;
         _propertyName  = name;
-        _taxRate       = settings.taxRate;
-        _serviceRate   = settings.serviceChargeRate;
-        _accent        = hexToColor(settings.primaryColorHex);
-        _logoUrl       = settings.logoUrl;
+        _taxRate        = settings.taxRate;
+        _serviceRate    = settings.serviceChargeRate;
+        _accent         = hexToColor(settings.primaryColorHex);
+        _logoUrl        = settings.logoUrl;
+        _currencySymbol = settings.currencySymbol;
         _categories    = cats;
         _selectedCategory = cats.isNotEmpty ? cats.first : null;
         _loading       = false;
@@ -180,10 +218,173 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
 
   // ── Cart helpers ───────────────────────────────────────────────────────────
   void _addToCart(MenuItem item) {
+    if (item.modifiers.isNotEmpty) {
+      _showModifierDialog(item);
+    } else {
+      _addToCartWithMods(item, {}, 1);
+    }
+  }
+
+  Widget _qtyBtn(IconData icon, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 30, height: 30,
+      decoration: BoxDecoration(
+        color: _C.card, borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _C.divider),
+      ),
+      child: Icon(icon, color: _C.text, size: 14),
+    ),
+  );
+
+  Future<void> _showModifierDialog(MenuItem item) async {
+    final Map<String, List<String>> selections = {};
+    for (final mod in item.modifiers) selections[mod.name] = [];
+    int qty = 1;
+    final fmt = _fmt;
+
+    final result = await showDialog<({Map<String, List<String>> mods, int qty})>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          bool isValid = true;
+          for (final mod in item.modifiers) {
+            if (mod.isRequired && selections[mod.name]!.isEmpty) {
+              isValid = false; break;
+            }
+          }
+
+          return AlertDialog(
+            backgroundColor: _C.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: _C.divider)),
+            title: Text('Customize ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold, color: _C.text)),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ...item.modifiers.map((mod) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(mod.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _C.text)),
+                                if (mod.isRequired)
+                                  const Text(' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                const Spacer(),
+                                Text(mod.allowMultiple ? '(Qty per option)' : '(Choose 1)',
+                                    style: const TextStyle(fontSize: 12, color: _C.subtext)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ...mod.options.map((opt) {
+                              final priceLabel = opt.priceAdjustment == 0
+                                  ? fmt.format(item.price)
+                                  : '+${fmt.format(opt.priceAdjustment)}';
+                              if (mod.allowMultiple) {
+                                final optQty = selections[mod.name]!.where((n) => n == opt.name).length;
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 5),
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: Text(opt.name, style: const TextStyle(fontSize: 14, color: _C.text))),
+                                      Text(priceLabel, style: const TextStyle(fontSize: 13, color: _C.subtext)),
+                                      const SizedBox(width: 12),
+                                      _qtyBtn(Icons.remove_rounded, () { if (optQty > 0) setSt(() => selections[mod.name]!.remove(opt.name)); }),
+                                      SizedBox(
+                                        width: 36,
+                                        child: Text('$optQty', textAlign: TextAlign.center, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: optQty > 0 ? _C.gold : _C.subtext)),
+                                      ),
+                                      _qtyBtn(Icons.add_rounded, () => setSt(() => selections[mod.name]!.add(opt.name))),
+                                    ],
+                                  ),
+                                );
+                              } else {
+                                final isSelected = selections[mod.name]!.contains(opt.name);
+                                return InkWell(
+                                  onTap: () => setSt(() => selections[mod.name] = [opt.name]),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                          color: isSelected ? _C.gold : _C.subtext,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(child: Text(opt.name, style: const TextStyle(fontSize: 14, color: _C.text))),
+                                        Text(priceLabel, style: const TextStyle(fontSize: 13, color: _C.subtext)),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
+                            }),
+                          ],
+                        ),
+                      );
+                    }),
+                    const Divider(color: _C.divider),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Text('Quantity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _C.text)),
+                        const Spacer(),
+                        _qtyBtn(Icons.remove_rounded, () { if (qty > 1) setSt(() => qty--); }),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text('$qty', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _C.text)),
+                        ),
+                        _qtyBtn(Icons.add_rounded, () => setSt(() => qty++)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: _C.subtext))),
+              ElevatedButton(
+                onPressed: isValid ? () => Navigator.pop(ctx, (mods: selections, qty: qty)) : null,
+                style: ElevatedButton.styleFrom(backgroundColor: _C.gold, foregroundColor: _C.bg),
+                child: Text('Add $qty to Order'),
+              )
+            ],
+          );
+        }
+      )
+    );
+
+    if (result != null) {
+      _addToCartWithMods(item, result.mods, result.qty);
+    }
+  }
+
+  void _addToCartWithMods(MenuItem item, Map<String, List<String>> mods, int qty) {
     setState(() {
-      final existing = _cart.where((c) => c.item.id == item.id).firstOrNull;
-      if (existing != null) existing.qty++;
-      else _cart.add(_CartItem(item: item));
+      final existing = _cart.where((c) {
+        if (c.item.id != item.id) return false;
+        if (c.selectedModifiers.length != mods.length) return false;
+        for (final k in mods.keys) {
+          if (!c.selectedModifiers.containsKey(k)) return false;
+          final listA = List<String>.from(c.selectedModifiers[k]!)..sort();
+          final listB = List<String>.from(mods[k]!)..sort();
+          if (listA.join() != listB.join()) return false;
+        }
+        return true;
+      }).firstOrNull;
+
+      if (existing != null) {
+        existing.qty += qty;
+      } else {
+        _cart.add(_CartItem(item: item, qty: qty, modifiers: mods));
+      }
     });
   }
 
@@ -191,13 +392,16 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
     setState(() {
       final existing = _cart.where((c) => c.item.id == item.id).firstOrNull;
       if (existing == null) return;
-      if (existing.qty > 1) existing.qty--;
-      else _cart.removeWhere((c) => c.item.id == item.id);
+      if (existing.qty > 1) {
+        existing.qty--;
+      } else {
+        _cart.remove(existing);
+      }
     });
   }
 
   int _qtyInCart(MenuItem item) =>
-      _cart.where((c) => c.item.id == item.id).firstOrNull?.qty ?? 0;
+      _cart.where((c) => c.item.id == item.id).fold(0, (s, c) => s + c.qty);
 
   // ── Place / add-on order ───────────────────────────────────────────────────
   Future<void> _placeOrder() async {
@@ -211,7 +415,12 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
       final id = await _service.placeOrder(
         propertyId: widget.propertyId,
         tableId:    widget.tableId,
-        cartItems:  _cart.map((c) => (item: c.item, qty: c.qty, notes: c.notes)).toList(),
+        cartItems:  _cart.map((c) => (
+          item: c.item,
+          qty: c.qty,
+          notes: '',
+          modifiers: c.selectedModifiers.isNotEmpty ? c.selectedModifiers : null
+        )).toList(),
         parentOrderId: parentId,
       );
 
@@ -334,7 +543,7 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
   // ── Order tracking screen ─────────────────────────────────────────────────
   Widget _orderTrackingView() {
     final allServed = _orders.isNotEmpty && _orders.every((o) => o.status == 'served');
-    final fmt = NumberFormat.currency(symbol: '', decimalDigits: 2);
+    final fmt = _fmt;
 
     return Scaffold(
       backgroundColor: _C.bg,
@@ -396,7 +605,9 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
                   height: 50,
                   child: OutlinedButton.icon(
                     onPressed: () => setState(() {
-                      for (final o in _orders) o.sub?.cancel();
+                      for (final o in _orders) {
+                        o.sub?.cancel();
+                      }
                       _orders.clear();
                     }),
                     icon: const Icon(Icons.replay_rounded, color: _C.gold),
@@ -534,9 +745,9 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
         const Divider(color: _C.divider, height: 20),
         _invoiceRow('Subtotal', _allOrdersSubtotal, fmt),
         if (_taxRate > 0)
-          _invoiceRow('Tax (${_taxRate.toStringAsFixed(0)}%)', _tax, fmt),
+          _invoiceRow('Tax (${(_taxRate * 100).toStringAsFixed(0)}%)', _tax, fmt),
         if (_serviceRate > 0)
-          _invoiceRow('Service (${_serviceRate.toStringAsFixed(0)}%)', _serviceCharge, fmt),
+          _invoiceRow('Service (${(_serviceRate * 100).toStringAsFixed(0)}%)', _serviceCharge, fmt),
         const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -922,9 +1133,41 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
                   maxLines: 2, overflow: TextOverflow.ellipsis),
             ],
             const SizedBox(height: 8),
-            Text(NumberFormat.currency(symbol: '', decimalDigits: 2).format(item.price),
+            Text(_fmt.format(item.price),
                 style: const TextStyle(color: _C.gold,
                     fontWeight: FontWeight.w700, fontSize: 15)),
+          if (item.modifiers.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 6),
+              child: Divider(height: 1, thickness: 0.8, color: _C.divider),
+            ),
+            ...item.modifiers.take(2).map((mod) {
+              final optLabels = mod.options.map((o) => o.priceAdjustment != 0
+                  ? '${o.name} (+${_fmt.format(o.priceAdjustment)})'
+                  : o.name).join('  ·  ');
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(mod.name,
+                        style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: _C.subtext)),
+                    const SizedBox(height: 2),
+                    Text(optLabels,
+                        style: const TextStyle(fontSize: 10, color: _C.text),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              );
+            }),
+            if (item.modifiers.length > 2)
+              Text('+${item.modifiers.length - 2} more groups',
+                  style: const TextStyle(fontSize: 10, color: _C.subtext)),
+          ],
           ],
         )),
         const SizedBox(width: 8),
@@ -971,11 +1214,12 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
   }
 
   Widget _cartFab() {
-    final fmt = NumberFormat.currency(symbol: '', decimalDigits: 2);
+    final fmt = _fmt;
     // For add-on, show running total including previous orders
+    final cartWithCharges = _cartSubtotal * (1 + _taxRate + _serviceRate);
     final displayTotal = _addingMore
-        ? _grandTotal + _cartSubtotal * (1 + _taxRate / 100 + _serviceRate / 100)
-        : _cartSubtotal;
+        ? _grandTotal + cartWithCharges
+        : cartWithCharges;
 
     return GestureDetector(
       onTap: _showCart,
@@ -1021,11 +1265,12 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
       builder: (_) => _CartSheet(
         cart: _cart,
         subtotal: _cartSubtotal,
-        tax: _cartSubtotal * (_taxRate / 100),
-        serviceCharge: _cartSubtotal * (_serviceRate / 100),
-        total: _cartSubtotal * (1 + _taxRate / 100 + _serviceRate / 100),
+        tax: _cartSubtotal * _taxRate,
+        serviceCharge: _cartSubtotal * _serviceRate,
+        total: _cartSubtotal * (1 + _taxRate + _serviceRate),
         taxRate: _taxRate,
         serviceRate: _serviceRate,
+        currencySymbol: _currencySymbol,
         isPlacing: _isPlacing,
         isAddOn: _addingMore,
         onAdd: (item) { _addToCart(item); },
@@ -1083,6 +1328,7 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
 class _CartSheet extends StatefulWidget {
   final List<_CartItem> cart;
   final double subtotal, tax, serviceCharge, total, taxRate, serviceRate;
+  final String currencySymbol;
   final bool isPlacing;
   final bool isAddOn;
   final void Function(MenuItem) onAdd;
@@ -1097,6 +1343,7 @@ class _CartSheet extends StatefulWidget {
     required this.total,
     required this.taxRate,
     required this.serviceRate,
+    required this.currencySymbol,
     required this.isPlacing,
     required this.isAddOn,
     required this.onAdd,
@@ -1109,7 +1356,7 @@ class _CartSheet extends StatefulWidget {
 }
 
 class _CartSheetState extends State<_CartSheet> {
-  final fmt = NumberFormat.currency(symbol: '', decimalDigits: 2);
+  NumberFormat get fmt => NumberFormat.currency(symbol: widget.currencySymbol, decimalDigits: 2);
 
   @override
   Widget build(BuildContext context) {
@@ -1170,7 +1417,16 @@ class _CartSheetState extends State<_CartSheet> {
                   child: Row(children: [
                     Row(mainAxisSize: MainAxisSize.min, children: [
                       GestureDetector(
-                        onTap: () { widget.onRemove(c.item); setState(() {}); },
+                        onTap: () {
+                          setState(() {
+                            if (c.qty > 1) {
+                              c.qty--;
+                            } else {
+                              widget.cart.remove(c);
+                              if (widget.cart.isEmpty) Navigator.pop(context);
+                            }
+                          });
+                        },
                         child: Container(
                           width: 30, height: 30,
                           decoration: BoxDecoration(
@@ -1188,7 +1444,9 @@ class _CartSheetState extends State<_CartSheet> {
                                 fontWeight: FontWeight.w700, fontSize: 15)),
                       ),
                       GestureDetector(
-                        onTap: () { widget.onAdd(c.item); setState(() {}); },
+                        onTap: () {
+                          setState(() => c.qty++);
+                        },
                         child: Container(
                           width: 30, height: 30,
                           decoration: BoxDecoration(
@@ -1198,9 +1456,23 @@ class _CartSheetState extends State<_CartSheet> {
                       ),
                     ]),
                     const SizedBox(width: 12),
-                    Expanded(child: Text(c.item.name,
-                        style: const TextStyle(color: _C.text, fontSize: 14,
-                            fontWeight: FontWeight.w500))),
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(c.item.name,
+                            style: const TextStyle(color: _C.text, fontSize: 13,
+                                fontWeight: FontWeight.w600)),
+                        if (c.selectedModifiers.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          ...c.selectedModifiers.entries.map((e) {
+                            final counts = <String, int>{};
+                            for (final n in e.value) { counts[n] = (counts[n] ?? 0) + 1; }
+                            final summary = counts.entries.map((c2) => c2.value > 1 ? '${c2.key} ×${c2.value}' : c2.key).join(', ');
+                            return Text('${e.key}: $summary', style: const TextStyle(color: _C.subtext, fontSize: 11));
+                          }),
+                        ],
+                      ],
+                    )),
                     Text(fmt.format(c.subtotal),
                         style: const TextStyle(color: _C.subtext, fontSize: 13)),
                   ]),
@@ -1215,9 +1487,9 @@ class _CartSheetState extends State<_CartSheet> {
             child: Column(children: [
               _totalRow('Subtotal', widget.subtotal),
               if (widget.taxRate > 0)
-                _totalRow('Tax (${widget.taxRate.toStringAsFixed(0)}%)', widget.tax),
+                _totalRow('Tax (${(widget.taxRate * 100).toStringAsFixed(0)}%)', widget.tax),
               if (widget.serviceRate > 0)
-                _totalRow('Service (${widget.serviceRate.toStringAsFixed(0)}%)',
+                _totalRow('Service (${(widget.serviceRate * 100).toStringAsFixed(0)}%)',
                     widget.serviceCharge),
               const SizedBox(height: 8),
               Row(

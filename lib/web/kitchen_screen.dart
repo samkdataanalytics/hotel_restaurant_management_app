@@ -8,7 +8,6 @@ import '../providers/hotel_session.dart';
 import 'package:uuid/uuid.dart';
 import 'package:collection/collection.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../app_theme.dart';
 import '../models/restaurant_order.dart';
 import '../models/booking.dart';
 import '../models/guest.dart';
@@ -511,7 +510,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                   .where((e) => e.value.isNotEmpty)
                                   .map((e) {
                                     final counts = <String, int>{};
-                                    for (final n in e.value) counts[n] = (counts[n] ?? 0) + 1;
+                                    for (final n in e.value) {
+                                      counts[n] = (counts[n] ?? 0) + 1;
+                                    }
                                     final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
                                     return Padding(
                                       padding: const EdgeInsets.only(top: 2),
@@ -670,7 +671,9 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                                         .where((e) => e.value.isNotEmpty)
                                         .map((e) {
                                           final counts = <String, int>{};
-                                          for (final n in e.value) counts[n] = (counts[n] ?? 0) + 1;
+                                          for (final n in e.value) {
+                                            counts[n] = (counts[n] ?? 0) + 1;
+                                          }
                                           final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
                                           return Text(
                                             '${e.key}: $summary',

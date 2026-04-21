@@ -661,7 +661,7 @@ class _RestaurantAnalyticsScreenState
   }
 
   Widget _orderTypePie() {
-    const _kDeliveryGreen = Color(0xFF06C167);
+    const kDeliveryGreen = Color(0xFF06C167);
     final total = _dineInCount + _takeawayCount + _deliveryCount;
     return _card(
       title: 'Order Type Mix',
@@ -696,7 +696,7 @@ class _RestaurantAnalyticsScreenState
                         if (_deliveryCount > 0)
                           PieChartSectionData(
                             value: _deliveryCount.toDouble(),
-                            color: _kDeliveryGreen,
+                            color: kDeliveryGreen,
                             title: '${(_deliveryCount * 100 / total).round()}%',
                             radius: 70,
                             titleStyle: const TextStyle(
@@ -716,7 +716,7 @@ class _RestaurantAnalyticsScreenState
                   children: [
                     if (_dineInCount > 0)   _legend(_kOrange,        'Dine-in ($_dineInCount)'),
                     if (_takeawayCount > 0) _legend(_kBlue,          'Takeaway ($_takeawayCount)'),
-                    if (_deliveryCount > 0) _legend(_kDeliveryGreen, 'Delivery ($_deliveryCount)'),
+                    if (_deliveryCount > 0) _legend(kDeliveryGreen, 'Delivery ($_deliveryCount)'),
                   ],
                 ),
               ],
@@ -751,8 +751,8 @@ class _RestaurantAnalyticsScreenState
             )
           : Column(
               children: [
-                Row(
-                  children: const [
+                const Row(
+                  children: [
                     Expanded(
                         flex: 3,
                         child: _TH('Item')),
@@ -918,29 +918,29 @@ class _RestaurantAnalyticsScreenState
   // ─── Delivery Platform Breakdown ─────────────────────
 
   Widget _buildDeliveryBreakdown() {
-    const _kUber   = Color(0xFF06C167);
-    const _kPickMe = Color(0xFFFF6B35);
-    const _kOther  = Color(0xFF6B7280);
+    const kUber   = Color(0xFF06C167);
+    const kPickMe = Color(0xFFFF6B35);
+    const kOther  = Color(0xFF6B7280);
 
     final platforms = [
       (
         label: 'UberEats',
         icon: Icons.delivery_dining_rounded,
-        color: _kUber,
+        color: kUber,
         count: _uberEatsCount,
         revenue: _uberEatsRevenue,
       ),
       (
         label: 'PickMe',
         icon: Icons.moped_rounded,
-        color: _kPickMe,
+        color: kPickMe,
         count: _pickMeCount,
         revenue: _pickMeRevenue,
       ),
       (
         label: 'Other',
         icon: Icons.storefront_rounded,
-        color: _kOther,
+        color: kOther,
         count: _otherCount,
         revenue: _otherRevenue,
       ),
@@ -1111,8 +1111,8 @@ class _RestaurantAnalyticsScreenState
           ),
           const SizedBox(height: 16),
           // Per-item table
-          Row(
-            children: const [
+          const Row(
+            children: [
               Expanded(flex: 3, child: _TH('Menu Item')),
               Expanded(child: _TH('Cost', center: true)),
               Expanded(child: _TH('Price', center: true)),

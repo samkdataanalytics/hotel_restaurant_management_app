@@ -1,6 +1,5 @@
-import 'dart:async';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'dart:js_interop';
+import 'package:web/web.dart' as web;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -82,25 +81,32 @@ class OnboardingShell extends ConsumerStatefulWidget {
 }
 
 class _OnboardingShellState extends ConsumerState<OnboardingShell> {
-  StreamSubscription<html.PopStateEvent>? _popSub;
+  web.EventListener? _popListener;
 
   @override
   void initState() {
     super.initState();
     // Push a sentinel entry so the browser has something to "go back from".
-    html.window.history.pushState({'sentinel': 'onboarding'}, '', html.window.location.href);
+    web.window.history.pushState(
+      {'sentinel': 'onboarding'}.jsify(),
+      '',
+      web.window.location.href,
+    );
 
     // When the browser fires popstate (back pressed), sign out and go to login.
-    _popSub = html.window.onPopState.listen((_) async {
+    // Must be non-async — .toJS only accepts void-returning functions.
+    _popListener = (web.Event _) {
       if (!mounted) return;
-      await ref.read(authProvider.notifier).signOut();
-      if (mounted) context.go('/login');
-    });
+      ref.read(authProvider.notifier).signOut().then((_) {
+        if (mounted) context.go('/login');
+      });
+    }.toJS;
+    web.window.addEventListener('popstate', _popListener);
   }
 
   @override
   void dispose() {
-    _popSub?.cancel();
+    web.window.removeEventListener('popstate', _popListener);
     super.dispose();
   }
 

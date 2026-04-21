@@ -446,8 +446,8 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
               if (isSelected)
                 Icon(Icons.check_circle_rounded, color: accentColor, size: 22)
               else
-                Icon(Icons.radio_button_unchecked_rounded,
-                    color: const Color(0xFFCBD5E1), size: 22),
+                const Icon(Icons.radio_button_unchecked_rounded,
+                    color: Color(0xFFCBD5E1), size: 22),
             ],
           ),
         ),
@@ -474,7 +474,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
           ),
           const SizedBox(height: 20),
 
-          _FieldLabel(text: 'Property Name *'),
+          const _FieldLabel(text: 'Property Name *'),
           const SizedBox(height: 6),
           TextFormField(
             controller: _nameController,
@@ -488,7 +488,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
           ),
           const SizedBox(height: 16),
 
-          _FieldLabel(text: 'Address'),
+          const _FieldLabel(text: 'Address'),
           const SizedBox(height: 6),
           TextFormField(
             controller: _addressController,
@@ -506,7 +506,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _FieldLabel(text: 'City'),
+                    const _FieldLabel(text: 'City'),
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: _cityController,
@@ -521,7 +521,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _FieldLabel(text: 'Country'),
+                    const _FieldLabel(text: 'Country'),
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: _countryController,
@@ -541,7 +541,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _FieldLabel(text: 'Phone'),
+                    const _FieldLabel(text: 'Phone'),
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: _phoneController,
@@ -560,7 +560,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _FieldLabel(text: 'Email'),
+                    const _FieldLabel(text: 'Email'),
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: _emailController,
@@ -578,10 +578,10 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
           ),
           const SizedBox(height: 16),
 
-          _FieldLabel(text: 'Timezone'),
+          const _FieldLabel(text: 'Timezone'),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
-            value: _selectedTimezone,
+            initialValue: _selectedTimezone,
             decoration: InputDecoration(
               filled: true,
               fillColor: Colors.grey.shade50,
@@ -603,10 +603,10 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
           ),
           const SizedBox(height: 16),
 
-          _FieldLabel(text: 'Currency'),
+          const _FieldLabel(text: 'Currency'),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
-            value: _selectedCurrency,
+            initialValue: _selectedCurrency,
             decoration: InputDecoration(
               filled: true,
               fillColor: Colors.grey.shade50,
@@ -630,7 +630,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
           const SizedBox(height: 20),
 
           // Logo picker
-          _FieldLabel(text: 'Property Logo  (optional)'),
+          const _FieldLabel(text: 'Property Logo  (optional)'),
           const SizedBox(height: 8),
           GestureDetector(
             onTap: _pickLogo,

@@ -211,8 +211,12 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   /// Persists, propagates, and syncs [property] across all state holders.
   Future<void> _applyActiveProperty(OrgProperty property) async {
-    // Persist to shared prefs and update Riverpod notifier (both fast/sync)
+    // Persist to shared prefs (safe even if unmounted — no widget dependency)
     await OrganizationService().setActivePropertyId(property.id);
+
+    // Guard: widget may have been disposed during the async gap above
+    if (!mounted) return;
+
     ref.read(activePropertyProvider.notifier).setProperty(property);
 
     // Point singleton services at the new property before any parallel work
@@ -229,8 +233,10 @@ class _AppShellState extends ConsumerState<AppShell> {
         _loadUserPermissions(property.id),
       ]);
     } else {
-      await _loadUserPermissions(property.id);
+      return; // widget disposed — bail out
     }
+
+    if (!mounted) return;
 
     // Refresh badge counts now that services are pointed at the new property
     _loadBadgeCounts();
@@ -490,7 +496,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                           property: activeProperty!,
                           onReactivate: () async {
                             await OrganizationService()
-                                .updatePropertyStatus(activeProperty!.id, 'active');
+                                .updatePropertyStatus(activeProperty.id, 'active');
                             await ref.read(authProvider.notifier).reload();
                             final updated = await OrganizationService()
                                 .getActiveProperty();
@@ -646,6 +652,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     final logoUrl = provider_pkg.Provider.of<HotelSession>(context, listen: false)
         .settings
         ?.logoUrl ?? '';
+    final logoSize = expanded ? 40.0 : 32.0;
     return Container(
       height: 72,
       padding: EdgeInsets.symmetric(
@@ -659,20 +666,20 @@ class _AppShellState extends ConsumerState<AppShell> {
             child: logoUrl.isNotEmpty
                 ? Image.network(
                     logoUrl,
-                    width: 40,
-                    height: 40,
+                    width: logoSize,
+                    height: logoSize,
                     fit: BoxFit.contain,
                     errorBuilder: (_, __, ___) => Image.asset(
                       'assets/images/hotrest_logo.webp',
-                      width: 40,
-                      height: 40,
+                      width: logoSize,
+                      height: logoSize,
                       fit: BoxFit.contain,
                     ),
                   )
                 : Image.asset(
                     'assets/images/hotrest_logo.webp',
-                    width: 40,
-                    height: 40,
+                    width: logoSize,
+                    height: logoSize,
                     fit: BoxFit.contain,
                   ),
           ),
@@ -1068,87 +1075,7 @@ class _AppShellState extends ConsumerState<AppShell> {
           ),
         ),
 
-        // Account Settings
-        Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: expanded ? 10 : 8,
-            vertical: 2,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () => context.go('/app/account'),
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: expanded ? 12 : 0,
-                  vertical: 10,
-                ),
-                child: Row(
-                  mainAxisAlignment: expanded
-                      ? MainAxisAlignment.start
-                      : MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.manage_accounts_rounded,
-                      size: 20,
-                      color: Colors.white38,
-                    ),
-                    if (expanded) ...[
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Account Settings',
-                        style: TextStyle(color: Colors.white54, fontSize: 13),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
 
-        // Logout
-        Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: expanded ? 10 : 8,
-            vertical: 4,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: _signOut,
-              child: Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: expanded ? 12 : 0,
-                  vertical: 10,
-                ),
-                child: Row(
-                  mainAxisAlignment: expanded
-                      ? MainAxisAlignment.start
-                      : MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.logout_rounded,
-                      size: 20,
-                      color: Colors.white24,
-                    ),
-                    if (expanded) ...[
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Logout',
-                        style: TextStyle(color: Colors.white38, fontSize: 13),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
 
         const SizedBox(height: 12),
       ],
@@ -1249,23 +1176,59 @@ class _AppShellState extends ConsumerState<AppShell> {
 
           // Current user — on mobile show only avatar icon; on desktop show name
           if (authState?.email != null)
-            isMobile
-                ? const Icon(Icons.account_circle_rounded,
-                    size: 24, color: Color(0xFF94A3B8))
-                : Row(
+            PopupMenuButton<String>(
+              offset: const Offset(0, 40),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              onSelected: (value) {
+                if (value == 'account') {
+                  context.go('/app/account');
+                } else if (value == 'logout') {
+                  _signOut();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'account',
+                  child: Row(
                     children: [
-                      const Icon(Icons.account_circle_rounded,
-                          size: 20, color: Color(0xFF94A3B8)),
+                      Icon(Icons.manage_accounts_rounded, size: 18, color: Colors.grey.shade600),
+                      const SizedBox(width: 10),
+                      const Text('Account Settings', style: TextStyle(fontSize: 14)),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout_rounded, size: 18, color: Colors.grey.shade600),
+                      const SizedBox(width: 10),
+                      const Text('Logout', style: TextStyle(fontSize: 14)),
+                    ],
+                  ),
+                ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    const Icon(Icons.account_circle_rounded, size: 24, color: Color(0xFF94A3B8)),
+                    if (!isMobile) ...[
                       const SizedBox(width: 8),
                       Text(
                         (authState?.isStaffAccount ?? false)
                             ? authState!.email!.split('@').first
                             : authState!.email!,
-                        style: const TextStyle(
-                            fontSize: 13, color: Color(0xFF64748B)),
+                        style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
                       ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Color(0xFF94A3B8)),
                     ],
-                  ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );

@@ -246,58 +246,58 @@ class _TermsContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _Section(heading: '1. Acceptance of Terms', children: [
-          const _Body(
+          _Body(
               'By accessing or using HotRest ("the Service"), you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use the Service.'),
-          const _Body(
+          _Body(
               'HotRest is a SaaS platform providing hotel and restaurant management tools. These terms apply to all users, including administrators, staff members, and guests who interact with the platform.'),
         ]),
         _Section(heading: '2. Account Registration', children: [
-          const _Body(
+          _Body(
               'To use the Service, you must create an account by providing accurate and complete information. You are responsible for maintaining the confidentiality of your login credentials.'),
-          const _Bullet('You must be at least 18 years old to create an account.'),
-          const _Bullet('One organisation may have multiple properties and staff accounts under a single subscription.'),
-          const _Bullet('You are responsible for all activity that occurs under your account.'),
+          _Bullet('You must be at least 18 years old to create an account.'),
+          _Bullet('One organisation may have multiple properties and staff accounts under a single subscription.'),
+          _Bullet('You are responsible for all activity that occurs under your account.'),
         ]),
         _Section(heading: '3. Subscription Plans & Billing', children: [
-          const _Body(
+          _Body(
               'HotRest offers Free, Starter, Pro, and Enterprise subscription plans. Plan features and limits are described on the pricing page and may change with reasonable notice.'),
-          const _Bullet('Subscriptions are billed monthly or annually as selected at sign-up.'),
-          const _Bullet('Enterprise plans are negotiated individually and governed by a separate agreement.'),
-          const _Bullet('You authorise HotRest to charge the payment method on file at each billing cycle.'),
-          const _Bullet('Failure to pay may result in suspension or termination of your account.'),
+          _Bullet('Subscriptions are billed monthly or annually as selected at sign-up.'),
+          _Bullet('Enterprise plans are negotiated individually and governed by a separate agreement.'),
+          _Bullet('You authorise HotRest to charge the payment method on file at each billing cycle.'),
+          _Bullet('Failure to pay may result in suspension or termination of your account.'),
         ]),
         _Section(heading: '4. Acceptable Use', children: [
-          const _Body('You agree not to:'),
-          const _Bullet('Use the Service for any unlawful purpose or in violation of any regulations.'),
-          const _Bullet('Attempt to gain unauthorised access to other accounts or systems.'),
-          const _Bullet('Interfere with the proper functioning of the platform.'),
-          const _Bullet('Reverse engineer, copy, or resell any part of the Service.'),
-          const _Bullet('Upload malicious code, spam, or harmful content.'),
+          _Body('You agree not to:'),
+          _Bullet('Use the Service for any unlawful purpose or in violation of any regulations.'),
+          _Bullet('Attempt to gain unauthorised access to other accounts or systems.'),
+          _Bullet('Interfere with the proper functioning of the platform.'),
+          _Bullet('Reverse engineer, copy, or resell any part of the Service.'),
+          _Bullet('Upload malicious code, spam, or harmful content.'),
         ]),
         _Section(heading: '5. Data & Intellectual Property', children: [
-          const _Body(
+          _Body(
               'You retain ownership of all data you input into HotRest. By using the Service, you grant HotRest a limited licence to process your data solely to provide the Service.'),
-          const _Body(
+          _Body(
               'All platform software, branding, and content are the intellectual property of HotRest and may not be used without prior written consent.'),
         ]),
         _Section(heading: '6. Limitation of Liability', children: [
-          const _Body(
+          _Body(
               'HotRest is provided "as is" without warranties of any kind. To the fullest extent permitted by law, HotRest shall not be liable for any indirect, incidental, special, or consequential damages arising out of your use of the Service.'),
         ]),
         _Section(heading: '7. Termination', children: [
-          const _Body(
+          _Body(
               'We reserve the right to suspend or terminate your account at any time for violation of these terms. You may cancel your account at any time from your account settings.'),
         ]),
         _Section(heading: '8. Changes to Terms', children: [
-          const _Body(
+          _Body(
               'We may update these terms from time to time. We will notify you of significant changes via email or an in-app notice. Continued use of the Service constitutes acceptance of the updated terms.'),
         ]),
         _Section(heading: '9. Contact', children: [
-          const _Body(
+          _Body(
               'For any questions about these Terms, please contact us at kasun@ideadeck.biz.'),
         ]),
       ],
@@ -312,48 +312,48 @@ class _ReturnsContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _Section(heading: 'Overview', children: [
-          const _Body(
+          _Body(
               'HotRest is a software-as-a-service (SaaS) platform. Because we deliver digital services rather than physical goods, our refund policy reflects the nature of software subscriptions.'),
         ]),
         _Section(heading: '1. Free Plan', children: [
-          const _Body(
+          _Body(
               'The Free plan is available at no charge and is not eligible for any refund consideration.'),
         ]),
         _Section(heading: '2. Paid Subscriptions — 14-Day Trial Period', children: [
-          const _Body(
+          _Body(
               'New paid subscriptions (Starter and Pro) are eligible for a full refund if requested within 14 days of the initial charge, provided the account has not exceeded reasonable usage limits (defined as fewer than 100 orders processed during the trial period).'),
-          const _Body(
+          _Body(
               'To request a refund within the trial period, contact kasun@ideadeck.biz with your account email and reason for the refund.'),
         ]),
         _Section(heading: '3. After the Trial Period', children: [
-          const _Body(
+          _Body(
               'After the 14-day trial period, subscription fees are non-refundable. You may cancel your subscription at any time, and access will continue until the end of the current billing period.'),
-          const _Bullet('Monthly subscriptions: access continues until the end of the current month.'),
-          const _Bullet('Annual subscriptions: access continues until the end of the paid annual term.'),
-          const _Bullet('No pro-rated refunds are issued for early cancellation of annual plans.'),
+          _Bullet('Monthly subscriptions: access continues until the end of the current month.'),
+          _Bullet('Annual subscriptions: access continues until the end of the paid annual term.'),
+          _Bullet('No pro-rated refunds are issued for early cancellation of annual plans.'),
         ]),
         _Section(heading: '4. Billing Errors', children: [
-          const _Body(
+          _Body(
               'If you believe you have been charged in error (e.g. duplicate charge or incorrect plan amount), please contact us within 30 days of the charge. We will investigate and, if the error is confirmed, issue a full refund for the incorrect amount within 5–10 business days.'),
         ]),
         _Section(heading: '5. Enterprise Plans', children: [
-          const _Body(
+          _Body(
               'Refund terms for Enterprise plans are governed by the individual agreement signed between HotRest and the customer. Please refer to your contract or contact your account manager.'),
         ]),
         _Section(heading: '6. Chargebacks', children: [
-          const _Body(
+          _Body(
               'If you initiate a chargeback or payment dispute with your bank without first contacting us, we reserve the right to suspend your account until the matter is resolved.'),
         ]),
         _Section(heading: '7. How to Request a Refund', children: [
-          const _Body('Please email kasun@ideadeck.biz with:'),
-          const _Bullet('Your registered email address.'),
-          const _Bullet('The invoice number or date of charge.'),
-          const _Bullet('The reason for the refund request.'),
-          const _Body(
+          _Body('Please email kasun@ideadeck.biz with:'),
+          _Bullet('Your registered email address.'),
+          _Bullet('The invoice number or date of charge.'),
+          _Bullet('The reason for the refund request.'),
+          _Body(
               'We aim to respond to all refund requests within 3 business days.'),
         ]),
       ],
@@ -368,78 +368,78 @@ class _PrivacyContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _Section(heading: 'Introduction', children: [
-          const _Body(
+          _Body(
               'HotRest ("we", "our", "us") is committed to protecting your personal information. This Privacy Policy explains what data we collect, how we use it, and your rights regarding that data.'),
-          const _Body(
+          _Body(
               'By using HotRest, you agree to the collection and use of information in accordance with this policy.'),
         ]),
         _Section(heading: '1. Information We Collect', children: [
-          const _Body('We collect the following categories of information:'),
-          const _Bullet('Account information: name, email address, phone number, and business details provided during registration.'),
-          const _Bullet('Usage data: features used, pages visited, session duration, and interaction logs for improving the platform.'),
-          const _Bullet('Operational data: hotel bookings, guest records, restaurant orders, inventory, and financial reports that you enter into the platform. This data belongs to you.'),
-          const _Bullet('Payment information: processed securely via third-party payment providers. We do not store full card numbers on our servers.'),
-          const _Bullet('Device & technical data: IP address, browser type, and device identifiers for security and analytics purposes.'),
+          _Body('We collect the following categories of information:'),
+          _Bullet('Account information: name, email address, phone number, and business details provided during registration.'),
+          _Bullet('Usage data: features used, pages visited, session duration, and interaction logs for improving the platform.'),
+          _Bullet('Operational data: hotel bookings, guest records, restaurant orders, inventory, and financial reports that you enter into the platform. This data belongs to you.'),
+          _Bullet('Payment information: processed securely via third-party payment providers. We do not store full card numbers on our servers.'),
+          _Bullet('Device & technical data: IP address, browser type, and device identifiers for security and analytics purposes.'),
         ]),
         _Section(heading: '2. How We Use Your Information', children: [
-          const _Body('We use your data to:'),
-          const _Bullet('Provide, operate, and improve the HotRest platform.'),
-          const _Bullet('Process payments and manage billing.'),
-          const _Bullet('Send transactional emails (e.g. invoices, password resets, account notifications).'),
-          const _Bullet('Respond to support requests and enquiries.'),
-          const _Bullet('Detect and prevent fraud or security incidents.'),
-          const _Bullet('Comply with legal obligations.'),
-          const _Body(
+          _Body('We use your data to:'),
+          _Bullet('Provide, operate, and improve the HotRest platform.'),
+          _Bullet('Process payments and manage billing.'),
+          _Bullet('Send transactional emails (e.g. invoices, password resets, account notifications).'),
+          _Bullet('Respond to support requests and enquiries.'),
+          _Bullet('Detect and prevent fraud or security incidents.'),
+          _Bullet('Comply with legal obligations.'),
+          _Body(
               'We do not sell your personal data to third parties and we do not use your operational data (guest records, orders, etc.) for any purpose other than providing the Service to you.'),
         ]),
         _Section(heading: '3. Data Storage & Security', children: [
-          const _Body(
+          _Body(
               'Your data is stored on Supabase-hosted infrastructure with industry-standard encryption at rest and in transit (TLS 1.2+). Access to production data is restricted to authorised personnel only.'),
-          const _Body(
+          _Body(
               'While we take all reasonable precautions, no method of transmission over the internet is 100% secure. We cannot guarantee absolute security.'),
         ]),
         _Section(heading: '4. Data Retention', children: [
-          const _Body(
+          _Body(
               'We retain your account data for as long as your account is active. If you close your account, we will delete or anonymise your personal data within 90 days, unless retention is required by law.'),
-          const _Body(
+          _Body(
               'Operational data (orders, bookings, etc.) is retained for 7 years to meet standard financial record-keeping requirements, after which it is securely deleted.'),
         ]),
         _Section(heading: '5. Third-Party Services', children: [
-          const _Body('HotRest uses trusted third-party services that may process your data:'),
-          const _Bullet('Supabase — database and authentication infrastructure.'),
-          const _Bullet('Payhere / payment processors — payment handling.'),
-          const _Bullet('Google Fonts — font delivery (no personal data shared).'),
-          const _Body(
+          _Body('HotRest uses trusted third-party services that may process your data:'),
+          _Bullet('Supabase — database and authentication infrastructure.'),
+          _Bullet('Payhere / payment processors — payment handling.'),
+          _Bullet('Google Fonts — font delivery (no personal data shared).'),
+          _Body(
               'Each third-party provider has their own privacy policy. We encourage you to review them.'),
         ]),
         _Section(heading: '6. Cookies', children: [
-          const _Body(
+          _Body(
               'We use essential session cookies to keep you logged in and to maintain application state. We do not use tracking or advertising cookies.'),
         ]),
         _Section(heading: '7. Your Rights', children: [
-          const _Body('Depending on your jurisdiction, you may have the right to:'),
-          const _Bullet('Access the personal data we hold about you.'),
-          const _Bullet('Request correction of inaccurate data.'),
-          const _Bullet('Request deletion of your personal data ("right to be forgotten").'),
-          const _Bullet('Object to or restrict certain processing activities.'),
-          const _Bullet('Export your data in a portable format.'),
-          const _Body(
+          _Body('Depending on your jurisdiction, you may have the right to:'),
+          _Bullet('Access the personal data we hold about you.'),
+          _Bullet('Request correction of inaccurate data.'),
+          _Bullet('Request deletion of your personal data ("right to be forgotten").'),
+          _Bullet('Object to or restrict certain processing activities.'),
+          _Bullet('Export your data in a portable format.'),
+          _Body(
               'To exercise any of these rights, please email kasun@ideadeck.biz. We will respond within 30 days.'),
         ]),
         _Section(heading: '8. Children\'s Privacy', children: [
-          const _Body(
+          _Body(
               'HotRest is not intended for use by individuals under the age of 18. We do not knowingly collect personal data from minors.'),
         ]),
         _Section(heading: '9. Changes to This Policy', children: [
-          const _Body(
+          _Body(
               'We may update this Privacy Policy periodically. When we do, we will revise the "last updated" date at the top of this page and notify you via email for material changes.'),
         ]),
         _Section(heading: '10. Contact', children: [
-          const _Body(
+          _Body(
               'For privacy-related questions or to exercise your rights, please contact our Data Protection team at kasun@ideadeck.biz.'),
         ]),
       ],
