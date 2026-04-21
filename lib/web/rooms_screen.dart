@@ -578,7 +578,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
                     ),
                   ),
                   Text(
-                    '${_sym}${room.pricePerNight.toInt()} / night',
+                    '$_sym${room.pricePerNight.toInt()} / night',
                     style: TextStyle(
                       color: AppTheme.adminPrimary,
                       fontWeight: FontWeight.w600,
@@ -690,6 +690,7 @@ class _RoomFormDialogState extends State<_RoomFormDialog> {
   late final TextEditingController _roomNumberController;
   late final TextEditingController _floorController;
   late final TextEditingController _priceController;
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
   late RoomType _selectedType;
   late RoomStatus _selectedStatus;
   DateTime? _maintenanceStart;
@@ -899,10 +900,10 @@ class _RoomFormDialogState extends State<_RoomFormDialog> {
                       child: TextFormField(
                         controller: _priceController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Price / Night (\$)',
+                        decoration: InputDecoration(
+                          labelText: 'Price / Night ($_sym)',
                           hintText: 'e.g. 150',
-                          prefixIcon: Icon(Icons.attach_money),
+                          prefixIcon: const Icon(Icons.attach_money),
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {

@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:js_interop';
 import 'dart:typed_data';
+import 'package:web/web.dart' as web;
 import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -32,17 +36,87 @@ const _kRedBdr     = PdfColor(0.996, 0.804, 0.827); // #FECDD3
 class InvoiceService {
   final _dateFmt  = DateFormat('MMM dd, yyyy');
 
-  /// Fetches logo image bytes from [url]. Returns null on any error.
+  // Static caches — survive widget rebuilds, only downloaded once per session
+  static pw.Font? _cachedRobotoRegular;
+  static pw.Font? _cachedRobotoBold;
+  static final Map<String, Uint8List> _logoCache    = {}; // raw fetched bytes
+  static final Map<String, Uint8List> _logoPdfCache = {}; // resized for PDF embedding
+
+  /// Fetches logo bytes and returns a PDF-optimised (small) version.
+  /// Both the raw and resized bytes are cached to avoid repeated work.
   Future<Uint8List?> _fetchLogoBytes(String url) async {
     if (url.isEmpty) return null;
+    if (_logoPdfCache.containsKey(url)) return _logoPdfCache[url];
     try {
-      final res = await http.get(Uri.parse(url));
-      if (res.statusCode == 200) return res.bodyBytes;
+      Uint8List raw;
+      if (_logoCache.containsKey(url)) {
+        raw = _logoCache[url]!;
+      } else {
+        final res = await http.get(Uri.parse(url))
+            .timeout(const Duration(seconds: 6));
+        if (res.statusCode != 200) return null;
+        raw = res.bodyBytes;
+        _logoCache[url] = raw;
+      }
+      // Resize to max 160×160 px for PDF embedding — keeps pdf.save() fast
+      final small = await _resizeForPdf(raw, maxDimension: 160, quality: 0.80);
+      _logoPdfCache[url] = small;
+      return small;
     } catch (_) {}
     return null;
   }
 
-  /// Generate a PDF guest folio.
+  /// Resizes image bytes using the browser canvas (no extra packages needed).
+  static Future<Uint8List> _resizeForPdf(
+    Uint8List bytes, {
+    int maxDimension  = 160,
+    double quality    = 0.80,
+  }) async {
+    final completer = Completer<Uint8List>();
+    final blob = web.Blob([bytes.toJS].toJS);
+    final url  = web.URL.createObjectURL(blob);
+    final img  = web.HTMLImageElement()..src = url;
+
+    web.EventListener? onLoad;
+    web.EventListener? onError;
+
+    onLoad = (web.Event _) {
+      final w = img.naturalWidth  > 0 ? img.naturalWidth  : maxDimension;
+      final h = img.naturalHeight > 0 ? img.naturalHeight : maxDimension;
+      int outW, outH;
+      if (w >= h) {
+        outW = w > maxDimension ? maxDimension : w;
+        outH = (outW * h / w).round();
+      } else {
+        outH = h > maxDimension ? maxDimension : h;
+        outW = (outH * w / h).round();
+      }
+      final canvas = web.HTMLCanvasElement()
+        ..width  = outW
+        ..height = outH;
+      final ctx = canvas.getContext('2d') as web.CanvasRenderingContext2D;
+      ctx.drawImage(img, 0, 0);
+      web.URL.revokeObjectURL(url);
+      final dataUrl   = canvas.toDataURL('image/jpeg', quality.toJS);
+      final base64Str = dataUrl.split(',').last;
+      img.removeEventListener('load', onLoad);
+      img.removeEventListener('error', onError);
+      completer.complete(base64Decode(base64Str));
+    }.toJS;
+
+    onError = (web.Event _) {
+      web.URL.revokeObjectURL(url);
+      img.removeEventListener('load', onLoad);
+      img.removeEventListener('error', onError);
+      completer.complete(bytes);
+    }.toJS;
+
+    img.addEventListener('load', onLoad);
+    img.addEventListener('error', onError);
+
+    return completer.future;
+  }
+
   Future<Uint8List> generateInvoice({
     required Booking booking,
     required Room room,
@@ -53,7 +127,15 @@ class InvoiceService {
     HotelSettings? settings,
   }) async {
     final fmt = NumberFormat.currency(symbol: currencySymbol, decimalDigits: 2);
-    final pdf = pw.Document();
+    
+    // Fonts should already be cached by warmUp(); this is a safety fallback.
+    await _ensureFonts();
+
+    final pdf = pw.Document(
+      theme: _cachedRobotoRegular != null && _cachedRobotoBold != null 
+        ? pw.ThemeData.withFont(base: _cachedRobotoRegular, bold: _cachedRobotoBold)
+        : pw.ThemeData.withFont(base: pw.Font.helvetica(), bold: pw.Font.helveticaBold()),
+    );
 
     // ── Financial calculations ──────────────────────────────────────────────
     final billable      = expenses.where((e) => e.isBillable && e.bookingId == booking.id).toList();
@@ -482,7 +564,9 @@ class InvoiceService {
               .where((e) => e.value.isNotEmpty)
               .map((e) {
                 final counts = <String, int>{};
-                for (final n in e.value) counts[n] = (counts[n] ?? 0) + 1;
+                for (final n in e.value) {
+                  counts[n] = (counts[n] ?? 0) + 1;
+                }
                 final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
                 return '${e.key}: $summary';
               }).toList();
@@ -745,6 +829,30 @@ class InvoiceService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
+
+  /// Pre-warms font cache and logo cache (raw + PDF-sized) so PDF generation
+  /// is instant. Safe to call in parallel with DB queries.
+  Future<void> warmUp(String logoUrl) async {
+    await Future.wait([
+      _ensureFonts(),
+      if (logoUrl.isNotEmpty) _fetchLogoBytes(logoUrl),
+    ]);
+  }
+
+  Future<void> _ensureFonts() async {
+    if (_cachedRobotoRegular != null && _cachedRobotoBold != null) return;
+    try {
+      final fonts = await Future.wait([
+        PdfGoogleFonts.robotoRegular().timeout(const Duration(seconds: 8)),
+        PdfGoogleFonts.robotoBold().timeout(const Duration(seconds: 8)),
+      ]);
+      _cachedRobotoRegular = fonts[0];
+      _cachedRobotoBold    = fonts[1];
+    } catch (_) {
+      _cachedRobotoRegular = null;
+      _cachedRobotoBold    = null;
+    }
+  }
 
   /// Display a print/preview dialog for the guest folio.
   Future<void> displayInvoicePdf({

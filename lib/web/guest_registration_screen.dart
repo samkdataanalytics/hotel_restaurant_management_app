@@ -91,10 +91,12 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
         ]);
         final s    = results[0] as ({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl});
         final name = results[1] as String;
-        if (mounted) setState(() {
+        if (mounted) {
+          setState(() {
           _accent       = hexToColor(s.primaryColorHex);
           _propertyName = name;
         });
+        }
       } catch (_) {}
     }
 
@@ -129,7 +131,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
   Future<void> _submitForm() async {
     if (_fullNameCtrl.text.isEmpty || _passportCtrl.text.isEmpty || _emailCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please fill all required fields in Section 1.'), backgroundColor: AppTheme.danger),
+        SnackBar(content: const Text('Please fill all required fields in Section 1.'), backgroundColor: AppTheme.danger),
       );
       return;
     }
@@ -421,7 +423,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
         Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           items: options.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
           onChanged: onChanged,
           decoration: InputDecoration(

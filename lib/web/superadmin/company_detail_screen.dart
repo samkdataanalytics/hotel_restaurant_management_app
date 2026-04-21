@@ -205,7 +205,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                         label: _currentStatus,
                         color: statusColor),
                     const SizedBox(width: 16),
-                    Icon(Icons.calendar_today_rounded,
+                    const Icon(Icons.calendar_today_rounded,
                         size: 12, color: Colors.white38),
                     const SizedBox(width: 4),
                     Text(
@@ -214,7 +214,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
                           fontSize: 12, color: Colors.white38),
                     ),
                     const SizedBox(width: 16),
-                    Icon(Icons.public_rounded,
+                    const Icon(Icons.public_rounded,
                         size: 12, color: Colors.white38),
                     const SizedBox(width: 4),
                     Text(

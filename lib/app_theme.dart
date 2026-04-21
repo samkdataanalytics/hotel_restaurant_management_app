@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
 class AppTheme {
@@ -76,28 +77,28 @@ class AppTheme {
         shadowColor: Colors.black38,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
-      appBarTheme: AppBarTheme(
+      appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: const TextStyle(
+        titleTextStyle: TextStyle(
           fontFamily: 'Outfit',
           fontSize: 20,
           fontWeight: FontWeight.w600,
           color: _goldPrimary,
         ),
-        iconTheme: const IconThemeData(color: _goldPrimary),
+        iconTheme: IconThemeData(color: _goldPrimary),
       ),
     );
   }
 
   // ─── Web Admin Theme ─────────────────────────────────────
 
-  static const _adminPrimary = Color(0xFF2563EB);
-  static const _adminPrimaryLight = Color(0xFF3B82F6);
+  static const _adminPrimary = Color(0xFFE65100);       // Elevate: Burnt Orange
+  static const _adminPrimaryLight = Color(0xFFFF9800);  // Elevate: Lighter Orange
   static const _adminBgDark = Color(0xFF0F172A);
-  static const _adminSidebar = Color(0xFF1A2540);
-  static const _adminContent = Color(0xFFF5F7FA);
+  static const _adminSidebar = Color(0xFF101828);       // Elevate: Deeper Midnight
+  static const _adminContent = Color(0xFFF8FAFC);       // Elevate: Soft Slate 50
   static const _adminCard = Colors.white;
   static const _adminTextDark = Color(0xFF1E293B);
   static const _adminTextMuted = Color(0xFF64748B);
@@ -110,7 +111,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       scaffoldBackgroundColor: _adminContent,
-      colorScheme: ColorScheme.light(
+      colorScheme: const ColorScheme.light(
         primary: _adminPrimary,
         secondary: _adminPrimaryLight,
         surface: _adminCard,
@@ -121,13 +122,13 @@ class AppTheme {
       textTheme: const TextTheme(
         displayLarge:   TextStyle(fontFamily: 'DMSerifDisplay', fontSize: 32, fontWeight: FontWeight.w400, color: _adminTextDark, letterSpacing: -0.3),
         displayMedium:  TextStyle(fontFamily: 'DMSerifDisplay', fontSize: 24, fontWeight: FontWeight.w400, color: _adminTextDark),
-        headlineLarge:  TextStyle(fontFamily: 'Inter', fontSize: 22, fontWeight: FontWeight.w600, color: _adminTextDark),
-        headlineMedium: TextStyle(fontFamily: 'Inter', fontSize: 18, fontWeight: FontWeight.w600, color: _adminTextDark),
-        titleLarge:     TextStyle(fontFamily: 'Inter', fontSize: 16, fontWeight: FontWeight.w600, color: _adminTextDark),
-        titleMedium:    TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.w500, color: _adminTextDark),
-        bodyLarge:      TextStyle(fontFamily: 'Inter', fontSize: 15, fontWeight: FontWeight.w400, color: _adminTextDark),
-        bodyMedium:     TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.w400, color: _adminTextMuted),
-        labelLarge:     TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.w600, color: _adminPrimary),
+        headlineLarge:  TextStyle(fontFamily: 'Outfit', fontSize: 22, fontWeight: FontWeight.w600, color: _adminTextDark),
+        headlineMedium: TextStyle(fontFamily: 'Outfit', fontSize: 18, fontWeight: FontWeight.w600, color: _adminTextDark),
+        titleLarge:     TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.w600, color: _adminTextDark),
+        titleMedium:    TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w500, color: _adminTextDark),
+        bodyLarge:      TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w400, color: _adminTextDark, fontFeatures: [FontFeature.tabularFigures()]),
+        bodyMedium:     TextStyle(fontFamily: 'Outfit', fontSize: 13, fontWeight: FontWeight.w400, color: _adminTextMuted, fontFeatures: [FontFeature.tabularFigures()]),
+        labelLarge:     TextStyle(fontFamily: 'Outfit', fontSize: 13, fontWeight: FontWeight.w600, color: _adminPrimary),
       ),
       cardTheme: CardThemeData(
         color: _adminCard,
@@ -149,16 +150,25 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.grey.shade50,
+        fillColor: const Color(0xFFF8FAFC), // soft grey-blue instead of hard white
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: _adminPrimary, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      ),
+      dialogTheme: DialogThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        elevation: 24,
+        shadowColor: Colors.black26,
       ),
       dataTableTheme: DataTableThemeData(
         headingRowColor: WidgetStateProperty.all(Colors.grey.shade50),

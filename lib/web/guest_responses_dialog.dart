@@ -39,9 +39,9 @@ class GuestResponsesDialog extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Guest Registration Responses',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -84,7 +84,7 @@ class GuestResponsesDialog extends StatelessWidget {
                     else
                       ...booking.guestPreferences!.entries.map((e) {
                         return _buildInfoRow(_formatCamelCaseToTitle(e.key), e.value.toString());
-                      }).toList(),
+                      }),
                   ],
                 ),
               ),

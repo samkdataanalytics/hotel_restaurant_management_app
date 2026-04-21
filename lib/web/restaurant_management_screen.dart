@@ -613,7 +613,7 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
           // Available
           Switch(
             value: item.isAvailable,
-            activeColor: _RC.available,
+            activeThumbColor: _RC.available,
             onChanged: (val) async {
               await widget.service.saveMenuItem(item.copyWith(isAvailable: val));
               _load();
@@ -678,6 +678,7 @@ class _MenuItemDialog extends StatefulWidget {
 class _MenuItemDialogState extends State<_MenuItemDialog> {
   final _formKey = GlobalKey<FormState>();
   final _uuid = const Uuid();
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
   late TextEditingController _name, _description, _price, _emoji;
   late String _category;
   late bool _available;
@@ -746,8 +747,11 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
     );
     if (res != null) {
       setState(() {
-        if (index >= 0) _itemModifiers[index] = res;
-        else _itemModifiers.add(res);
+        if (index >= 0) {
+          _itemModifiers[index] = res;
+        } else {
+          _itemModifiers.add(res);
+        }
       });
     }
   }
@@ -765,9 +769,9 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
             // Header
             Container(
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: _RC.accentLight,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               child: Row(
                 children: [
@@ -802,7 +806,7 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
                       Row(children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _category,
+                            initialValue: _category,
                             decoration: _inputDeco('Category'),
                             items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                             onChanged: (v) => setState(() => _category = v!),
@@ -810,7 +814,7 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _field(_price, 'Selling Price (\$)',
+                          child: _field(_price, 'Selling Price ($_sym)',
                               keyboardType: TextInputType.number,
                               validator: (v) => (double.tryParse(v ?? '') == null) ? 'Enter valid price' : null),
                         ),
@@ -818,7 +822,7 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
                         Column(
                           children: [
                             const Text('Available', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                            Switch(value: _available, activeColor: _RC.available,
+                            Switch(value: _available, activeThumbColor: _RC.available,
                                 onChanged: (v) => setState(() => _available = v)),
                           ],
                         ),
@@ -1149,9 +1153,9 @@ class _ModifierDialogState extends State<_ModifierDialog> {
           children: [
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: _RC.accentLight,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: Row(
                 children: [
@@ -1344,9 +1348,9 @@ class _CostHistoryDialog extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: _RC.costBg,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: Row(
                 children: [
@@ -1418,7 +1422,7 @@ class _CostHistoryDialog extends StatelessWidget {
           Icon(isUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
               size: 12, color: isUp ? _RC.occupied : _RC.available),
           const SizedBox(width: 2),
-          Text('${sym}${delta.abs().toStringAsFixed(2)}',
+          Text('$sym${delta.abs().toStringAsFixed(2)}',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
                   color: isUp ? _RC.occupied : _RC.available)),
         ],
@@ -1742,14 +1746,14 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
                           color: Colors.grey.shade50,
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                         ),
-                        child: Row(
+                        child: const Row(
                           children: [
-                            const Expanded(child: Text('Date', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.black54))),
-                            const SizedBox(width: 12),
-                            const Expanded(child: Text('Price / Unit', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.black54))),
-                            const SizedBox(width: 12),
-                            const Expanded(child: Text('Change', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.black54))),
-                            const Expanded(child: Text('Note', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.black54))),
+                            Expanded(child: Text('Date', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.black54))),
+                            SizedBox(width: 12),
+                            Expanded(child: Text('Price / Unit', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.black54))),
+                            SizedBox(width: 12),
+                            Expanded(child: Text('Change', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.black54))),
+                            Expanded(child: Text('Note', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.black54))),
                           ],
                         ),
                       ),
@@ -1836,7 +1840,7 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
 class _IngredientDialog extends StatefulWidget {
   final RestaurantService service;
   final Ingredient? ingredient;
-  const _IngredientDialog({required this.service, this.ingredient});
+  const _IngredientDialog({super.key, required this.service, this.ingredient});
   @override
   State<_IngredientDialog> createState() => _IngredientDialogState();
 }
@@ -1916,7 +1920,7 @@ class _IngredientDialogState extends State<_IngredientDialog> {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
-                  value: _unit,
+                  initialValue: _unit,
                   decoration: InputDecoration(
                     labelText: 'Unit of Measurement',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -1965,6 +1969,7 @@ class _UpdatePriceDialogState extends State<_UpdatePriceDialog> {
   final _priceCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   bool _saving = false;
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   @override
   void dispose() { _priceCtrl.dispose(); _noteCtrl.dispose(); super.dispose(); }
@@ -2017,7 +2022,7 @@ class _UpdatePriceDialogState extends State<_UpdatePriceDialog> {
                   controller: _priceCtrl,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: 'Price per ${widget.ingredient.unit} (\$)',
+                    labelText: 'Price per ${widget.ingredient.unit} ($_sym)',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   validator: (v) => (double.tryParse(v ?? '') == null) ? 'Enter a valid price' : null,
@@ -2196,85 +2201,93 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
   void _showQrDialog(RestaurantTable table) {
     final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
     final propertyId = session.hotelId ?? '';
-    // Build the full public URL for the guest menu
-    final uri = Uri.base;
-    final baseUrl = '${uri.scheme}://${uri.host}${uri.port != 80 && uri.port != 443 ? ':${uri.port}' : ''}';
+    final baseUrl = Uri.base.origin;
     final menuUrl = '$baseUrl/#/menu/$propertyId/${table.id}';
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.qr_code_2_rounded, size: 22),
-            const SizedBox(width: 8),
-            Text('Table ${table.tableNumber} QR Code'),
-          ],
-        ),
-        content: SizedBox(
-          width: 280,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: QrImageView(
-                  data: menuUrl,
-                  version: QrVersions.auto,
-                  size: 220,
-                  backgroundColor: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Guests scan this code to order directly from their phone.',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              // URL copy row
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(menuUrl,
-                          style: const TextStyle(fontSize: 11),
-                          overflow: TextOverflow.ellipsis),
+      // Use Dialog (not AlertDialog) — AlertDialog wraps content in IntrinsicWidth
+      // which is incompatible with QrImageView's internal LayoutBuilder.
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: SizedBox(
+          width: 380,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF3CD),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.copy_rounded, size: 18),
-                      tooltip: 'Copy link',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                    child: const Icon(Icons.table_restaurant_rounded, color: Color(0xFFD4A853), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Table ${table.tableNumber} — Menu QR',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                const Text(
+                  'Place this QR code on the table so guests can browse the menu and place orders directly.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                // QR code — fixed size avoids IntrinsicWidth → LayoutBuilder conflict
+                Center(
+                  child: QrImageView(
+                    data: menuUrl,
+                    version: QrVersions.auto,
+                    size: 220,
+                    eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                    dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square, color: Colors.black),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Center(
+                  child: SelectableText(
+                    menuUrl,
+                    style: TextStyle(fontSize: 11, color: AppTheme.adminPrimary),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // Actions
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: menuUrl));
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Link copied to clipboard')),
+                          const SnackBar(content: Text('URL copied to clipboard')),
                         );
                       },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy URL'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close'),
                     ),
                   ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }
@@ -2452,7 +2465,7 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
               const Divider(color: Colors.black12),
               Row(
                 children: [
-                  Icon(Icons.check_circle_outline_rounded, size: 14, color: _RC.available),
+                  const Icon(Icons.check_circle_outline_rounded, size: 14, color: _RC.available),
                   const SizedBox(width: 4),
                   Text('Ready for guests',
                       style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
@@ -2502,7 +2515,9 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
   // Kitchen-aware status helpers (served+unpaid → Payment Due)
   String _kitchenStatusLabel(RestaurantOrder order) {
     if (order.status == OrderStatus.served &&
-        order.paymentStatus == PaymentStatus.unpaid) return 'Payment Due';
+        order.paymentStatus == PaymentStatus.unpaid) {
+      return 'Payment Due';
+    }
     switch (order.status) {
       case OrderStatus.pending:    return 'Pending';
       case OrderStatus.preparing:  return 'Preparing';
@@ -2514,7 +2529,9 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
 
   Color _kitchenStatusColor(RestaurantOrder order) {
     if (order.status == OrderStatus.served &&
-        order.paymentStatus == PaymentStatus.unpaid) return Colors.purple;
+        order.paymentStatus == PaymentStatus.unpaid) {
+      return Colors.purple;
+    }
     switch (order.status) {
       case OrderStatus.pending:    return _RC.preparing;
       case OrderStatus.preparing:  return AppTheme.adminPrimary;
@@ -2526,7 +2543,9 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
 
   IconData _kitchenStatusIcon(RestaurantOrder order) {
     if (order.status == OrderStatus.served &&
-        order.paymentStatus == PaymentStatus.unpaid) return Icons.payments_rounded;
+        order.paymentStatus == PaymentStatus.unpaid) {
+      return Icons.payments_rounded;
+    }
     switch (order.status) {
       case OrderStatus.pending:    return Icons.hourglass_top_rounded;
       case OrderStatus.preparing:  return Icons.outdoor_grill_rounded;
@@ -2677,7 +2696,9 @@ class _TableOrderDialog extends StatelessWidget {
 
   String _statusLabel(RestaurantOrder order) {
     if (order.status == OrderStatus.served &&
-        order.paymentStatus == PaymentStatus.unpaid) return 'Payment Due';
+        order.paymentStatus == PaymentStatus.unpaid) {
+      return 'Payment Due';
+    }
     switch (order.status) {
       case OrderStatus.pending:   return 'Pending';
       case OrderStatus.preparing: return 'Preparing';
@@ -2689,7 +2710,9 @@ class _TableOrderDialog extends StatelessWidget {
 
   Color _statusColor(RestaurantOrder order) {
     if (order.status == OrderStatus.served &&
-        order.paymentStatus == PaymentStatus.unpaid) return Colors.purple;
+        order.paymentStatus == PaymentStatus.unpaid) {
+      return Colors.purple;
+    }
     switch (order.status) {
       case OrderStatus.pending:   return _RC.preparing;
       case OrderStatus.preparing: return AppTheme.adminPrimary;
@@ -2701,7 +2724,9 @@ class _TableOrderDialog extends StatelessWidget {
 
   IconData _statusIcon(RestaurantOrder order) {
     if (order.status == OrderStatus.served &&
-        order.paymentStatus == PaymentStatus.unpaid) return Icons.payments_rounded;
+        order.paymentStatus == PaymentStatus.unpaid) {
+      return Icons.payments_rounded;
+    }
     switch (order.status) {
       case OrderStatus.pending:   return Icons.hourglass_top_rounded;
       case OrderStatus.preparing: return Icons.outdoor_grill_rounded;
@@ -2779,9 +2804,9 @@ class _TableOrderDialog extends StatelessWidget {
             // Header
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: _RC.occupiedLight,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: Row(
                 children: [
@@ -3003,8 +3028,9 @@ class _InventoryTabState extends ConsumerState<_InventoryTab> {
     final isOut    = stock <= 0;
     final isLow    = !isOut && (inv?.isLow ?? false);
     Color bg = Colors.white;
-    if (isOut)      bg = _RC.occupiedLight.withOpacity(0.4);
-    else if (isLow) bg = _RC.preparingLight.withOpacity(0.35);
+    if (isOut) {
+      bg = _RC.occupiedLight.withOpacity(0.4);
+    } else if (isLow) bg = _RC.preparingLight.withOpacity(0.35);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),

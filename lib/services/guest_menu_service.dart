@@ -26,6 +26,7 @@ class GuestMenuService {
           'imageUrl': r['image_url'] ?? '',
           'isAvailable': r['is_available'] ?? true,
           'ingredients': r['ingredients'] ?? [],
+          'modifiers': r['modifiers'] ?? [],
         })).toList();
   }
 
@@ -66,16 +67,16 @@ class GuestMenuService {
 
   // ─── Settings (tax / service charge) ──────────────────────────────────────
 
-  Future<({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl})>
+  Future<({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl, String currencySymbol})>
       getSettings(String propertyId) async {
     try {
       final rows = await _db
           .from('hotel_settings')
-          .select('tax_rate, service_charge_rate, primary_color, logo_url')
+          .select('tax_rate, service_charge_rate, primary_color, logo_url, currency_symbol')
           .eq('hotel_id', propertyId)
           .limit(1);
       if (rows.isEmpty) {
-        return (taxRate: 0.0, serviceChargeRate: 0.0, primaryColorHex: '#D4A853', logoUrl: '');
+        return (taxRate: 0.0, serviceChargeRate: 0.0, primaryColorHex: '#D4A853', logoUrl: '', currencySymbol: '\$');
       }
       final r = rows.first;
       return (
@@ -84,9 +85,10 @@ class GuestMenuService {
             (r['service_charge_rate'] as num?)?.toDouble() ?? 0.0,
         primaryColorHex: r['primary_color'] as String? ?? '#D4A853',
         logoUrl: r['logo_url'] as String? ?? '',
+        currencySymbol: r['currency_symbol'] as String? ?? '\$',
       );
     } catch (_) {
-      return (taxRate: 0.0, serviceChargeRate: 0.0, primaryColorHex: '#D4A853', logoUrl: '');
+      return (taxRate: 0.0, serviceChargeRate: 0.0, primaryColorHex: '#D4A853', logoUrl: '', currencySymbol: '\$');
     }
   }
 
@@ -98,7 +100,7 @@ class GuestMenuService {
   Future<String> placeOrder({
     required String propertyId,
     required String tableId,
-    required List<({MenuItem item, int qty, String notes})> cartItems,
+    required List<({MenuItem item, int qty, String notes, Map<String, List<String>>? modifiers})> cartItems,
     String? parentOrderId,
     String type = 'dineIn',
   }) async {
@@ -112,6 +114,7 @@ class GuestMenuService {
           'menuItem': e.item.toMap(),
           'quantity': e.qty,
           'notes': e.notes,
+          'selectedModifiers': e.modifiers ?? {},
           'isRefunded': false,
           'refundedQuantity': 0,
         }).toList();
@@ -138,7 +141,19 @@ class GuestMenuService {
     if (type == 'roomService') {
       final itemCount = cartItems.fold(0, (sum, e) => sum + e.qty);
       final total = cartItems.fold(
-          0.0, (sum, e) => sum + e.item.price * e.qty);
+          0.0, (sum, e) {
+            double base = e.item.price;
+            e.modifiers?.forEach((cat, list) {
+               final mod = e.item.modifiers.where((m) => m.name == cat).firstOrNull;
+               if (mod != null) {
+                 for (final optName in list) {
+                   final opt = mod.options.where((o) => o.name == optName).firstOrNull;
+                   if (opt != null) base += opt.priceAdjustment;
+                 }
+               }
+            });
+            return sum + base * e.qty;
+          });
       NotificationService(propertyId).notifyRoomServiceOrder(
         orderNumber: orderNumber,
         roomNumber: tableId,
@@ -148,6 +163,21 @@ class GuestMenuService {
     }
 
     return orderId;
+  }
+
+  // ─── Fetch order status (direct REST query — no Realtime required) ───────
+  /// Returns null if not found.
+  Future<({String status, String paymentStatus})?> fetchOrderStatus(String orderId) async {
+    final rows = await _db
+        .from('restaurant_orders')
+        .select('status, payment_status')
+        .eq('id', orderId)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    return (
+      status: rows.first['status'] as String? ?? 'pending',
+      paymentStatus: rows.first['payment_status'] as String? ?? 'unpaid',
+    );
   }
 
   // ─── Watch order (status + payment_status) ────────────────────────────────

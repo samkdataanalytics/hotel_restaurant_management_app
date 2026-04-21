@@ -154,7 +154,7 @@ class TimeRecord {
 
   /// Total worked duration, or null if still clocked in.
   Duration? get duration =>
-      clockOut != null ? clockOut!.difference(clockIn) : null;
+      clockOut?.difference(clockIn);
 
   String get durationLabel {
     final d = duration;

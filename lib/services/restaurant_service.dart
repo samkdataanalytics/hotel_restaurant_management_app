@@ -603,7 +603,9 @@ class RestaurantService {
         .where((o) {
           if (o.status == OrderStatus.cancelled) return false;
           if (o.paymentStatus == PaymentStatus.paid ||
-              o.paymentStatus == PaymentStatus.chargedToRoom) return false;
+              o.paymentStatus == PaymentStatus.chargedToRoom) {
+            return false;
+          }
           return true;
         })
         .toList();

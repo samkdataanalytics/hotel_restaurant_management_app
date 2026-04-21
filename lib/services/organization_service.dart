@@ -281,9 +281,20 @@ class OrganizationService {
     final userId = _db.auth.currentUser?.id;
     if (userId == null) return [];
 
+    // Primary path: SECURITY DEFINER RPC that bypasses all RLS policies.
+    // Works regardless of which migration set is active.
+    try {
+      final rows = await _db.rpc('get_my_properties');
+      if (rows is List && rows.isNotEmpty) {
+        return rows.map((h) => OrgProperty.fromRow(h as Map<String, dynamic>)).toList();
+      }
+    } catch (_) {}
+
+    // ── Fallback (if RPC not yet deployed) ────────────────────────────────────
+
     final ids = <String>{};
 
-    // 1. property_staff (new system — one row per assigned property)
+    // 1. property_staff (new system)
     try {
       final rows = await _db
           .from('property_staff')
@@ -295,7 +306,7 @@ class OrganizationService {
       }
     } catch (_) {}
 
-    // 2. hotel_users (legacy system)
+    // 2. hotel_users (legacy)
     try {
       final rows = await _db
           .from('hotel_users')
@@ -307,14 +318,50 @@ class OrganizationService {
       }
     } catch (_) {}
 
+    // 3. Org owner/admin fallback — only owners and admins see all org properties.
+    //    Regular staff are excluded so they only see assigned properties (paths 1 & 2).
+    if (ids.isEmpty) {
+      try {
+        final memberRows = await _db
+            .from('organization_members')
+            .select('org_id, role')
+            .eq('user_id', userId)
+            .limit(1);
+        if (memberRows.isNotEmpty) {
+          final role = memberRows.first['role'] as String? ?? '';
+          if (role == 'owner' || role == 'admin') {
+            final orgId = memberRows.first['org_id'] as String?;
+            if (orgId != null) {
+              final hotelRows = await _db
+                  .from('hotels')
+                  .select('id')
+                  .eq('org_id', orgId);
+              for (final r in hotelRows) {
+                final id = r['id'] as String?;
+                if (id != null) ids.add(id);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     if (ids.isEmpty) return [];
 
-    // 3. Fetch hotel details for all collected IDs in one query (exclude soft-deleted)
-    final hotels = await _db
-        .from('hotels')
-        .select()
-        .inFilter('id', ids.toList())
-        .eq('is_deleted', false);
+    // 4. Fetch hotel details (with is_deleted fallback)
+    List<dynamic> hotels;
+    try {
+      hotels = await _db
+          .from('hotels')
+          .select()
+          .inFilter('id', ids.toList())
+          .eq('is_deleted', false);
+    } catch (_) {
+      hotels = await _db
+          .from('hotels')
+          .select()
+          .inFilter('id', ids.toList());
+    }
 
     return hotels.map((h) => OrgProperty.fromRow(h)).toList();
   }

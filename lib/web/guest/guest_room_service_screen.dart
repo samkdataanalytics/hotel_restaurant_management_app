@@ -17,13 +17,34 @@ class _C {
   static const purple  = Color(0xFF8B5CF6); // room service accent
 }
 
-// ─── Cart entry ───────────────────────────────────────────────────────────────
 class _CartItem {
   final MenuItem item;
   int qty;
-  String notes;
-  _CartItem({required this.item, this.qty = 1, this.notes = ''});
-  double get subtotal => item.price * qty;
+  String notes = '';
+  final Map<String, List<String>> selectedModifiers;
+
+  _CartItem({
+    required this.item,
+    this.qty = 1,
+    Map<String, List<String>>? modifiers,
+  }) : selectedModifiers = modifiers ?? {};
+
+  /// Matches OrderItem.unitPrice logic from POS exactly.
+  double get unitPrice {
+    int extraUnits = 0;
+    double adjustmentsTotal = 0.0;
+    for (final mod in item.modifiers) {
+      final selected = selectedModifiers[mod.name] ?? [];
+      if (selected.length > 1) extraUnits += selected.length - 1;
+      for (final optName in selected) {
+        final opt = mod.options.where((o) => o.name == optName).firstOrNull;
+        if (opt != null) adjustmentsTotal += opt.priceAdjustment;
+      }
+    }
+    return item.price * (1 + extraUnits) + adjustmentsTotal;
+  }
+
+  double get subtotal => unitPrice * qty;
 }
 
 // ─── Placed order ─────────────────────────────────────────────────────────────
@@ -31,16 +52,13 @@ class _PlacedOrder {
   final String id;
   final List<_CartItem> items;
   final bool isAddOn;
-  String status;
-  String paymentStatus;
-  StreamSubscription<({String status, String paymentStatus})>? sub;
+  String status = 'pending';
+  String paymentStatus = 'unpaid';
 
   _PlacedOrder({
     required this.id,
     required this.items,
     this.isAddOn = false,
-    this.status = 'pending',
-    this.paymentStatus = 'unpaid',
   });
 
   bool get isActive => status != 'served' && status != 'cancelled';
@@ -67,7 +85,7 @@ class GuestRoomServiceScreen extends StatefulWidget {
 class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
     with TickerProviderStateMixin {
   final _service = GuestMenuService();
-  final _fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  NumberFormat get _fmt => NumberFormat.currency(symbol: _currencySymbol, decimalDigits: 2);
   late TabController _tabCtrl;
 
   // Brand color + logo (loaded from DB)
@@ -93,6 +111,9 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
   bool _addingMore = false;
   bool _isPlacing = false;
 
+  // Polling timer for order status
+  Timer? _pollTimer;
+
   // Feedback / session
   bool _showFeedback = false;
   bool _sessionEnded = false;
@@ -109,12 +130,38 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
 
   @override
   void dispose() {
-    for (final o in _orders) {
-      o.sub?.cancel();
-    }
+    _pollTimer?.cancel();
     _tabCtrl.dispose();
     _feedbackController.dispose();
     super.dispose();
+  }
+
+  /// Starts polling all active orders every 5 s via plain REST (no WebSocket).
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (!mounted) return;
+      bool changed = false;
+      for (final order in _orders) {
+        try {
+          final result = await _service.fetchOrderStatus(order.id);
+          if (result == null) continue;
+          if (result.status != order.status ||
+              result.paymentStatus != order.paymentStatus) {
+            order.status = result.status;
+            order.paymentStatus = result.paymentStatus;
+            changed = true;
+          }
+        } catch (_) {}
+      }
+      if (changed && mounted) {
+        setState(() {
+          if (_orders.any((o) => o.isPaid) && !_showFeedback && !_sessionEnded) {
+            _showFeedback = true;
+          }
+        });
+      }
+    });
   }
 
   Future<void> _load() async {
@@ -126,7 +173,7 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
       ]);
 
       final items    = results[0] as List<MenuItem>;
-      final settings = results[1] as ({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl});
+      final settings = results[1] as ({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl, String currencySymbol});
       final name     = results[2] as String;
 
       final cats = items.map((i) => i.category).toSet().toList()..sort();
@@ -136,10 +183,11 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
         _menu = items;
         _categories = cats;
         _selectedCategory = cats.isNotEmpty ? cats.first : '';
-        _taxRate = settings.taxRate;
-        _serviceRate = settings.serviceChargeRate;
-        _accent  = hexToColor(settings.primaryColorHex);
-        _logoUrl = settings.logoUrl;
+        _taxRate        = settings.taxRate;
+        _serviceRate    = settings.serviceChargeRate;
+        _accent         = hexToColor(settings.primaryColorHex);
+        _logoUrl        = settings.logoUrl;
+        _currencySymbol = settings.currencySymbol;
         _propertyName = name;
         _loading = false;
         _tabCtrl.dispose();
@@ -163,12 +211,160 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
   // ── Cart helpers ─────────────────────────────────────────────────────────────
 
   void _addItem(MenuItem item) {
+    if (item.modifiers.isNotEmpty) {
+      _showModifierDialog(item);
+    } else {
+      _addToCartWithMods(item, {}, 1);
+    }
+  }
+
+  Future<void> _showModifierDialog(MenuItem item) async {
+    final Map<String, List<String>> selections = {};
+    for (final mod in item.modifiers) selections[mod.name] = [];
+    int qty = 1;
+
+    final result = await showDialog<({Map<String, List<String>> mods, int qty})>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          bool isValid = true;
+          for (final mod in item.modifiers) {
+            if (mod.isRequired && selections[mod.name]!.isEmpty) {
+              isValid = false; break;
+            }
+          }
+
+          return AlertDialog(
+            backgroundColor: _C.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: _C.divider)),
+            title: Text('Customize ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold, color: _C.text)),
+            content: SizedBox(
+              width: 400,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ...item.modifiers.map((mod) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(mod.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _C.text)),
+                                if (mod.isRequired)
+                                  const Text(' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                const Spacer(),
+                                Text(mod.allowMultiple ? '(Qty per option)' : '(Choose 1)',
+                                    style: const TextStyle(fontSize: 12, color: _C.subtext)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ...mod.options.map((opt) {
+                              final optionPrice = item.price + opt.priceAdjustment;
+                              final priceLabel = opt.priceAdjustment == 0
+                                  ? _fmt.format(item.price)   // base option — show actual price
+                                  : '${_fmt.format(optionPrice)} (+${_fmt.format(opt.priceAdjustment)})';
+                              if (mod.allowMultiple) {
+                                final optQty = selections[mod.name]!.where((n) => n == opt.name).length;
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 5),
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: Text(opt.name, style: const TextStyle(fontSize: 14, color: _C.text))),
+                                      Text(priceLabel, style: const TextStyle(fontSize: 13, color: _C.subtext)),
+                                      const SizedBox(width: 12),
+                                      _qtyBtn(Icons.remove_rounded, () { if (optQty > 0) setSt(() => selections[mod.name]!.remove(opt.name)); }),
+                                      SizedBox(
+                                        width: 36,
+                                        child: Text('$optQty', textAlign: TextAlign.center, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: optQty > 0 ? _accent : _C.subtext)),
+                                      ),
+                                      _qtyBtn(Icons.add_rounded, () => setSt(() => selections[mod.name]!.add(opt.name))),
+                                    ],
+                                  ),
+                                );
+                              } else {
+                                final isSelected = selections[mod.name]!.contains(opt.name);
+                                return InkWell(
+                                  onTap: () => setSt(() => selections[mod.name] = [opt.name]),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                          color: isSelected ? _accent : _C.subtext,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(child: Text(opt.name, style: const TextStyle(fontSize: 14, color: _C.text))),
+                                        Text(priceLabel, style: const TextStyle(fontSize: 13, color: _C.subtext)),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
+                            }),
+                          ],
+                        ),
+                      );
+                    }),
+                    const Divider(color: _C.divider),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Text('Quantity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _C.text)),
+                        const Spacer(),
+                        _qtyBtn(Icons.remove_rounded, () { if (qty > 1) setSt(() => qty--); }),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text('$qty', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _C.text)),
+                        ),
+                        _qtyBtn(Icons.add_rounded, () => setSt(() => qty++)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: _C.subtext))),
+              ElevatedButton(
+                onPressed: isValid ? () => Navigator.pop(ctx, (mods: selections, qty: qty)) : null,
+                style: ElevatedButton.styleFrom(backgroundColor: _accent, foregroundColor: _C.bg),
+                child: Text('Add $qty to Order'),
+              )
+            ],
+          );
+        }
+      )
+    );
+
+    if (result != null) {
+      _addToCartWithMods(item, result.mods, result.qty);
+    }
+  }
+
+  void _addToCartWithMods(MenuItem item, Map<String, List<String>> mods, int qty) {
     setState(() {
-      final existing = _cart.where((c) => c.item.id == item.id).firstOrNull;
+      final existing = _cart.where((c) {
+        if (c.item.id != item.id) return false;
+        if (c.selectedModifiers.length != mods.length) return false;
+        for (final k in mods.keys) {
+          if (!c.selectedModifiers.containsKey(k)) return false;
+          final listA = List<String>.from(c.selectedModifiers[k]!)..sort();
+          final listB = List<String>.from(mods[k]!)..sort();
+          if (listA.join() != listB.join()) return false;
+        }
+        return true;
+      }).firstOrNull;
+
       if (existing != null) {
-        existing.qty++;
+        existing.qty += qty;
       } else {
-        _cart.add(_CartItem(item: item));
+        _cart.add(_CartItem(item: item, qty: qty, modifiers: mods));
       }
     });
   }
@@ -205,7 +401,12 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
       final id = await _service.placeOrder(
         propertyId: widget.propertyId,
         tableId: widget.roomNumber, // room number stored in tableId field
-        cartItems: _cart.map((c) => (item: c.item, qty: c.qty, notes: c.notes)).toList(),
+        cartItems: _cart.map((c) => (
+          item: c.item, 
+          qty: c.qty, 
+          notes: c.notes,
+          modifiers: c.selectedModifiers.isNotEmpty ? c.selectedModifiers : null
+        )).toList(),
         parentOrderId: parentId,
         type: 'roomService',
       );
@@ -216,22 +417,15 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
         isAddOn: parentId != null,
       );
 
-      placed.sub = _service.watchOrder(id).listen((data) {
-        if (!mounted) return;
-        setState(() {
-          placed.status = data.status;
-          placed.paymentStatus = data.paymentStatus;
-          if (placed.isPaid && !_showFeedback && !_sessionEnded) {
-            _showFeedback = true;
-          }
-        });
-      });
-
       setState(() {
         _orders.add(placed);
         _cart.clear();
         _addingMore = false;
       });
+
+      // Start (or restart) the polling timer now that we have an active order.
+      _startPolling();
+
     } catch (e) {
       debugPrint('❌ placeOrder error: $e');
       if (mounted) {
@@ -420,6 +614,38 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
           const SizedBox(height: 8),
           Text(_fmt.format(item.price),
               style: TextStyle(color: _accent, fontWeight: FontWeight.w700, fontSize: 14)),
+          if (item.modifiers.isNotEmpty) ...[
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 6),
+              child: Divider(height: 1, thickness: 0.8, color: _C.divider),
+            ),
+            ...item.modifiers.take(2).map((mod) {
+              final optLabels = mod.options.map((o) => o.priceAdjustment != 0
+                  ? '${o.name} (+${_fmt.format(o.priceAdjustment)})'
+                  : o.name).join('  ·  ');
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(mod.name,
+                        style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: _C.subtext)),
+                    const SizedBox(height: 2),
+                    Text(optLabels,
+                        style: const TextStyle(fontSize: 10, color: _C.text),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              );
+            }),
+            if (item.modifiers.length > 2)
+              Text('+${item.modifiers.length - 2} more groups',
+                  style: const TextStyle(fontSize: 10, color: _C.subtext)),
+          ],
         ])),
         const SizedBox(width: 12),
         qty == 0
@@ -472,8 +698,15 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
         total: _cartTotal,
         isAddOn: _addingMore,
         isPlacing: _isPlacing,
-        onAdd: _addItem,
-        onRemove: _removeItem,
+        onAdd: (c) => setState(() => c.qty++),
+        onRemove: (c) => setState(() {
+          if (c.qty > 1) {
+            c.qty--;
+          } else {
+            _cart.remove(c);
+            if (_cart.isEmpty) Navigator.pop(context);
+          }
+        }),
         onPlace: () { Navigator.pop(context); _placeOrder(); },
         currencySymbol: _currencySymbol,
         accent: _accent,
@@ -743,8 +976,8 @@ class _CartSheet extends StatefulWidget {
   final List<_CartItem> cart;
   final double subtotal, tax, taxRate, serviceCharge, serviceRate, total;
   final bool isAddOn, isPlacing;
-  final void Function(MenuItem) onAdd;
-  final void Function(MenuItem) onRemove;
+  final void Function(_CartItem) onAdd;
+  final void Function(_CartItem) onRemove;
   final VoidCallback onPlace;
   final String currencySymbol;
   final Color accent;
@@ -812,7 +1045,7 @@ class _CartSheetState extends State<_CartSheet> {
                 child: Row(children: [
                   Row(mainAxisSize: MainAxisSize.min, children: [
                     GestureDetector(
-                      onTap: () { widget.onRemove(c.item); setState(() {}); },
+                      onTap: () { widget.onRemove(c); setState(() {}); },
                       child: Container(
                         width: 30, height: 30,
                         decoration: BoxDecoration(
@@ -828,7 +1061,7 @@ class _CartSheetState extends State<_CartSheet> {
                           style: TextStyle(color: widget.accent, fontWeight: FontWeight.w700, fontSize: 15)),
                     ),
                     GestureDetector(
-                      onTap: () { widget.onAdd(c.item); setState(() {}); },
+                      onTap: () { widget.onAdd(c); setState(() {}); },
                       child: Container(
                         width: 30, height: 30,
                         decoration: BoxDecoration(
@@ -840,8 +1073,21 @@ class _CartSheetState extends State<_CartSheet> {
                     ),
                   ]),
                   const SizedBox(width: 12),
-                  Expanded(child: Text(c.item.name,
-                      style: const TextStyle(color: _C.text, fontSize: 14))),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(c.item.name, style: const TextStyle(color: _C.text, fontSize: 14)),
+                      if (c.selectedModifiers.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        ...c.selectedModifiers.entries.map((e) {
+                          final counts = <String, int>{};
+                          for (final n in e.value) { counts[n] = (counts[n] ?? 0) + 1; }
+                          final summary = counts.entries.map((c2) => c2.value > 1 ? '${c2.key} ×${c2.value}' : c2.key).join(', ');
+                          return Text('${e.key}: $summary', style: const TextStyle(color: _C.subtext, fontSize: 11));
+                        }),
+                      ],
+                    ],
+                  )),
                   Text(fmt.format(c.subtotal),
                       style: const TextStyle(color: _C.subtext, fontSize: 13)),
                 ]),

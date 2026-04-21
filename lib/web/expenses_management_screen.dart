@@ -341,7 +341,7 @@ class _ExpensesManagementScreenState extends ConsumerState<ExpensesManagementScr
             child: Align(
               alignment: Alignment.centerRight,
               child: Text(
-                '${_sym}${expense.amount.toStringAsFixed(2)}',
+                '$_sym${expense.amount.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   color: AppTheme.danger,

@@ -100,9 +100,9 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppTheme.danger.withOpacity(0.2)),
               ),
-              child: Column(
+              child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text('• Your profile will be deactivated', style: TextStyle(fontSize: 13)),
                   SizedBox(height: 4),
                   Text('• If you are the sole owner, your organisation and all properties will also be deactivated', style: TextStyle(fontSize: 13)),

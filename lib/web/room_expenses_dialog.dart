@@ -232,7 +232,7 @@ class _RoomExpensesDialogState extends State<RoomExpensesDialog> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<ExpenseCategory>(
-                            value: _category,
+                            initialValue: _category,
                             decoration: InputDecoration(
                               labelText: 'Category',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),

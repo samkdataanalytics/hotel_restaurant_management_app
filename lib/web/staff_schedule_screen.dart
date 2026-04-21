@@ -525,12 +525,12 @@ class _ScheduleTab extends StatelessWidget {
                   ),
                 ),
                 if (dayShifts.isEmpty)
-                  Padding(
+                  const Padding(
                     padding:
-                        const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                        EdgeInsets.fromLTRB(16, 0, 16, 14),
                     child: Text(
                       'No shifts scheduled',
-                      style: const TextStyle(
+                      style: TextStyle(
                           fontSize: 12, color: Color(0xFFCBD5E1)),
                     ),
                   )
@@ -1203,7 +1203,7 @@ class _ShiftDialogState extends State<_ShiftDialog> {
               // Staff
               _label('Staff Member'),
               DropdownButtonFormField<PropertyStaffMember>(
-                value: _selectedStaff,
+                initialValue: _selectedStaff,
                 hint: const Text('Select staff member'),
                 decoration: _inputDec(),
                 items: widget.staff.map((s) => DropdownMenuItem(
@@ -1290,7 +1290,7 @@ class _ShiftDialogState extends State<_ShiftDialog> {
               // Role
               _label('Role'),
               DropdownButtonFormField<String>(
-                value: _role,
+                initialValue: _role,
                 decoration: _inputDec(),
                 items: _roles.map((r) => DropdownMenuItem(
                       value: r,
@@ -1304,7 +1304,7 @@ class _ShiftDialogState extends State<_ShiftDialog> {
               if (isEdit) ...[
                 _label('Status'),
                 DropdownButtonFormField<ShiftStatus>(
-                  value: _status,
+                  initialValue: _status,
                   decoration: _inputDec(),
                   items: ShiftStatus.values.map((s) => DropdownMenuItem(
                         value: s,

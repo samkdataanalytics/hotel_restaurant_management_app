@@ -128,13 +128,13 @@ class SkeletonKpiCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(width: 4, color: const Color(0xFFDDE3EC)),
-            Expanded(
+            const Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
+                  children: [
                     SkeletonLine(width: 90),
                     SizedBox(height: 10),
                     SkeletonBox(width: 64, height: 24),
@@ -252,9 +252,9 @@ class DashboardSkeleton extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Row(
+              const Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
+                children: [
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -346,9 +346,9 @@ class TableListSkeleton extends StatelessWidget {
               padding: EdgeInsets.symmetric(
                   horizontal: AppTheme.isMobile(context) ? 16 : 32,
                   vertical: 18),
-              child: Row(
+              child: const Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
+                children: [
                   SkeletonBox(width: 180, height: 24),
                   Row(children: [
                     SkeletonBox(width: 110, height: 36, radius: 10),
@@ -359,10 +359,10 @@ class TableListSkeleton extends StatelessWidget {
               ),
             ),
             // Search / filter bar
-            Padding(
-              padding: const EdgeInsets.fromLTRB(32, 20, 32, 0),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(32, 20, 32, 0),
               child: Row(
-                children: const [
+                children: [
                   Expanded(child: SkeletonBox(height: 40, radius: 10)),
                   SizedBox(width: 12),
                   SkeletonBox(width: 130, height: 40, radius: 10),
@@ -443,9 +443,9 @@ class PosMenuSkeleton extends StatelessWidget {
                     color: Colors.white,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 24, vertical: 16),
-                    child: Row(
+                    child: const Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
+                      children: [
                         SkeletonBox(width: 180, height: 24),
                         SkeletonLine(width: 130),
                       ],
@@ -457,8 +457,8 @@ class PosMenuSkeleton extends StatelessWidget {
                     color: Colors.white,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 24, vertical: 12),
-                    child: Row(
-                      children: const [
+                    child: const Row(
+                      children: [
                         SkeletonBox(width: 56, height: 32, radius: 16),
                         SizedBox(width: 8),
                         SkeletonBox(width: 80, height: 32, radius: 16),
@@ -494,13 +494,13 @@ class PosMenuSkeleton extends StatelessWidget {
             Container(
               width: 370,
               color: Colors.white,
-              child: Column(
+              child: const Column(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.all(20),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
+                      children: [
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -517,8 +517,8 @@ class PosMenuSkeleton extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const Divider(height: 1),
-                  const Expanded(
+                  Divider(height: 1),
+                  Expanded(
                     child: Center(
                       child: SkeletonBox(
                           width: 56, height: 56, radius: 28),
@@ -549,9 +549,9 @@ class KpiTableSkeleton extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Row(
+              const Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: const [
+                children: [
                   SkeletonBox(width: 170, height: 26),
                   Row(children: [
                     SkeletonBox(width: 110, height: 36, radius: 10),
@@ -615,8 +615,8 @@ class KpiTableSkeleton extends StatelessWidget {
                       color: const Color(0xFFF8FAFC),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 20, vertical: 12),
-                      child: Row(
-                        children: const [
+                      child: const Row(
+                        children: [
                           Expanded(child: SkeletonLine(width: 60)),
                           SizedBox(width: 16),
                           Expanded(child: SkeletonLine(width: 80)),

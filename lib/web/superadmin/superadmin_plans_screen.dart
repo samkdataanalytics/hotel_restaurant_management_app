@@ -285,7 +285,7 @@ class _PlanEditorCardState extends State<_PlanEditorCard> {
                     Switch(
                       value: _isActive,
                       onChanged: (v) => setState(() => _isActive = v),
-                      activeColor: AppTheme.success,
+                      activeThumbColor: AppTheme.success,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ],
@@ -324,7 +324,7 @@ class _PlanEditorCardState extends State<_PlanEditorCard> {
                     Switch(
                       value: _isCustomPrice,
                       onChanged: (v) => setState(() => _isCustomPrice = v),
-                      activeColor: accentColor,
+                      activeThumbColor: accentColor,
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ],
@@ -370,7 +370,7 @@ class _PlanEditorCardState extends State<_PlanEditorCard> {
                   Switch(
                     value: _isHighlighted,
                     onChanged: (v) => setState(() => _isHighlighted = v),
-                    activeColor: AppTheme.goldPrimary,
+                    activeThumbColor: AppTheme.goldPrimary,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ],

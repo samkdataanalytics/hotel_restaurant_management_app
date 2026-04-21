@@ -159,7 +159,7 @@ class MenuPdfService {
         pw.Center(
           child: pw.Text(
             propName,
-            style: pw.TextStyle(
+            style: const pw.TextStyle(
               color: _kGray,
               fontSize: 14,
               letterSpacing: 0.5,

@@ -72,7 +72,7 @@ class _UsersManagementScreenState
       context: context,
       builder: (_) => _AddStaffDialog(
         propertyId:    property.id,
-        orgId:         authState!.organization!.id,
+        orgId:         authState.organization!.id,
         isHotel:       _isHotel,
         isRestaurant:  _isRestaurant,
         orgProperties: authState.properties,
@@ -381,13 +381,13 @@ class _UsersManagementScreenState
                                   size: 48,
                                   color: Colors.grey.shade300),
                               const SizedBox(height: 12),
-                              Text(
+                              const Text(
                                 'No team members yet.',
                                 style: TextStyle(
                                     color: Colors.black54, fontSize: 16),
                               ),
                               const SizedBox(height: 4),
-                              Text(
+                              const Text(
                                 'Click "Add Member" to create a staff account.',
                                 style: TextStyle(
                                     color: Colors.black38, fontSize: 13),
@@ -1429,9 +1429,9 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
                 const Icon(Icons.person_outline_rounded,
                     size: 16, color: Colors.black45),
                 const SizedBox(width: 8),
-                Text(
+                const Text(
                   'Username: ',
-                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                  style: TextStyle(fontSize: 13, color: Colors.black54),
                 ),
                 Text(
                   _createdUsername ?? '',
@@ -1851,8 +1851,8 @@ class _PrivilegeMatrix extends StatelessWidget {
         const SizedBox(height: 8),
 
         if (isHotel) ...[
-          _SectionHeader(
-              label: 'HOTEL', color: const Color(0xFFD4A853)),
+          const _SectionHeader(
+              label: 'HOTEL', color: Color(0xFFD4A853)),
           const SizedBox(height: 6),
           ...kHotelSectionKeys.map((key) => _SectionRow(
                 sectionKey: key,
@@ -1865,7 +1865,7 @@ class _PrivilegeMatrix extends StatelessWidget {
         if (isHotel && isRestaurant) const SizedBox(height: 8),
 
         if (isRestaurant) ...[
-          _SectionHeader(
+          const _SectionHeader(
               label: 'RESTAURANT', color: AppTheme.restaurantAccent),
           const SizedBox(height: 6),
           ...kRestaurantSectionKeys.map((key) => _SectionRow(

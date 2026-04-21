@@ -94,12 +94,14 @@ class AuthNotifier extends AsyncNotifier<AppAuthState> {
       List<OrgProperty> properties = [];
 
       if (!isSuperadmin) {
-        final results = await Future.wait([
-          OrganizationService().getMyOrganization(),
-          OrganizationService().getMyProperties(),
-        ]);
-        org        = results[0] as Organization?;
-        properties = results[1] as List<OrgProperty>;
+        // Run independently so a properties error never hides the org (and
+        // vice-versa), which would wrongly redirect the user to /onboarding.
+        try {
+          org = await OrganizationService().getMyOrganization();
+        } catch (_) {}
+        try {
+          properties = await OrganizationService().getMyProperties();
+        } catch (_) {}
       }
 
       return AppAuthState(

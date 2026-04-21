@@ -468,7 +468,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                         backgroundColor: Colors.grey.shade100,
                       ),
                     const SizedBox(width: 8),
-                    Text('Status:',
+                    const Text('Status:',
                         style: TextStyle(
                             fontSize: 12,
                             color: Colors.black45,
@@ -602,7 +602,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 ),
                 child: Text(
                   '#${parent.orderNumber}',
-                  style: TextStyle(
+                  style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 13,
                       color: _kOrange),

@@ -278,7 +278,7 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<ExpenseCategory>(
-                            value: _category,
+                            initialValue: _category,
                             decoration: InputDecoration(
                               labelText: 'Category',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -351,7 +351,7 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
 
                     // ROW 3: Room optional link
                     DropdownButtonFormField<String?>(
-                      value: _roomId,
+                      initialValue: _roomId,
                       decoration: InputDecoration(
                         labelText: 'Link to Room (Optional)',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -433,7 +433,7 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
                             ),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
-                              value: _bookingId,
+                              initialValue: _bookingId,
                               decoration: InputDecoration(
                                 labelText: 'Select Guest Booking',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
