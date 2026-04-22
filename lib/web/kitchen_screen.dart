@@ -614,12 +614,83 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                         : 'Mark as ${nextStatus.name[0].toUpperCase()}${nextStatus.name.substring(1)}',
                   ),
                 ),
+                if (canEditSection(ref, 'restaurant_kitchen'))
+                  TextButton.icon(
+                    onPressed: () => _cancelOrderKitchen(order),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.red.shade300,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                    ),
+                    icon: Icon(Icons.cancel_outlined, size: 14, color: Colors.red.shade300),
+                    label: const Text('Cancel Order', style: TextStyle(fontSize: 12)),
+                  ),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  // ── Cancel order from kitchen ─────────────────────────────────────────────────
+  Future<void> _cancelOrderKitchen(RestaurantOrder order) async {
+    final isPending = order.status == OrderStatus.pending;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Colors.white12)),
+        title: Row(children: [
+          const Icon(Icons.cancel_outlined, color: Colors.redAccent, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            isPending ? 'Cancel Order?' : 'Cancel Order — Food May Be Ready',
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+        ]),
+        content: Text(
+          isPending
+              ? 'This order will be cancelled and inventory will be restored.'
+              : 'The order is being prepared. Cancelling will NOT restore inventory — food is already being made.',
+          style: TextStyle(
+            color: isPending ? Colors.white70 : Colors.orange.shade300,
+            fontSize: 14, height: 1.55,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_, false),
+            child: const Text('Keep', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(_, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 0),
+            child: const Text('Cancel Order'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await _restaurantService.cancelOrder(order.id);
+      await _loadData(silent: true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to cancel order: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   // ── Payment-due card (accepts 1 or more orders as a group) ──────────────────

@@ -822,6 +822,76 @@ class RestaurantService {
     }
   }
 
+  /// Cancels [cancelQty] units of a single item within an order.
+  /// Inventory is restored only when the order is still [OrderStatus.pending].
+  /// Auto-cancels the whole order if every item becomes fully cancelled.
+  Future<void> cancelOrderItem(
+      String orderId, String orderItemId, int cancelQty) async {
+    final rows = await _db
+        .from('restaurant_orders')
+        .select()
+        .eq('id', orderId)
+        .limit(1);
+    if (rows.isEmpty) return;
+    final order = _orderFromRow(rows.first);
+
+    final itemIdx = order.items.indexWhere((i) => i.id == orderItemId);
+    if (itemIdx == -1) return;
+    final item = order.items[itemIdx];
+    if (item.isFullyRefunded) return;
+
+    final actualQty = cancelQty.clamp(0, item.activeQuantity);
+    if (actualQty <= 0) return;
+
+    final newRefundedQty = item.refundedQuantity + actualQty;
+    final fullyRefunded = newRefundedQty >= item.quantity;
+
+    final updatedItems = List<OrderItem>.from(order.items);
+    updatedItems[itemIdx] = item.copyWith(
+      isRefunded: fullyRefunded,
+      refundedQuantity: newRefundedQty,
+    );
+
+    final allRefunded = updatedItems.every((i) => i.isFullyRefunded);
+
+    await _db.from('restaurant_orders').update({
+      'items': updatedItems.map((e) => e.toMap()).toList(),
+      if (allRefunded) 'status': 'cancelled',
+      if (allRefunded) 'inventory_restored': order.status == OrderStatus.pending,
+    }).eq('id', orderId);
+
+    // Restore inventory only when the order was still pending (not yet cooking).
+    if (order.status == OrderStatus.pending) {
+      final menuItems = await getMenuItems();
+      final menuItem = menuItems.firstWhere(
+        (m) => m.id == item.menuItem.id,
+        orElse: () => item.menuItem,
+      );
+      final restorations = <String, double>{};
+      for (final ing in menuItem.ingredients) {
+        restorations[ing.ingredientId] =
+            (restorations[ing.ingredientId] ?? 0) + ing.quantity * actualQty;
+      }
+      await _applyInventoryDelta(restorations, subtract: false);
+    }
+
+    // Free table if the whole order was auto-cancelled with no siblings.
+    if (allRefunded && order.tableId != null) {
+      final siblingRows = await _db
+          .from('restaurant_orders')
+          .select('id')
+          .eq('table_id', order.tableId!)
+          .neq('id', orderId)
+          .neq('status', 'cancelled')
+          .not('payment_status', 'in', '("paid","chargedToRoom")');
+      if (siblingRows.isEmpty) {
+        await _db
+            .from('restaurant_tables')
+            .update({'status': 'available'}).eq('id', order.tableId!);
+      }
+    }
+  }
+
   // ─── Inventory helpers ────────────────────────────────────────────────────
 
   Future<void> _applyInventoryDelta(

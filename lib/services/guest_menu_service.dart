@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/menu_item.dart';
@@ -206,6 +207,23 @@ class GuestMenuService {
             paymentStatus: r['payment_status'] as String? ?? 'unpaid',
           );
         });
+  }
+
+  // ─── Cancel order (via SECURITY DEFINER RPC — works from anon client) ──────
+
+  /// Calls the `cancel_guest_order` Postgres function.
+  /// Returns one of: 'cancelled' | 'not_cancellable' | 'already_cancelled' | 'not_found'
+  Future<String> cancelOrder(String orderId) async {
+    try {
+      final result = await _db.rpc(
+        'cancel_guest_order',
+        params: {'p_order_id': orderId},
+      );
+      return result as String? ?? 'not_found';
+    } catch (e) {
+      debugPrint('cancelOrder error: $e');
+      return 'error';
+    }
   }
 
   // ─── Submit guest feedback ─────────────────────────────────────────────────
