@@ -19,6 +19,7 @@ import '../services/restaurant_service.dart';
 import '../models/staff_permission.dart';
 import '../services/booking_service.dart';
 import 'restaurant_invoice_dialog.dart';
+import 'widgets/split_payment_inputs.dart';
 
 // ─── Restaurant brand colors — sourced from AppTheme ─────────────────────────
 const _kOrange = AppTheme.restaurantAccent;
@@ -468,6 +469,92 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     });
 
     return order;
+  }
+
+  Future<void> _showSplitCheckoutDialog(double total) async {
+    double splitCash = 0;
+    double splitCard = 0;
+    final cashCtrl = TextEditingController();
+    final cardCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: SizedBox(
+            width: 420,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.call_split_rounded, color: Color(0xFF8B5CF6), size: 22),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text('Split Payment',
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        icon: const Icon(Icons.close_rounded),
+                        style: IconButton.styleFrom(foregroundColor: Colors.black38),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Total due: ${_currencyFormat.format(total)}',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                  const SizedBox(height: 20),
+                  SplitPaymentInputs(
+                    total: total,
+                    currency: _currencyFormat,
+                    cashCtrl: cashCtrl,
+                    cardCtrl: cardCtrl,
+                    cashAmount: splitCash,
+                    cardAmount: splitCard,
+                    onChanged: (cash, card) => setDlg(() {
+                      splitCash = cash;
+                      splitCard = card;
+                    }),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: (splitCash + splitCard - total).abs() < 0.01
+                          ? () => Navigator.pop(ctx, true)
+                          : null,
+                      icon: const Icon(Icons.check_rounded, size: 18),
+                      label: const Text('Confirm Payment',
+                          style: TextStyle(fontSize: 14)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF22C55E),
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.grey.shade100,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    cashCtrl.dispose();
+    cardCtrl.dispose();
+    if (confirmed == true && mounted) {
+      await _handleCheckout(PaymentStatus.paid);
+    }
   }
 
   Future<void> _handleCheckout(PaymentStatus status, {String? bookingId, String? roomId}) async {
@@ -1064,44 +1151,66 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             if (hasItems)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                child: Row(children: [
-                  Expanded(
-                    flex: 5,
+                child: Column(children: [
+                  Row(children: [
+                    Expanded(
+                      flex: 5,
+                      child: ElevatedButton.icon(
+                        onPressed: !canEditSection(ref, 'restaurant_pos')
+                            ? null
+                            : () => _handleCheckout(PaymentStatus.paid),
+                        icon: const Icon(Icons.attach_money_rounded, size: 16),
+                        label: Text(
+                          'Cash  •  ${_currencyFormat.format(grandTotal)}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 12),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.success,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 3,
+                      child: OutlinedButton.icon(
+                        onPressed: _showChargeToRoomDialog,
+                        icon: const Icon(Icons.hotel_rounded, size: 14),
+                        label: const Text('Room',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 12)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.warning,
+                          side: BorderSide(color: AppTheme.warning),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: !canEditSection(ref, 'restaurant_pos')
                           ? null
-                          : () => _handleCheckout(PaymentStatus.paid),
-                      icon: const Icon(Icons.attach_money_rounded, size: 16),
-                      label: Text(
-                        'Cash  •  ${_currencyFormat.format(grandTotal)}',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w700, fontSize: 12),
-                      ),
+                          : () => _showSplitCheckoutDialog(grandTotal),
+                      icon: const Icon(Icons.call_split_rounded, size: 16),
+                      label: const Text('Split Payment',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.success,
+                        backgroundColor: const Color(0xFF8B5CF6),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10)),
                         elevation: 0,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 3,
-                    child: OutlinedButton.icon(
-                      onPressed: _showChargeToRoomDialog,
-                      icon: const Icon(Icons.hotel_rounded, size: 14),
-                      label: const Text('Room',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 12)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.warning,
-                        side: BorderSide(color: AppTheme.warning),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
                   ),
@@ -1723,7 +1832,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                 ]),
               ),
             ),
-          // Cash / Card
+          // Cash / Card / Split
           Row(
             children: [
               Expanded(
@@ -1757,6 +1866,24 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     disabledForegroundColor: Colors.grey.shade400,
                     elevation: _cart.isEmpty ? 0 : 2,
                     shadowColor: const Color(0xFF0EA5E9).withOpacity(0.4),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _cart.isEmpty || !canEditSection(ref, 'restaurant_pos') ? null : () => _showSplitCheckoutDialog(grandTotal),
+                  icon: const Icon(Icons.call_split_rounded, size: 18),
+                  label: const Text('Split', style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade200,
+                    disabledForegroundColor: Colors.grey.shade400,
+                    elevation: _cart.isEmpty ? 0 : 2,
+                    shadowColor: const Color(0xFF8B5CF6).withOpacity(0.4),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
@@ -2223,12 +2350,16 @@ class _PosPaymentResult {
   final String? roomId;
   final String? discountType;
   final double discountAmount;
+  final double cashAmount;
+  final double cardAmount;
   const _PosPaymentResult({
     required this.paymentStatus,
     this.bookingId,
     this.roomId,
     this.discountType,
     this.discountAmount = 0.0,
+    this.cashAmount = 0.0,
+    this.cardAmount = 0.0,
   });
 }
 
@@ -2271,6 +2402,13 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
   double _discountAmount = 0.0;
   final  _discountController = TextEditingController();
 
+  // Split payment
+  bool   _splitMode  = false;
+  double _splitCash  = 0.0;
+  double _splitCard  = 0.0;
+  final  _splitCashCtrl = TextEditingController();
+  final  _splitCardCtrl = TextEditingController();
+
   static const _kPurple = Color(0xFF8B5CF6);
   static const _kGreen = Color(0xFF22C55E);
   static const _kGreenBg = Color(0xFFF0FFF4);
@@ -2294,6 +2432,8 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
   @override
   void dispose() {
     _discountController.dispose();
+    _splitCashCtrl.dispose();
+    _splitCardCtrl.dispose();
     super.dispose();
   }
 
@@ -2323,7 +2463,8 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
     });
   }
 
-  bool get _canConfirm {
+  bool _canConfirmWith(double total) {
+    if (_splitMode) return (_splitCash + _splitCard - total).abs() < 0.01;
     if (_method == null) return false;
     if (_method == 'room' && _selectedGuest == null) return false;
     return true;
@@ -2333,7 +2474,9 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
     PaymentStatus status;
     String? bookingId;
     String? roomId;
-    if (_method == 'room') {
+    if (_splitMode) {
+      status = PaymentStatus.paid;
+    } else if (_method == 'room') {
       status = PaymentStatus.chargedToRoom;
       final b = _selectedGuest!['booking'] as Booking;
       bookingId = b.id;
@@ -2342,11 +2485,13 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
       status = PaymentStatus.paid;
     }
     Navigator.pop(context, _PosPaymentResult(
-      paymentStatus: status,
-      bookingId: bookingId,
-      roomId: roomId,
+      paymentStatus:  status,
+      bookingId:      bookingId,
+      roomId:         roomId,
       discountType:   _discountAmount > 0 ? _discountType : null,
       discountAmount: _discountAmount,
+      cashAmount:     _splitMode ? _splitCash : 0,
+      cardAmount:     _splitMode ? _splitCard : 0,
     ));
   }
 
@@ -2529,11 +2674,30 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
               const SizedBox(height: 20),
 
               // Payment method
-              const Text('Select payment method',
-                  style: TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black45)),
-              const SizedBox(height: 10),
               Row(
+                children: [
+                  const Text('Select payment method',
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black45)),
+                  const Spacer(),
+                  SplitPaymentToggle(
+                    active: _splitMode,
+                    onTap: () => setState(() {
+                      _splitMode = !_splitMode;
+                      if (_splitMode) {
+                        _method = null;
+                        _selectedGuest = null;
+                        _splitCash = 0;
+                        _splitCard = 0;
+                        _splitCashCtrl.clear();
+                        _splitCardCtrl.clear();
+                      }
+                    }),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (!_splitMode) Row(
                 children: [
                   _methodTile(Icons.money_rounded, 'Cash', 'cash', Colors.green.shade600),
                   const SizedBox(width: 10),
@@ -2542,6 +2706,23 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
                   _methodTile(Icons.hotel_rounded, 'Room Charge', 'room', _kOrange),
                 ],
               ),
+
+              // Split payment inputs
+              if (_splitMode) ...[
+                const SizedBox(height: 14),
+                SplitPaymentInputs(
+                  total: _total,
+                  currency: widget.currency,
+                  cashCtrl: _splitCashCtrl,
+                  cardCtrl: _splitCardCtrl,
+                  cashAmount: _splitCash,
+                  cardAmount: _splitCard,
+                  onChanged: (cash, card) => setState(() {
+                    _splitCash = cash;
+                    _splitCard = card;
+                  }),
+                ),
+              ],
 
               // Room charge — checked-in guest list
               if (_method == 'room') ...[
@@ -2675,7 +2856,7 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _canConfirm ? _confirm : null,
+                  onPressed: _canConfirmWith(_total) ? _confirm : null,
                   icon: const Icon(Icons.check_rounded, size: 18),
                   label: const Text('Confirm Payment & Close Table',
                       style: TextStyle(fontSize: 14)),
