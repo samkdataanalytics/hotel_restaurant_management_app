@@ -17,6 +17,7 @@ import '../app_theme.dart';
 import '../models/staff_permission.dart';
 import '../services/restaurant_service.dart';
 import 'restaurant_invoice_dialog.dart';
+import 'widgets/split_payment_inputs.dart';
 
 const _kOrange = AppTheme.restaurantAccent;
 const _kOrangeBg = AppTheme.restaurantAccentBg;
@@ -31,12 +32,17 @@ class _PaymentResult {
   final String? roomId;
   final String? discountType;   // 'percentage' | 'flat' | null
   final double  discountAmount;
+  // Split payment amounts (non-zero when customer pays with two methods)
+  final double cashAmount;
+  final double cardAmount;
   const _PaymentResult({
     required this.paymentStatus,
     this.bookingId,
     this.roomId,
     this.discountType,
     this.discountAmount = 0.0,
+    this.cashAmount = 0.0,
+    this.cardAmount = 0.0,
   });
 }
 
@@ -70,6 +76,13 @@ class _PaymentDialogState extends State<_PaymentDialog> {
   double _discountAmount = 0.0;
   final  _discountCtrl   = TextEditingController();
 
+  // Split payment
+  bool   _splitMode  = false;
+  double _splitCash  = 0.0;
+  double _splitCard  = 0.0;
+  final  _splitCashCtrl = TextEditingController();
+  final  _splitCardCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -79,6 +92,8 @@ class _PaymentDialogState extends State<_PaymentDialog> {
   @override
   void dispose() {
     _discountCtrl.dispose();
+    _splitCashCtrl.dispose();
+    _splitCardCtrl.dispose();
     super.dispose();
   }
 
@@ -97,7 +112,10 @@ class _PaymentDialogState extends State<_PaymentDialog> {
     });
   }
 
-  bool get _canConfirm {
+  bool _canConfirmWith(double total) {
+    if (_splitMode) {
+      return (_splitCash + _splitCard - total).abs() < 0.01;
+    }
     if (_method == null) return false;
     if (_method == 'room' && _selectedGuest == null) return false;
     return true;
@@ -107,7 +125,9 @@ class _PaymentDialogState extends State<_PaymentDialog> {
     PaymentStatus status;
     String? bookingId;
     String? roomId;
-    if (_method == 'room') {
+    if (_splitMode) {
+      status = PaymentStatus.paid;
+    } else if (_method == 'room') {
       status = PaymentStatus.chargedToRoom;
       final b = _selectedGuest!['booking'] as Booking;
       bookingId = b.id;
@@ -122,7 +142,9 @@ class _PaymentDialogState extends State<_PaymentDialog> {
             bookingId:      bookingId,
             roomId:         roomId,
             discountType:   _discountAmount > 0 ? _discountType : null,
-            discountAmount: _discountAmount));
+            discountAmount: _discountAmount,
+            cashAmount:     _splitMode ? _splitCash : (_method == 'cash' ? 0 : 0),
+            cardAmount:     _splitMode ? _splitCard : 0));
   }
 
   Widget _discountToggleBtn(String label, String value) {
@@ -363,13 +385,33 @@ class _PaymentDialogState extends State<_PaymentDialog> {
               const SizedBox(height: 20),
 
               // Payment method
-              const Text('Select payment method',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black45)),
-              const SizedBox(height: 10),
               Row(
+                children: [
+                  const Text('Select payment method',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black45)),
+                  const Spacer(),
+                  // Split toggle
+                  SplitPaymentToggle(
+                    active: _splitMode,
+                    onTap: () => setState(() {
+                      _splitMode = !_splitMode;
+                      if (_splitMode) {
+                        _method = null;
+                        _selectedGuest = null;
+                        _splitCash = 0;
+                        _splitCard = 0;
+                        _splitCashCtrl.clear();
+                        _splitCardCtrl.clear();
+                      }
+                    }),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (!_splitMode) Row(
                 children: [
                   _methodTile(Icons.money_rounded, 'Cash', 'cash',
                       Colors.green.shade600),
@@ -381,6 +423,23 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                       _kOrange),
                 ],
               ),
+
+              // Split payment — cash + card inputs
+              if (_splitMode) ...[
+                const SizedBox(height: 14),
+                SplitPaymentInputs(
+                  total: total,
+                  currency: widget.currency,
+                  cashCtrl: _splitCashCtrl,
+                  cardCtrl: _splitCardCtrl,
+                  cashAmount: _splitCash,
+                  cardAmount: _splitCard,
+                  onChanged: (cash, card) => setState(() {
+                    _splitCash = cash;
+                    _splitCard = card;
+                  }),
+                ),
+              ],
 
               // Room charge — checked-in guest list
               if (_method == 'room') ...[
@@ -487,7 +546,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _canConfirm ? _confirm : null,
+                  onPressed: _canConfirmWith(total) ? _confirm : null,
                   icon: const Icon(Icons.check_rounded, size: 18),
                   label: const Text('Confirm Payment & Close Table',
                       style: TextStyle(fontSize: 14)),

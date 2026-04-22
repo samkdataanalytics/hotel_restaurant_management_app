@@ -17,6 +17,7 @@ import '../services/restaurant_service.dart';
 import '../models/staff_permission.dart';
 import '../services/booking_service.dart';
 import 'restaurant_invoice_dialog.dart';
+import 'widgets/split_payment_inputs.dart';
 
 // ── Web Audio beep (JS interop) ──────────────────────────────────────────────
 @JS('eval')
@@ -1045,6 +1046,13 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
   double _discountAmount = 0.0;
   final  _discountCtrl   = TextEditingController();
 
+  // Split payment
+  bool   _splitMode  = false;
+  double _splitCash  = 0.0;
+  double _splitCard  = 0.0;
+  final  _splitCashCtrl = TextEditingController();
+  final  _splitCardCtrl = TextEditingController();
+
   double _discountValue(double itemsTotal) {
     if (_discountAmount <= 0) return 0.0;
     if (_discountType == 'percentage') return itemsTotal * (_discountAmount / 100);
@@ -1060,6 +1068,8 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
   @override
   void dispose() {
     _discountCtrl.dispose();
+    _splitCashCtrl.dispose();
+    _splitCardCtrl.dispose();
     super.dispose();
   }
 
@@ -1099,6 +1109,25 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
       paymentStatus: PaymentStatus.chargedToRoom,
       bookingId: b.id,
       roomId: b.roomId,
+    );
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (_) => RestaurantInvoiceDialog(
+        order: updatedOrders.first,
+        table: widget.table,
+        allOrders: updatedOrders.length > 1 ? updatedOrders : null,
+      ),
+    );
+    if (!mounted) return;
+    Navigator.pop(context);
+    widget.onComplete();
+  }
+
+  Future<void> _collectSplit() async {
+    setState(() => _loading = true);
+    final updatedOrders = await _applyDiscountAndSettle(
+      paymentStatus: PaymentStatus.paid,
     );
     if (!mounted) return;
     await showDialog(
@@ -1362,6 +1391,26 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
 
                   // Payment method toggle
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Payment method',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black45)),
+                      SplitPaymentToggle(
+                        active: _splitMode,
+                        onTap: () => setState(() {
+                          _splitMode = !_splitMode;
+                          if (_splitMode) {
+                            _splitCash = 0;
+                            _splitCard = 0;
+                            _splitCashCtrl.clear();
+                            _splitCardCtrl.clear();
+                          }
+                        }),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (!_splitMode) Row(
                     children: [
                       Expanded(
                         child: _methodBtn(
@@ -1392,8 +1441,25 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
                     ],
                   ),
 
+                  // Split payment inputs
+                  if (_splitMode) ...[
+                    const SizedBox(height: 10),
+                    SplitPaymentInputs(
+                      total: total,
+                      currency: _currency,
+                      cashCtrl: _splitCashCtrl,
+                      cardCtrl: _splitCardCtrl,
+                      cashAmount: _splitCash,
+                      cardAmount: _splitCard,
+                      onChanged: (cash, card) => setState(() {
+                        _splitCash = cash;
+                        _splitCard = card;
+                      }),
+                    ),
+                  ],
+
                   // Room charge guest list
-                  if (_payMethod == 'room') ...[
+                  if (!_splitMode && _payMethod == 'room') ...[
                     const SizedBox(height: 16),
                     const Text('Select Guest',
                         style: TextStyle(
@@ -1487,15 +1553,19 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
                 child: const Text('Cancel'),
               ),
               ElevatedButton.icon(
-                onPressed: _payMethod == 'room'
-                    ? (_selectedGuest != null ? _collectRoomCharge : null)
-                    : _collectPaid,
+                onPressed: _splitMode
+                    ? ((_splitCash + _splitCard - total).abs() < 0.01 ? _collectSplit : null)
+                    : _payMethod == 'room'
+                        ? (_selectedGuest != null ? _collectRoomCharge : null)
+                        : _collectPaid,
                 icon: const Icon(Icons.check_rounded, size: 16),
-                label: Text(_payMethod == 'room'
-                    ? 'Charge to Room'
-                    : _payMethod == 'card'
-                        ? 'Confirm Card'
-                        : 'Confirm Cash'),
+                label: Text(_splitMode
+                    ? 'Confirm Split Payment'
+                    : _payMethod == 'room'
+                        ? 'Charge to Room'
+                        : _payMethod == 'card'
+                            ? 'Confirm Card'
+                            : 'Confirm Cash'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.purple.shade700,
                   foregroundColor: Colors.white,
