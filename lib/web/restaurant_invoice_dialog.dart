@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../app_theme.dart';
 import '../providers/hotel_session.dart';
+import '../models/menu_item.dart';
 import '../models/restaurant_order.dart';
 import '../models/restaurant_table.dart';
 
@@ -48,13 +49,17 @@ class RestaurantInvoiceDialog extends StatelessWidget {
     final subtotal = itemsTotal - totalDiscount; // post-discount subtotal
 
     // Tax & service charge from property settings
-    // Service charge applies to dine-in and room service orders (not takeaway)
-    final isServiceChargeable = ordersToRender.any(
-        (o) => o.type == OrderType.dineIn || o.type == OrderType.roomService);
+    // Service charge applies only to the dine-in / room-service portion (not takeaway)
+    final dineInItemsTotal = ordersToRender
+        .where((o) => o.type == OrderType.dineIn || o.type == OrderType.roomService)
+        .fold(0.0, (s, o) => s + o.itemsTotal);
+    final dineInFraction = itemsTotal > 0 ? dineInItemsTotal / itemsTotal : 0.0;
+    final hasTakeaway = ordersToRender.any(
+        (o) => o.type == OrderType.takeaway || o.type == OrderType.delivery);
     final taxRate           = settings?.taxRate           ?? 0.0;
-    final serviceChargeRate = isServiceChargeable ? (settings?.serviceChargeRate ?? 0.0) : 0.0;
+    final serviceChargeRate = settings?.serviceChargeRate ?? 0.0;
     final tax           = subtotal * taxRate;
-    final serviceCharge = subtotal * serviceChargeRate;
+    final serviceCharge = (dineInFraction * subtotal) * serviceChargeRate;
     final grandTotal = subtotal + tax + serviceCharge;
 
     return Dialog(
@@ -215,92 +220,8 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                               ],
                             ),
                           ),
-                        ...visibleItems.map((item) => Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 7),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    flex: 4,
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                            item.menuItem.imageUrl.isNotEmpty
-                                                ? item.menuItem.imageUrl
-                                                : '🍽️',
-                                            style: const TextStyle(
-                                                fontSize: 18)),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(item.menuItem.name,
-                                                  style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      fontSize: 13)),
-                                              ...item.selectedModifiers.entries
-                                                  .where((e) => e.value.isNotEmpty)
-                                                  .map((e) => Padding(
-                                                        padding: const EdgeInsets.only(top: 2),
-                                                        child: Row(
-                                                          children: [
-                                                            Text('${e.key}: ',
-                                                                style: TextStyle(
-                                                                    fontSize: 10,
-                                                                    color: Colors.grey.shade500,
-                                                                    fontWeight: FontWeight.w600)),
-                                                            Text(e.value.join(', '),
-                                                                style: TextStyle(
-                                                                    fontSize: 10,
-                                                                    color: Colors.grey.shade600)),
-                                                          ],
-                                                        ),
-                                                      )),
-                                              if (item.refundedQuantity > 0)
-                                                Text(
-                                                  '${item.refundedQuantity} unit(s) refunded',
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: Colors
-                                                          .orange.shade600),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                        '${item.activeQuantity}',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                            color: Colors.grey.shade600,
-                                            fontSize: 13)),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                        currency
-                                            .format(item.unitPrice),
-                                        textAlign: TextAlign.end,
-                                        style: TextStyle(
-                                            color: Colors.grey.shade600,
-                                            fontSize: 13)),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                        currency.format(item.subtotal),
-                                        textAlign: TextAlign.end,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 13)),
-                                  ),
-                                ],
-                              ),
-                            )),
+                        ...visibleItems.expand(
+                              (item) => _buildItemRows(item, currency)),
                       ]; // end per-ticket item list
                     }), // end expand
 
@@ -324,10 +245,12 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                         muted: true,
                       ),
                     ],
-                    if (serviceChargeRate > 0) ...[
+                    if (serviceChargeRate > 0 && serviceCharge > 0) ...[
                       const SizedBox(height: 4),
                       _totalRow(
-                        'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(0)}%)',
+                        hasTakeaway
+                            ? 'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(0)}%) — dine-in only'
+                            : 'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(0)}%)',
                         currency.format(serviceCharge),
                         muted: true,
                       ),
@@ -457,6 +380,142 @@ class RestaurantInvoiceDialog extends StatelessWidget {
       case PaymentStatus.unpaid: return 'UNPAID';
     }
   }
+}
+
+/// Expands one OrderItem into one or more invoice row widgets.
+/// allowMultiple modifiers with >1 selection each become their own row.
+List<Widget> _buildItemRows(OrderItem item, NumberFormat currency) {
+  if (item.isFullyRefunded) return [];
+
+  final qty       = item.activeQuantity;
+  final basePrice = item.menuItem.price;
+  final emoji     = item.menuItem.imageUrl.isNotEmpty ? item.menuItem.imageUrl : '🍽️';
+
+  // Partition into multi-select (allowMultiple + >1 chosen) vs single-select
+  final multiEntries  = <MapEntry<MenuModifier, List<String>>>[];
+  double singleAdj    = 0.0;
+  final singleLabels  = <MapEntry<String, String>>[];  // (modName, optName)
+
+  for (final mod in item.menuItem.modifiers) {
+    final selected = item.selectedModifiers[mod.name] ?? [];
+    if (selected.isEmpty) continue;
+    if (mod.allowMultiple && selected.length > 1) {
+      multiEntries.add(MapEntry(mod, selected));
+    } else {
+      final optName = selected.first;
+      final opt = mod.options.firstWhere(
+        (o) => o.name == optName,
+        orElse: () => MenuModifierOption(name: optName),
+      );
+      singleAdj += opt.priceAdjustment;
+      singleLabels.add(MapEntry(mod.name, optName));
+    }
+  }
+
+  Widget buildRow({
+    required List<MapEntry<String, String>> modLabels,
+    required double price,
+    required double total,
+    bool showEmoji = true,
+    bool showRefund = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 4,
+            child: Row(
+              children: [
+                Text(showEmoji ? emoji : '', style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.menuItem.name,
+                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+                      ...modLabels.map((e) => Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
+                              children: [
+                                Text('${e.key}: ',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade500,
+                                        fontWeight: FontWeight.w600)),
+                                Text(e.value,
+                                    style: TextStyle(
+                                        fontSize: 10, color: Colors.grey.shade600)),
+                              ],
+                            ),
+                          )),
+                      if (showRefund && item.refundedQuantity > 0)
+                        Text('${item.refundedQuantity} unit(s) refunded',
+                            style: TextStyle(fontSize: 10, color: Colors.orange.shade600)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Text('$qty',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+          ),
+          Expanded(
+            child: Text(currency.format(price),
+                textAlign: TextAlign.end,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+          ),
+          Expanded(
+            child: Text(currency.format(total),
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  if (multiEntries.isEmpty) {
+    // No expansion — show all modifiers on one row
+    final allMods = item.selectedModifiers.entries
+        .where((e) => e.value.isNotEmpty)
+        .map((e) => MapEntry(e.key, e.value.join(', ')))
+        .toList();
+    return [buildRow(
+      modLabels: allMods,
+      price: item.unitPrice,
+      total: item.subtotal,
+      showRefund: true,
+    )];
+  }
+
+  // Expand: one row per selected option in each allowMultiple modifier
+  final rows = <Widget>[];
+  bool isFirst = true;
+  for (final entry in multiEntries) {
+    final mod = entry.key;
+    for (final optName in entry.value) {
+      final opt = mod.options.firstWhere(
+        (o) => o.name == optName,
+        orElse: () => MenuModifierOption(name: optName),
+      );
+      final variantPrice = basePrice + singleAdj + opt.priceAdjustment;
+      final modLabels = [MapEntry(mod.name, optName), ...singleLabels];
+      rows.add(buildRow(
+        modLabels: modLabels,
+        price: variantPrice,
+        total: variantPrice * qty,
+        showEmoji: isFirst,
+        showRefund: isFirst,
+      ));
+      isFirst = false;
+    }
+  }
+  return rows;
 }
 
 class _DefaultLogoIcon extends StatelessWidget {

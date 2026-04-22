@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -17,6 +18,18 @@ class _C {
   static const muted     = Color(0xFF94A3B8);
   static const dark      = Color(0xFF0F172A);
   static const darkCard  = Color(0xFF1E293B);
+}
+
+// ─── Inherited scroll scope ───────────────────────────────────────────────────
+class _LandingScrollScope extends InheritedWidget {
+  final ScrollController controller;
+  const _LandingScrollScope({required this.controller, required super.child});
+
+  static ScrollController of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_LandingScrollScope>()!.controller;
+
+  @override
+  bool updateShouldNotify(_LandingScrollScope old) => controller != old.controller;
 }
 
 // ─── Landing screen ───────────────────────────────────────────────────────────
@@ -50,11 +63,8 @@ class _LandingScreenState extends State<LandingScreen> {
   void _scrollTo(GlobalKey key) {
     final ctx = key.currentContext;
     if (ctx != null) {
-      Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 700),
-        curve: Curves.easeInOut,
-      );
+      Scrollable.ensureVisible(ctx,
+          duration: const Duration(milliseconds: 700), curve: Curves.easeInOut);
     }
   }
 
@@ -67,17 +77,34 @@ class _LandingScreenState extends State<LandingScreen> {
       backgroundColor: _C.bg,
       body: Stack(
         children: [
-          SingleChildScrollView(
+          _LandingScrollScope(
             controller: _scrollCtrl,
-            child: Column(
-              children: [
-                const SizedBox(height: 100),
-                _HeroSection(isMobile: isMobile),
-                SizedBox(key: _featuresKey, child: _FeaturesSection(isMobile: isMobile)),
-                SizedBox(key: _pricingKey, child: _PricingSection(isMobile: isMobile)),
-                _CtaSection(isMobile: isMobile),
-                _Footer(isMobile: isMobile),
-              ],
+            child: SingleChildScrollView(
+              controller: _scrollCtrl,
+              child: Column(
+                children: [
+                  const SizedBox(height: 100),
+                  _HeroSection(isMobile: isMobile),
+                  _StatsStrip(isMobile: isMobile),
+                  _RevealOnScroll(child: _HowItWorksSection(isMobile: isMobile)),
+                  _RevealOnScroll(
+                    child: SizedBox(
+                      key: _featuresKey,
+                      child: _FeaturesSection(isMobile: isMobile),
+                    ),
+                  ),
+                  _RevealOnScroll(child: _TestimonialsSection(isMobile: isMobile)),
+                  _RevealOnScroll(
+                    child: SizedBox(
+                      key: _pricingKey,
+                      child: _PricingSection(isMobile: isMobile),
+                    ),
+                  ),
+                  _RevealOnScroll(child: _FaqSection(isMobile: isMobile)),
+                  _RevealOnScroll(child: _CtaSection(isMobile: isMobile)),
+                  _Footer(isMobile: isMobile),
+                ],
+              ),
             ),
           ),
           Positioned(
@@ -91,6 +118,74 @@ class _LandingScreenState extends State<LandingScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─── Reveal-on-scroll wrapper ─────────────────────────────────────────────────
+class _RevealOnScroll extends StatefulWidget {
+  final Widget child;
+  const _RevealOnScroll({required this.child});
+  @override
+  State<_RevealOnScroll> createState() => _RevealOnScrollState();
+}
+
+class _RevealOnScrollState extends State<_RevealOnScroll>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double>  _opacity;
+  late Animation<Offset>  _slide;
+  final _key = GlobalKey();
+  bool _revealed = false;
+  double _screenH = 0;
+  ScrollController? _sc;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
+    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    _slide   = Tween<Offset>(begin: const Offset(0, 0.07), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sc?.removeListener(_check);
+    _sc = _LandingScrollScope.of(context);
+    _sc!.addListener(_check);
+  }
+
+  @override
+  void dispose() {
+    _sc?.removeListener(_check);
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _check() {
+    if (_revealed || !mounted) return;
+    final ctx = _key.currentContext;
+    if (ctx == null) return;
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final pos = box.localToGlobal(Offset.zero);
+    if (_screenH == 0) return;
+    if (pos.dy < _screenH * 0.93) {
+      _revealed = true;
+      _ctrl.forward();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _screenH = MediaQuery.of(context).size.height;
+    return FadeTransition(
+      key: _key,
+      opacity: _opacity,
+      child: SlideTransition(position: _slide, child: widget.child),
     );
   }
 }
@@ -110,17 +205,12 @@ class _NavBar extends StatelessWidget {
       height: 100,
       decoration: BoxDecoration(
         color: solid ? Colors.white.withAlpha(248) : Colors.transparent,
-        border: solid
-            ? const Border(bottom: BorderSide(color: _C.border, width: 1))
-            : null,
-        boxShadow: solid
-            ? [BoxShadow(color: Colors.black.withAlpha(12), blurRadius: 20)]
-            : null,
+        border: solid ? const Border(bottom: BorderSide(color: _C.border, width: 1)) : null,
+        boxShadow: solid ? [BoxShadow(color: Colors.black.withAlpha(12), blurRadius: 20)] : null,
       ),
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 20 : 60),
       child: Row(
         children: [
-          // Animated nav logo
           const _AnimatedLogo(size: 72),
           if (!isMobile) ...[
             const SizedBox(width: 8),
@@ -221,11 +311,11 @@ class _AnimatedLogoState extends State<_AnimatedLogo> with SingleTickerProviderS
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (_, __) {
-        final blurOuter = 60 + _pulse.value * 60;   // 60 → 120
-        final blurInner = 20 + _pulse.value * 30;   // 20 → 50
-        final spreadOuter = 8 + _pulse.value * 14;  //  8 → 22
-        final innerAlpha = (60 + _pulse.value * 100).round().clamp(0, 255); // 60 → 160
-        final outerAlpha = (20 + _pulse.value * 50).round().clamp(0, 255);  // 20 → 70
+        final blurOuter  = 60 + _pulse.value * 60;
+        final blurInner  = 20 + _pulse.value * 30;
+        final spreadOuter = 8 + _pulse.value * 14;
+        final innerAlpha = (60  + _pulse.value * 100).round().clamp(0, 255);
+        final outerAlpha = (20  + _pulse.value *  50).round().clamp(0, 255);
 
         return ScaleTransition(
           scale: _scale,
@@ -233,24 +323,12 @@ class _AnimatedLogoState extends State<_AnimatedLogo> with SingleTickerProviderS
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(
-                  color: _C.gold.withAlpha(innerAlpha),
-                  blurRadius: blurInner,
-                  spreadRadius: spreadOuter / 2,
-                ),
-                BoxShadow(
-                  color: _C.goldLight.withAlpha(outerAlpha),
-                  blurRadius: blurOuter,
-                  spreadRadius: spreadOuter,
-                ),
+                BoxShadow(color: _C.gold.withAlpha(innerAlpha), blurRadius: blurInner, spreadRadius: spreadOuter / 2),
+                BoxShadow(color: _C.goldLight.withAlpha(outerAlpha), blurRadius: blurOuter, spreadRadius: spreadOuter),
               ],
             ),
-            child: Image.asset(
-              'assets/images/hotrest_logo.webp',
-              width: widget.size,
-              height: widget.size,
-              fit: BoxFit.contain,
-            ),
+            child: Image.asset('assets/images/hotrest_logo.webp',
+                width: widget.size, height: widget.size, fit: BoxFit.contain),
           ),
         );
       },
@@ -275,17 +353,12 @@ class _HeroSection extends StatelessWidget {
         gradient: RadialGradient(
           center: Alignment.topCenter,
           radius: 1.2,
-          colors: [
-            Color(0xFFFFF8E8),
-            Color(0xFFF8FAFC),
-            Color(0xFFFFFFFF),
-          ],
+          colors: [Color(0xFFFFF8E8), Color(0xFFF8FAFC), Color(0xFFFFFFFF)],
           stops: [0.0, 0.45, 1.0],
         ),
       ),
       child: Column(
         children: [
-          // Animated brand logo
           _AnimatedLogo(size: isMobile ? 180 : 260),
           const SizedBox(height: 32),
           // Trust badge
@@ -301,20 +374,12 @@ class _HeroSection extends StatelessWidget {
               children: [
                 Icon(Icons.verified_rounded, color: _C.gold, size: 14),
                 SizedBox(width: 7),
-                Text(
-                  'Trusted by 500+ Properties Worldwide',
-                  style: TextStyle(
-                    color: _C.gold,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
-                ),
+                Text('Trusted by 500+ Properties Worldwide',
+                    style: TextStyle(color: _C.gold, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
               ],
             ),
           ),
           const SizedBox(height: 36),
-          // Headline
           Text(
             'The All-in-One Platform\nfor Modern Hospitality',
             textAlign: TextAlign.center,
@@ -334,11 +399,7 @@ class _HeroSection extends StatelessWidget {
               'and guest experiences — all from one beautiful dashboard. '
               'Built for hotels and restaurants that demand excellence.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: _C.subtext,
-                fontSize: isMobile ? 15 : 17,
-                height: 1.65,
-              ),
+              style: TextStyle(color: _C.subtext, fontSize: isMobile ? 15 : 17, height: 1.65),
             ),
           ),
           const SizedBox(height: 36),
@@ -348,10 +409,19 @@ class _HeroSection extends StatelessWidget {
             runSpacing: 12,
             alignment: WrapAlignment.center,
             children: [
-              _GoldButton(
-                label: 'Start Free Trial',
-                onTap: () => context.go('/signup'),
-                large: true,
+              _GoldButton(label: 'Start Free Trial', onTap: () => context.go('/signup'), large: true),
+              OutlinedButton.icon(
+                onPressed: () => showDialog(
+                  context: context,
+                  builder: (_) => const _DemoDialog(),
+                ),
+                icon: const Icon(Icons.play_circle_outline_rounded, size: 18, color: _C.gold),
+                label: const Text('Watch Demo', style: TextStyle(color: _C.gold, fontSize: 15)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: _C.gold, width: 1.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
               ),
               OutlinedButton.icon(
                 onPressed: () => context.go('/login'),
@@ -366,20 +436,16 @@ class _HeroSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          // No credit card note
           const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.lock_outline_rounded, size: 13, color: _C.muted),
               SizedBox(width: 5),
-              Text(
-                'No credit card required · Free forever on Starter plan',
-                style: TextStyle(color: _C.muted, fontSize: 12.5),
-              ),
+              Text('No credit card required · Free forever on Starter plan',
+                  style: TextStyle(color: _C.muted, fontSize: 12.5)),
             ],
           ),
           const SizedBox(height: 64),
-          // Dashboard preview mockup
           _DashboardMockup(isMobile: isMobile),
         ],
       ),
@@ -387,87 +453,273 @@ class _HeroSection extends StatelessWidget {
   }
 }
 
-// ─── Stats strip ──────────────────────────────────────────────────────────────
-class _StatsStrip extends StatelessWidget {
+// ─── Stats strip (animated count-up) ─────────────────────────────────────────
+class _StatsStrip extends StatefulWidget {
   final bool isMobile;
   const _StatsStrip({required this.isMobile});
+  @override
+  State<_StatsStrip> createState() => _StatsStripState();
+}
+
+class _StatsStripState extends State<_StatsStrip> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double>   _anim;
+  final _key = GlobalKey();
+  bool _triggered = false;
+  double _screenH = 0;
+  ScrollController? _sc;
 
   static const _stats = [
-    (value: '500+',   label: 'Properties'),
-    (value: '50K+',   label: 'Bookings Managed'),
-    (value: '99.9%',  label: 'Uptime SLA'),
-    (value: '4.9★',   label: 'Average Rating'),
+    (target: 500.0, decimals: 0, suffix: '+',  label: 'Properties'),
+    (target: 50.0,  decimals: 0, suffix: 'K+', label: 'Bookings Managed'),
+    (target: 99.9,  decimals: 1, suffix: '%',  label: 'Uptime SLA'),
+    (target: 4.9,   decimals: 1, suffix: '★', label: 'Average Rating'),
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600));
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sc?.removeListener(_check);
+    _sc = _LandingScrollScope.of(context);
+    _sc!.addListener(_check);
+  }
+
+  @override
+  void dispose() {
+    _sc?.removeListener(_check);
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _check() {
+    if (_triggered || !mounted || _screenH == 0) return;
+    final ctx = _key.currentContext;
+    if (ctx == null) return;
+    final box = ctx.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final pos = box.localToGlobal(Offset.zero);
+    if (pos.dy < _screenH * 0.98) {
+      _triggered = true;
+      _ctrl.forward();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 24 : 80,
-        vertical: 40,
-      ),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+    _screenH = MediaQuery.of(context).size.height;
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) => Container(
+        key: _key,
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(horizontal: widget.isMobile ? 24 : 80, vertical: 40),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(colors: [Color(0xFF0F172A), Color(0xFF1E293B)]),
         ),
+        child: widget.isMobile
+            ? Wrap(
+                spacing: 32,
+                runSpacing: 24,
+                alignment: WrapAlignment.center,
+                children: _stats.map((s) => _AnimatedStatItem(
+                  value: s.target * _anim.value,
+                  decimals: s.decimals,
+                  suffix: s.suffix,
+                  label: s.label,
+                )).toList(),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: _stats.map((s) => _AnimatedStatItem(
+                  value: s.target * _anim.value,
+                  decimals: s.decimals,
+                  suffix: s.suffix,
+                  label: s.label,
+                )).toList(),
+              ),
       ),
-      child: isMobile
-          ? Wrap(
-              spacing: 32,
-              runSpacing: 24,
-              alignment: WrapAlignment.center,
-              children: _stats.map((s) => _StatItem(value: s.value, label: s.label)).toList(),
-            )
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: _stats.map((s) => _StatItem(value: s.value, label: s.label)).toList(),
-            ),
     );
   }
 }
 
-class _StatItem extends StatelessWidget {
-  final String value;
-  final String label;
-  const _StatItem({required this.value, required this.label});
+class _AnimatedStatItem extends StatelessWidget {
+  final double value;
+  final int    decimals;
+  final String suffix, label;
+  const _AnimatedStatItem({required this.value, required this.decimals, required this.suffix, required this.label});
 
   @override
   Widget build(BuildContext context) {
+    final display = decimals == 0 ? value.toInt().toString() : value.toStringAsFixed(decimals);
     return Column(
       children: [
         ShaderMask(
           blendMode: BlendMode.srcIn,
-          shaderCallback: (bounds) => const LinearGradient(
-            colors: [_C.goldLight, _C.gold],
-          ).createShader(bounds),
-          child: Text(value,
-              style: const TextStyle(
-                fontSize: 36,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -1,
-              )),
+          shaderCallback: (bounds) =>
+              const LinearGradient(colors: [_C.goldLight, _C.gold]).createShader(bounds),
+          child: Text('$display$suffix',
+              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w900, letterSpacing: -1)),
         ),
         const SizedBox(height: 4),
         Text(label,
-            style: TextStyle(
-              color: Colors.white.withAlpha(160),
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.3,
-            )),
+            style: TextStyle(color: Colors.white.withAlpha(160), fontSize: 13,
+                fontWeight: FontWeight.w500, letterSpacing: 0.3)),
       ],
     );
   }
 }
 
-// ─── Fake dashboard preview ───────────────────────────────────────────────────
-class _DashboardMockup extends StatelessWidget {
+// ─── How It Works ─────────────────────────────────────────────────────────────
+class _HowItWorksSection extends StatelessWidget {
   final bool isMobile;
-  const _DashboardMockup({required this.isMobile});
+  const _HowItWorksSection({required this.isMobile});
 
   @override
   Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 100),
+      child: Column(
+        children: [
+          const _SectionLabel(label: 'HOW IT WORKS'),
+          const SizedBox(height: 16),
+          Text(
+            'Up and Running\nin Under 20 Minutes',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _C.text,
+              fontSize: isMobile ? 28 : 44,
+              fontWeight: FontWeight.w800,
+              height: 1.15,
+              letterSpacing: -0.8,
+            ),
+          ),
+          const SizedBox(height: 14),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: const Text(
+              'No consultants. No training sessions. Just sign up and go.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _C.subtext, fontSize: 15.5, height: 1.55),
+            ),
+          ),
+          const SizedBox(height: 56),
+          isMobile
+              ? Column(children: [
+                  _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff — all in one onboarding flow.'),
+                  const SizedBox(height: 32),
+                  _StepCard(number: '02', icon: Icons.dashboard_rounded,   color: _C.gold,           title: 'Manage Everything',       desc: 'Check guests in, process restaurant orders, track staff shifts, and monitor occupancy from one unified dashboard.'),
+                  const SizedBox(height: 32),
+                  _StepCard(number: '03', icon: Icons.trending_up_rounded, color: Color(0xFF22C55E), title: 'Grow Your Business',       desc: 'Use built-in analytics to optimise pricing, spot peak periods, and make data-driven decisions that increase revenue.'),
+                ])
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff — all in one onboarding flow.')),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 52),
+                      child: Icon(Icons.arrow_forward_rounded, color: _C.border, size: 28),
+                    ),
+                    Expanded(child: _StepCard(number: '02', icon: Icons.dashboard_rounded,   color: _C.gold,           title: 'Manage Everything',       desc: 'Check guests in, process restaurant orders, track staff shifts, and monitor occupancy from one unified dashboard.')),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 52),
+                      child: Icon(Icons.arrow_forward_rounded, color: _C.border, size: 28),
+                    ),
+                    Expanded(child: _StepCard(number: '03', icon: Icons.trending_up_rounded, color: Color(0xFF22C55E), title: 'Grow Your Business',       desc: 'Use built-in analytics to optimise pricing, spot peak periods, and make data-driven decisions that increase revenue.')),
+                  ],
+                ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StepCard extends StatelessWidget {
+  final String number, title, desc;
+  final IconData icon;
+  final Color    color;
+  const _StepCard({required this.number, required this.icon, required this.color,
+      required this.title, required this.desc});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 72, height: 72,
+              decoration: BoxDecoration(color: color.withAlpha(22), shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 30),
+            ),
+            Positioned(
+              top: -6, right: -6,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
+                child: Text(number,
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        Text(title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _C.text, fontSize: 18, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 10),
+        Text(desc,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _C.subtext, fontSize: 14, height: 1.6)),
+      ],
+    );
+  }
+}
+
+// ─── Animated dashboard mockup ────────────────────────────────────────────────
+class _DashboardMockup extends StatefulWidget {
+  final bool isMobile;
+  const _DashboardMockup({required this.isMobile});
+  @override
+  State<_DashboardMockup> createState() => _DashboardMockupState();
+}
+
+class _DashboardMockupState extends State<_DashboardMockup> {
+  int    _idx   = 0;
+  Timer? _timer;
+
+  static const _datasets = [
+    (occ: '87%', occTrend: '+4%',  rev: '\$4,280', revTrend: '+12%', orders: '12', ordersTrend: '↑ Busy',   checkins: '8',  checkinsTrend: '3 pending'),
+    (occ: '91%', occTrend: '+7%',  rev: '\$5,140', revTrend: '+20%', orders: '17', ordersTrend: '↑ Peak',   checkins: '11', checkinsTrend: '5 pending'),
+    (occ: '79%', occTrend: '-2%',  rev: '\$3,960', revTrend: '+3%',  orders: '9',  ordersTrend: '→ Steady', checkins: '6',  checkinsTrend: '2 pending'),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted) setState(() => _idx = (_idx + 1) % _datasets.length);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = _datasets[_idx];
     return Container(
       constraints: const BoxConstraints(maxWidth: 900),
       decoration: BoxDecoration(
@@ -500,10 +752,7 @@ class _DashboardMockup extends StatelessWidget {
               Expanded(
                 child: Container(
                   height: 22,
-                  decoration: BoxDecoration(
-                    color: _C.surface,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+                  decoration: BoxDecoration(color: _C.surface, borderRadius: BorderRadius.circular(4)),
                   alignment: Alignment.center,
                   child: const Text('app.hotrest.io/app/dashboard',
                       style: TextStyle(color: _C.muted, fontSize: 11)),
@@ -516,7 +765,8 @@ class _DashboardMockup extends StatelessWidget {
                   color: const Color(0xFF22C55E).withAlpha(20),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Text('● Live', style: TextStyle(color: Color(0xFF22C55E), fontSize: 10, fontWeight: FontWeight.w700)),
+                child: const Text('● Live',
+                    style: TextStyle(color: Color(0xFF22C55E), fontSize: 10, fontWeight: FontWeight.w700)),
               ),
             ]),
           ),
@@ -525,7 +775,6 @@ class _DashboardMockup extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                // Top bar
                 Row(
                   children: [
                     const Text('Good morning, Alex 👋',
@@ -538,20 +787,21 @@ class _DashboardMockup extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: _C.gold.withAlpha(60)),
                       ),
-                      child: const Text('Grand Ocean Hotel', style: TextStyle(color: _C.gold, fontSize: 11, fontWeight: FontWeight.w700)),
+                      child: const Text('Grand Ocean Hotel',
+                          style: TextStyle(color: _C.gold, fontSize: 11, fontWeight: FontWeight.w700)),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    const _StatCard(label: 'Occupancy', value: '87%', icon: Icons.king_bed_rounded, color: Color(0xFF22C55E), trend: '+4%'),
+                    _StatCard(label: 'Occupancy',       value: d.occ,    icon: Icons.king_bed_rounded,    color: const Color(0xFF22C55E), trend: d.occTrend),
                     const SizedBox(width: 10),
-                    const _StatCard(label: "Today's Revenue", value: '\$4,280', icon: Icons.attach_money_rounded, color: _C.gold, trend: '+12%'),
+                    _StatCard(label: "Today's Revenue", value: d.rev,    icon: Icons.attach_money_rounded, color: _C.gold,                trend: d.revTrend),
                     const SizedBox(width: 10),
-                    if (!isMobile) const _StatCard(label: 'Active Orders', value: '12', icon: Icons.restaurant_rounded, color: Color(0xFFF97316), trend: '↑ Busy'),
-                    if (!isMobile) const SizedBox(width: 10),
-                    if (!isMobile) const _StatCard(label: 'Check-Ins Today', value: '8', icon: Icons.how_to_reg_rounded, color: Color(0xFF3B82F6), trend: '3 pending'),
+                    if (!widget.isMobile) _StatCard(label: 'Active Orders',   value: d.orders, icon: Icons.restaurant_rounded,   color: const Color(0xFFF97316), trend: d.ordersTrend),
+                    if (!widget.isMobile) const SizedBox(width: 10),
+                    if (!widget.isMobile) _StatCard(label: 'Check-Ins Today', value: d.checkins, icon: Icons.how_to_reg_rounded,  color: const Color(0xFF3B82F6), trend: d.checkinsTrend),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -568,14 +818,15 @@ class _DashboardMockup extends StatelessWidget {
     );
   }
 
-  Widget _dot(Color c) => Container(width: 12, height: 12, decoration: BoxDecoration(color: c, shape: BoxShape.circle));
+  Widget _dot(Color c) =>
+      Container(width: 12, height: 12, decoration: BoxDecoration(color: c, shape: BoxShape.circle));
 }
 
 class _StatCard extends StatelessWidget {
   final String label, value;
   final String? trend;
   final IconData icon;
-  final Color color;
+  final Color    color;
   const _StatCard({required this.label, required this.value, required this.icon, required this.color, this.trend});
 
   @override
@@ -593,10 +844,18 @@ class _StatCard extends StatelessWidget {
             Icon(icon, color: color, size: 16),
             const Spacer(),
             if (trend != null)
-              Text(trend!, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w700)),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 400),
+                child: Text(trend!, key: ValueKey(trend),
+                    style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w700)),
+              ),
           ]),
           const SizedBox(height: 6),
-          Text(value, style: const TextStyle(color: _C.text, fontWeight: FontWeight.w800, fontSize: 18)),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 400),
+            child: Text(value, key: ValueKey(value),
+                style: const TextStyle(color: _C.text, fontWeight: FontWeight.w800, fontSize: 18)),
+          ),
           Text(label, style: const TextStyle(color: _C.subtext, fontSize: 9.5)),
         ]),
       ),
@@ -607,38 +866,36 @@ class _StatCard extends StatelessWidget {
 class _MockChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final bars = [0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.75];
+    final bars   = [0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.75];
     final labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return Container(
       height: 90,
       padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
-      decoration: BoxDecoration(
-        color: _C.card,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _C.border),
-      ),
+      decoration: BoxDecoration(color: _C.card, borderRadius: BorderRadius.circular(10), border: Border.all(color: _C.border)),
       child: Column(
         children: [
           Expanded(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(bars.length, (i) => Expanded(child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: FractionallySizedBox(
-                  heightFactor: bars[i],
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [_C.goldLight.withAlpha(200), _C.gold.withAlpha(220)],
+              children: List.generate(bars.length, (i) => Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: FractionallySizedBox(
+                    heightFactor: bars[i],
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [_C.goldLight.withAlpha(200), _C.gold.withAlpha(220)],
+                        ),
+                        borderRadius: BorderRadius.circular(3),
                       ),
-                      borderRadius: BorderRadius.circular(3),
                     ),
                   ),
                 ),
-              ))),
+              )),
             ),
           ),
           const SizedBox(height: 3),
@@ -665,11 +922,7 @@ class _MockRoomGrid extends StatelessWidget {
     return Container(
       height: 90,
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: _C.card,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _C.border),
-      ),
+      decoration: BoxDecoration(color: _C.card, borderRadius: BorderRadius.circular(10), border: Border.all(color: _C.border)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -677,8 +930,7 @@ class _MockRoomGrid extends StatelessWidget {
           const SizedBox(height: 6),
           Expanded(
             child: Wrap(
-              spacing: 4,
-              runSpacing: 4,
+              spacing: 4, runSpacing: 4,
               children: rooms.map((r) => Tooltip(
                 message: 'Room ${r.$1}: ${r.$2 == 'occ' ? 'Occupied' : r.$2 == 'avail' ? 'Available' : 'Maintenance'}',
                 child: Container(
@@ -692,7 +944,8 @@ class _MockRoomGrid extends StatelessWidget {
                     borderRadius: BorderRadius.circular(3),
                   ),
                   alignment: Alignment.center,
-                  child: Text(r.$1, style: const TextStyle(color: Colors.white, fontSize: 6.5, fontWeight: FontWeight.w700)),
+                  child: Text(r.$1,
+                      style: const TextStyle(color: Colors.white, fontSize: 6.5, fontWeight: FontWeight.w700)),
                 ),
               )).toList(),
             ),
@@ -709,88 +962,25 @@ class _FeaturesSection extends StatelessWidget {
   const _FeaturesSection({required this.isMobile});
 
   static const _features = [
-    (
-      icon: Icons.king_bed_rounded,
-      color: Color(0xFF3B82F6),
-      title: 'Hotel Management',
-      bullets: [
-        'Room setup, types & availability',
-        'Reservations & walk-in check-in/out',
-        'Folio billing & payment tracking',
-        'Housekeeping task management',
-        'Occupancy & room status overview',
-      ],
-    ),
-    (
-      icon: Icons.point_of_sale_rounded,
-      color: Color(0xFFF97316),
-      title: 'Restaurant POS',
-      bullets: [
-        'Table-side & counter ordering',
-        'Live kitchen display system (KDS)',
-        'Menu & category management',
-        'Split bills & multiple payment modes',
-        'Real-time sales analytics',
-      ],
-    ),
-    (
-      icon: Icons.qr_code_2_rounded,
-      color: Color(0xFF22C55E),
-      title: 'Guest Portal',
-      bullets: [
-        'QR-based self check-in & check-out',
-        'Room service ordering via phone',
-        'Digital menus — no app download',
-        'Booking lookup & stay details',
-        'Direct messaging with front desk',
-      ],
-    ),
-    (
-      icon: Icons.palette_rounded,
-      color: Color(0xFFD4A853),
-      title: 'White-Label Ready',
-      bullets: [
-        'Custom brand colors & logo',
-        'Property name on all guest screens',
-        'Branded QR codes & menus',
-        'No HotRest branding visible to guests',
-        'Multi-property brand profiles',
-      ],
-    ),
-    (
-      icon: Icons.people_alt_rounded,
-      color: Color(0xFF8B5CF6),
-      title: 'Staff & Shifts',
-      bullets: [
-        'Role-based access control',
-        'Shift scheduling & clock-in/out',
-        'Time tracking & attendance logs',
-        'Staff invite via unique code',
-        'Per-property permission management',
-      ],
-    ),
-    (
-      icon: Icons.analytics_rounded,
-      color: Color(0xFF06B6D4),
-      title: 'Financial Reports',
-      bullets: [
-        'Daily revenue & expense summaries',
-        'Invoice & folio export to PDF',
-        'Occupancy rate tracking',
-        'Restaurant sales breakdown',
-        'Date-range custom reporting',
-      ],
-    ),
+    (icon: Icons.king_bed_rounded,    color: Color(0xFF3B82F6), title: 'Hotel Management',
+      bullets: ['Room setup, types & availability', 'Reservations & walk-in check-in/out', 'Folio billing & payment tracking', 'Housekeeping task management', 'Occupancy & room status overview']),
+    (icon: Icons.point_of_sale_rounded, color: Color(0xFFF97316), title: 'Restaurant POS',
+      bullets: ['Table-side & counter ordering', 'Live kitchen display system (KDS)', 'Menu & category management', 'Split bills & multiple payment modes', 'Real-time sales analytics']),
+    (icon: Icons.qr_code_2_rounded,   color: Color(0xFF22C55E), title: 'Guest Portal',
+      bullets: ['QR-based self check-in & check-out', 'Room service ordering via phone', 'Digital menus — no app download', 'Booking lookup & stay details', 'Direct messaging with front desk']),
+    (icon: Icons.palette_rounded,     color: Color(0xFFD4A853), title: 'White-Label Ready',
+      bullets: ['Custom brand colors & logo', 'Property name on all guest screens', 'Branded QR codes & menus', 'No HotRest branding visible to guests', 'Multi-property brand profiles']),
+    (icon: Icons.people_alt_rounded,  color: Color(0xFF8B5CF6), title: 'Staff & Shifts',
+      bullets: ['Role-based access control', 'Shift scheduling & clock-in/out', 'Time tracking & attendance logs', 'Staff invite via unique code', 'Per-property permission management']),
+    (icon: Icons.analytics_rounded,   color: Color(0xFF06B6D4), title: 'Financial Reports',
+      bullets: ['Daily revenue & expense summaries', 'Invoice & folio export to PDF', 'Occupancy rate tracking', 'Restaurant sales breakdown', 'Date-range custom reporting']),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 24 : 80,
-        vertical: isMobile ? 60 : 100,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 100),
       child: Column(
         children: [
           const _SectionLabel(label: 'FEATURES'),
@@ -827,8 +1017,7 @@ class _FeaturesSection extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               children: _features.map((f) =>
-                _FeatureCard(icon: f.icon, color: f.color, title: f.title, bullets: f.bullets),
-              ).toList(),
+                  _FeatureCard(icon: f.icon, color: f.color, title: f.title, bullets: f.bullets)).toList(),
             );
           }),
         ],
@@ -880,7 +1069,8 @@ class _FeatureCardState extends State<_FeatureCard> {
               child: Icon(widget.icon, color: widget.color, size: 20),
             ),
             const SizedBox(height: 12),
-            Text(widget.title, style: const TextStyle(color: _C.text, fontSize: 14.5, fontWeight: FontWeight.w700)),
+            Text(widget.title,
+                style: const TextStyle(color: _C.text, fontSize: 14.5, fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             ...widget.bullets.map((b) => Padding(
               padding: const EdgeInsets.only(bottom: 5),
@@ -896,7 +1086,8 @@ class _FeatureCardState extends State<_FeatureCard> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(b, style: const TextStyle(color: _C.subtext, fontSize: 12.5, height: 1.45)),
+                    child: Text(b,
+                        style: const TextStyle(color: _C.subtext, fontSize: 12.5, height: 1.45)),
                   ),
                 ],
               ),
@@ -916,27 +1107,18 @@ class _TestimonialsSection extends StatelessWidget {
   static const _testimonials = [
     (
       quote: 'HotRest cut our front-desk workload in half. Check-in used to take 5 minutes per guest — now guests self-check in via QR. The staff scheduling alone is worth every cent.',
-      name:  'Sarah Mitchell',
-      role:  'General Manager',
-      hotel: 'The Riverview Boutique Hotel',
-      initials: 'SM',
-      color: Color(0xFF3B82F6),
+      name: 'Sarah Mitchell', role: 'General Manager', hotel: 'The Riverview Boutique Hotel',
+      initials: 'SM', color: Color(0xFF3B82F6),
     ),
     (
       quote: 'We run 3 properties and the multi-property dashboard is a game-changer. I can see revenue, occupancy and active restaurant orders for all locations in one screen. Incredible.',
-      name:  'James Okonkwo',
-      role:  'Director of Operations',
-      hotel: 'Okonkwo Hospitality Group',
-      initials: 'JO',
-      color: Color(0xFFD4A853),
+      name: 'James Okonkwo', role: 'Director of Operations', hotel: 'Okonkwo Hospitality Group',
+      initials: 'JO', color: Color(0xFFD4A853),
     ),
     (
       quote: 'Switching from our old PMS was painless. The onboarding took less than 20 minutes, and the white-label guest portal means our branding is front and center — not some software company\'s logo.',
-      name:  'Priya Ramaswamy',
-      role:  'Owner',
-      hotel: 'Serenity Suites & Restaurant',
-      initials: 'PR',
-      color: Color(0xFF22C55E),
+      name: 'Priya Ramaswamy', role: 'Owner', hotel: 'Serenity Suites & Restaurant',
+      initials: 'PR', color: Color(0xFF22C55E),
     ),
   ];
 
@@ -944,10 +1126,7 @@ class _TestimonialsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 24 : 80,
-        vertical: isMobile ? 60 : 100,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 100),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -1036,26 +1215,14 @@ class _TestimonialCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Stars
-          Row(
-            children: List.generate(5, (_) => const Icon(Icons.star_rounded, color: _C.gold, size: 16)),
-          ),
+          Row(children: List.generate(5, (_) => const Icon(Icons.star_rounded, color: _C.gold, size: 16))),
           const SizedBox(height: 16),
-          // Quote
-          Text(
-            '"$quote"',
-            style: const TextStyle(
-              color: _C.text,
-              fontSize: 13.5,
-              height: 1.65,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
+          Text('"$quote"',
+              style: const TextStyle(color: _C.text, fontSize: 13.5, height: 1.65, fontStyle: FontStyle.italic)),
           const Spacer(),
           const SizedBox(height: 20),
           const Divider(color: _C.border, height: 1),
           const SizedBox(height: 16),
-          // Author
           Row(
             children: [
               Container(
@@ -1074,7 +1241,8 @@ class _TestimonialCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: const TextStyle(color: _C.text, fontWeight: FontWeight.w700, fontSize: 13)),
+                    Text(name,
+                        style: const TextStyle(color: _C.text, fontWeight: FontWeight.w700, fontSize: 13)),
                     Text('$role · $hotel',
                         style: const TextStyle(color: _C.subtext, fontSize: 11.5),
                         overflow: TextOverflow.ellipsis),
@@ -1089,17 +1257,17 @@ class _TestimonialCard extends StatelessWidget {
   }
 }
 
-// ─── Pricing section (dynamic from DB) ───────────────────────────────────────
+// ─── Pricing section (dynamic from DB + billing toggle) ───────────────────────
 class _PricingSection extends StatefulWidget {
   final bool isMobile;
   const _PricingSection({required this.isMobile});
-
   @override
   State<_PricingSection> createState() => _PricingSectionState();
 }
 
 class _PricingSectionState extends State<_PricingSection> {
   late Future<List<PlanModel>> _future;
+  bool _isAnnual = false;
 
   @override
   void initState() {
@@ -1112,9 +1280,7 @@ class _PricingSectionState extends State<_PricingSection> {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.symmetric(
-        horizontal: widget.isMobile ? 24 : 80,
-        vertical: widget.isMobile ? 60 : 100,
-      ),
+          horizontal: widget.isMobile ? 24 : 80, vertical: widget.isMobile ? 60 : 100),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -1142,15 +1308,72 @@ class _PricingSectionState extends State<_PricingSection> {
             textAlign: TextAlign.center,
             style: TextStyle(color: _C.subtext, fontSize: 15.5),
           ),
-          const SizedBox(height: 56),
+          const SizedBox(height: 32),
+          // Billing toggle
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 200),
+                style: TextStyle(
+                  color: !_isAnnual ? _C.text : _C.muted,
+                  fontWeight: !_isAnnual ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 14,
+                ),
+                child: const Text('Monthly'),
+              ),
+              const SizedBox(width: 14),
+              GestureDetector(
+                onTap: () => setState(() => _isAnnual = !_isAnnual),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  width: 48, height: 26,
+                  decoration: BoxDecoration(
+                    color: _isAnnual ? _C.gold : _C.border,
+                    borderRadius: BorderRadius.circular(13),
+                  ),
+                  child: AnimatedAlign(
+                    duration: const Duration(milliseconds: 220),
+                    alignment: _isAnnual ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      width: 20, height: 20,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 200),
+                style: TextStyle(
+                  color: _isAnnual ? _C.text : _C.muted,
+                  fontWeight: _isAnnual ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 14,
+                ),
+                child: const Text('Annual'),
+              ),
+              if (_isAnnual) ...[
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF22C55E).withAlpha(20),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFF22C55E).withAlpha(60)),
+                  ),
+                  child: const Text('Save 20%',
+                      style: TextStyle(color: Color(0xFF22C55E), fontSize: 11, fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 40),
           FutureBuilder<List<PlanModel>>(
             future: _future,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const SizedBox(
-                  height: 200,
-                  child: Center(child: CircularProgressIndicator()),
-                );
+                return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()));
               }
               final plans = snapshot.data ?? [];
               if (plans.isEmpty) return const SizedBox.shrink();
@@ -1163,7 +1386,7 @@ class _PricingSectionState extends State<_PricingSection> {
                       children: [
                         for (int i = 0; i < plans.length; i++) ...[
                           if (i > 0) const SizedBox(width: 16),
-                          Expanded(child: _PricingCard(plan: plans[i])),
+                          Expanded(child: _PricingCard(plan: plans[i], isAnnual: _isAnnual)),
                         ],
                       ],
                     ),
@@ -1173,7 +1396,7 @@ class _PricingSectionState extends State<_PricingSection> {
                   children: [
                     for (int i = 0; i < plans.length; i++) ...[
                       if (i > 0) const SizedBox(height: 16),
-                      _PricingCard(plan: plans[i]),
+                      _PricingCard(plan: plans[i], isAnnual: _isAnnual),
                     ],
                   ],
                 );
@@ -1188,7 +1411,8 @@ class _PricingSectionState extends State<_PricingSection> {
 
 class _PricingCard extends StatelessWidget {
   final PlanModel plan;
-  const _PricingCard({required this.plan});
+  final bool isAnnual;
+  const _PricingCard({required this.plan, required this.isAnnual});
 
   List<String> get _features {
     String limit(int v) => v == -1 ? 'Unlimited' : v.toString();
@@ -1208,12 +1432,18 @@ class _PricingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final highlighted = plan.isHighlighted;
-    final priceStr = plan.isCustomPrice
-        ? 'Custom'
-        : plan.priceMonthly == 0
-            ? 'Free'
-            : '\$${plan.priceMonthly.toStringAsFixed(0)}';
     final isEnterprise = plan.isCustomPrice;
+    final effectiveMonthly = isAnnual && !isEnterprise && plan.priceMonthly > 0
+        ? (plan.priceMonthly * 0.8).round()
+        : plan.priceMonthly;
+    final priceStr = isEnterprise
+        ? 'Custom'
+        : effectiveMonthly == 0
+            ? 'Free'
+            : '\$$effectiveMonthly';
+    final periodStr = isAnnual && !isEnterprise && effectiveMonthly > 0
+        ? '/ mo, billed annually'
+        : plan.priceMonthly > 0 ? '/ month' : '';
 
     return Container(
       padding: const EdgeInsets.all(28),
@@ -1243,10 +1473,7 @@ class _PricingCard extends StatelessWidget {
               const SizedBox(width: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _C.gold,
-                  borderRadius: BorderRadius.circular(20),
-                ),
+                decoration: BoxDecoration(color: _C.gold, borderRadius: BorderRadius.circular(20)),
                 child: const Text('Most Popular',
                     style: TextStyle(color: _C.bg, fontSize: 10, fontWeight: FontWeight.w800)),
               ),
@@ -1254,18 +1481,25 @@ class _PricingCard extends StatelessWidget {
           ]),
           const SizedBox(height: 20),
           Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(priceStr,
-                style: TextStyle(
-                  color: highlighted ? _C.goldLight : _C.text,
-                  fontSize: isEnterprise ? 28 : 40,
-                  fontWeight: FontWeight.w900,
-                  height: 1,
-                )),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: Text(priceStr, key: ValueKey(priceStr),
+                  style: TextStyle(
+                    color: highlighted ? _C.goldLight : _C.text,
+                    fontSize: isEnterprise ? 28 : 40,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  )),
+            ),
             if (!isEnterprise && plan.priceMonthly > 0) ...[
-              const SizedBox(width: 4),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 4),
-                child: Text('/ month', style: TextStyle(color: _C.subtext, fontSize: 14)),
+              const SizedBox(width: 6),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Text(periodStr, key: ValueKey(periodStr),
+                      style: const TextStyle(color: _C.subtext, fontSize: 13)),
+                ),
               ),
             ],
           ]),
@@ -1276,8 +1510,7 @@ class _PricingCard extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(children: [
               Icon(Icons.check_circle_rounded,
-                  size: 16,
-                  color: highlighted ? _C.gold : const Color(0xFF22C55E)),
+                  size: 16, color: highlighted ? _C.gold : const Color(0xFF22C55E)),
               const SizedBox(width: 10),
               Expanded(child: Text(f, style: const TextStyle(color: _C.subtext, fontSize: 13))),
             ]),
@@ -1302,10 +1535,7 @@ class _PricingCard extends StatelessWidget {
                 : OutlinedButton(
                     onPressed: () {
                       if (isEnterprise) {
-                        showDialog(
-                          context: context,
-                          builder: (_) => const _EnterpriseContactDialog(),
-                        );
+                        showDialog(context: context, builder: (_) => const _EnterpriseContactDialog());
                       } else {
                         context.go('/signup');
                       }
@@ -1315,13 +1545,139 @@ class _PricingCard extends StatelessWidget {
                       side: const BorderSide(color: _C.border),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(
-                      isEnterprise ? 'Contact Sales' : 'Get Started',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                    ),
+                    child: Text(isEnterprise ? 'Contact Sales' : 'Get Started',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── FAQ section ──────────────────────────────────────────────────────────────
+class _FaqSection extends StatelessWidget {
+  final bool isMobile;
+  const _FaqSection({required this.isMobile});
+
+  static const _faqs = [
+    (
+      q: 'Is there a free plan?',
+      a: 'Yes! Our Starter plan is free forever with up to 1 property, 10 rooms, 5 staff accounts, and 5 restaurant tables. No credit card required — just sign up and start managing.',
+    ),
+    (
+      q: 'Can I manage multiple properties?',
+      a: 'Absolutely. Our Pro plan supports up to 3 properties, and the Enterprise plan offers unlimited properties with a dedicated account manager and SLA guarantees.',
+    ),
+    (
+      q: 'Do guests need to download an app?',
+      a: 'No. The guest portal works entirely via QR code in any mobile browser. Guests can check in, browse the restaurant menu, order room service, and check out — no download required.',
+    ),
+    (
+      q: 'How secure is guest and payment data?',
+      a: 'Very. HotRest is built on enterprise-grade infrastructure with row-level security, encrypted data at rest and in transit, GDPR-ready data handling, and SOC 2 aligned practices.',
+    ),
+    (
+      q: 'Can I white-label the guest portal?',
+      a: 'Yes, on Pro and Enterprise plans. You can set your own logo, brand colours, and property name. Guests see your brand — not ours.',
+    ),
+    (
+      q: 'Can I cancel or downgrade anytime?',
+      a: 'Of course. There are no long-term contracts. You can upgrade, downgrade, or cancel your plan at any time from account settings. Monthly billing, no lock-in.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 100),
+      child: Column(
+        children: [
+          const _SectionLabel(label: 'FAQ'),
+          const SizedBox(height: 16),
+          Text(
+            'Frequently Asked Questions',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _C.text,
+              fontSize: isMobile ? 28 : 44,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.8,
+            ),
+          ),
+          const SizedBox(height: 48),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: Column(
+              children: _faqs.map((faq) => _FaqTile(q: faq.q, a: faq.a)).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FaqTile extends StatefulWidget {
+  final String q, a;
+  const _FaqTile({required this.q, required this.a});
+  @override
+  State<_FaqTile> createState() => _FaqTileState();
+}
+
+class _FaqTileState extends State<_FaqTile> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: _open ? _C.gold.withAlpha(8) : _C.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _open ? _C.gold.withAlpha(80) : _C.border),
+        ),
+        child: Column(
+          children: [
+            InkWell(
+              onTap: () => setState(() => _open = !_open),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(widget.q,
+                          style: TextStyle(
+                            color: _open ? _C.gold : _C.text,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          )),
+                    ),
+                    AnimatedRotation(
+                      turns: _open ? 0.125 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(Icons.add_rounded, color: _open ? _C.gold : _C.subtext, size: 22),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: Text(widget.a,
+                    style: const TextStyle(color: _C.subtext, fontSize: 14, height: 1.65)),
+              ),
+              crossFadeState: _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 200),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1336,10 +1692,7 @@ class _CtaSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 24 : 80,
-        vertical: isMobile ? 60 : 80,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 80),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -1352,7 +1705,6 @@ class _CtaSection extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 720),
           child: Column(
             children: [
-              // Badge
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                 decoration: BoxDecoration(
@@ -1365,10 +1717,8 @@ class _CtaSection extends StatelessWidget {
                   children: [
                     Icon(Icons.rocket_launch_rounded, color: _C.gold, size: 14),
                     SizedBox(width: 7),
-                    Text(
-                      'Get started in under 5 minutes',
-                      style: TextStyle(color: _C.gold, fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
+                    Text('Get started in under 5 minutes',
+                        style: TextStyle(color: _C.gold, fontSize: 12, fontWeight: FontWeight.w700)),
                   ],
                 ),
               ),
@@ -1388,11 +1738,7 @@ class _CtaSection extends StatelessWidget {
               Text(
                 'Join hundreds of hospitality teams already running smarter with HotRest.\nNo credit card required — start in minutes.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withAlpha(160),
-                  fontSize: 15,
-                  height: 1.6,
-                ),
+                style: TextStyle(color: Colors.white.withAlpha(160), fontSize: 15, height: 1.6),
               ),
               const SizedBox(height: 36),
               Wrap(
@@ -1400,11 +1746,7 @@ class _CtaSection extends StatelessWidget {
                 runSpacing: 12,
                 alignment: WrapAlignment.center,
                 children: [
-                  _GoldButton(
-                    label: 'Create Free Account',
-                    large: true,
-                    onTap: () => context.go('/signup'),
-                  ),
+                  _GoldButton(label: 'Create Free Account', large: true, onTap: () => context.go('/signup')),
                   OutlinedButton(
                     onPressed: () => context.go('/login'),
                     style: OutlinedButton.styleFrom(
@@ -1418,14 +1760,13 @@ class _CtaSection extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              // Trust row
               const Wrap(
                 spacing: 24,
                 runSpacing: 8,
                 alignment: WrapAlignment.center,
                 children: [
-                  _TrustChip(icon: Icons.lock_outline_rounded, label: 'SOC 2 Compliant'),
-                  _TrustChip(icon: Icons.shield_outlined, label: 'GDPR Ready'),
+                  _TrustChip(icon: Icons.lock_outline_rounded,  label: 'SOC 2 Compliant'),
+                  _TrustChip(icon: Icons.shield_outlined,       label: 'GDPR Ready'),
                   _TrustChip(icon: Icons.support_agent_rounded, label: '24/7 Support'),
                 ],
               ),
@@ -1464,13 +1805,8 @@ class _Footer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 24 : 80,
-        vertical: 48,
-      ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF0F172A),
-      ),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: 48),
+      decoration: const BoxDecoration(color: Color(0xFF0F172A)),
       child: isMobile
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -1491,7 +1827,6 @@ class _Footer extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Brand column
                     SizedBox(
                       width: 220,
                       child: Column(
@@ -1507,7 +1842,6 @@ class _Footer extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    // Product links
                     _FooterColumn(title: 'Product', items: [
                       const _FooterItem('Features', null),
                       const _FooterItem('Pricing', null),
@@ -1515,7 +1849,6 @@ class _Footer extends StatelessWidget {
                       _FooterItem('Get Started', () => context.go('/signup')),
                     ]),
                     const SizedBox(width: 48),
-                    // Legal links
                     _FooterColumn(title: 'Legal', items: [
                       _FooterItem('Terms of Service', () => context.go('/terms')),
                       _FooterItem('Return Policy', () => context.go('/returns')),
@@ -1543,11 +1876,9 @@ class _Footer extends StatelessWidget {
     const SizedBox(width: 10),
     ShaderMask(
       blendMode: BlendMode.srcIn,
-      shaderCallback: (bounds) => const LinearGradient(
-        colors: [_C.goldLight, _C.gold],
-      ).createShader(bounds),
-      child: const Text('HotRest',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
+      shaderCallback: (bounds) =>
+          const LinearGradient(colors: [_C.goldLight, _C.gold]).createShader(bounds),
+      child: const Text('HotRest', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
     ),
   ]);
 
@@ -1562,15 +1893,14 @@ class _Footer extends StatelessWidget {
   );
 
   Widget _links(BuildContext context) => Wrap(
-    spacing: 20,
-    runSpacing: 8,
+    spacing: 20, runSpacing: 8,
     alignment: WrapAlignment.center,
     children: [
-      _footerLink('Sign In', () => context.go('/login')),
+      _footerLink('Sign In',     () => context.go('/login')),
       _footerLink('Get Started', () => context.go('/signup')),
-      _footerLink('Terms', () => context.go('/terms')),
-      _footerLink('Returns', () => context.go('/returns')),
-      _footerLink('Privacy', () => context.go('/privacy')),
+      _footerLink('Terms',       () => context.go('/terms')),
+      _footerLink('Returns',     () => context.go('/returns')),
+      _footerLink('Privacy',     () => context.go('/privacy')),
     ],
   );
 
@@ -1591,7 +1921,8 @@ class _FooterColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+        Text(title,
+            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
         const SizedBox(height: 16),
         ...items.map((item) => Padding(
           padding: const EdgeInsets.only(bottom: 10),
@@ -1614,7 +1945,6 @@ class _FooterItem {
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
-
 class _SectionLabel extends StatelessWidget {
   final String label;
   const _SectionLabel({required this.label});
@@ -1644,12 +1974,7 @@ class _GoldButton extends StatefulWidget {
   final VoidCallback onTap;
   final bool large;
   final bool small;
-  const _GoldButton({
-    required this.label,
-    required this.onTap,
-    this.large = false,
-    this.small = false,
-  });
+  const _GoldButton({required this.label, required this.onTap, this.large = false, this.small = false});
   @override
   State<_GoldButton> createState() => _GoldButtonState();
 }
@@ -1677,10 +2002,9 @@ class _GoldButtonState extends State<_GoldButton> {
             foregroundColor: _C.bg,
             padding: EdgeInsets.symmetric(
               horizontal: widget.small ? 16 : widget.large ? 36 : 24,
-              vertical: widget.small ? 10 : widget.large ? 18 : 14,
+              vertical:   widget.small ? 10 : widget.large ? 18 : 14,
             ),
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(widget.small ? 8 : 12)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(widget.small ? 8 : 12)),
             elevation: 0,
           ),
           child: Text(widget.label,
@@ -1694,11 +2018,108 @@ class _GoldButtonState extends State<_GoldButton> {
   }
 }
 
-// ─── Enterprise Contact Dialog ────────────────────────────────────────────────
+// ─── Demo Dialog ──────────────────────────────────────────────────────────────
+class _DemoDialog extends StatelessWidget {
+  const _DemoDialog();
 
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 540),
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                height: 220,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF0F172A), Color(0xFF1E3A5F)],
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 64, height: 64,
+                      decoration: BoxDecoration(
+                        color: _C.gold.withAlpha(30),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: _C.gold.withAlpha(80), width: 2),
+                      ),
+                      child: const Icon(Icons.play_arrow_rounded, color: _C.gold, size: 36),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Product Demo',
+                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text('Full walkthrough video — coming soon',
+                        style: TextStyle(color: Colors.white.withAlpha(130), fontSize: 13)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text('See HotRest in Action',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _C.text)),
+              const SizedBox(height: 10),
+              const Text(
+                'Our product demo video is being produced. In the meantime, sign up free and '
+                'explore the full platform yourself — no credit card needed.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.55),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: _C.border),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Close', style: TextStyle(color: _C.subtext)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        context.go('/signup');
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _C.gold,
+                        foregroundColor: _C.bg,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                      ),
+                      child: const Text('Try Free', style: TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Enterprise Contact Dialog ────────────────────────────────────────────────
 class _EnterpriseContactDialog extends StatefulWidget {
   const _EnterpriseContactDialog();
-
   @override
   State<_EnterpriseContactDialog> createState() => _EnterpriseContactDialogState();
 }
@@ -1765,10 +2186,7 @@ class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
     children: [
       Container(
         width: 64, height: 64,
-        decoration: BoxDecoration(
-          color: const Color(0xFF22C55E).withAlpha(20),
-          shape: BoxShape.circle,
-        ),
+        decoration: BoxDecoration(color: const Color(0xFF22C55E).withAlpha(20), shape: BoxShape.circle),
         child: const Icon(Icons.check_rounded, color: Color(0xFF22C55E), size: 36),
       ),
       const SizedBox(height: 20),
@@ -1809,10 +2227,7 @@ class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
             Row(children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: _C.gold.withAlpha(20),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration: BoxDecoration(color: _C.gold.withAlpha(20), borderRadius: BorderRadius.circular(12)),
                 child: const Icon(Icons.business_rounded, color: _C.gold, size: 22),
               ),
               const SizedBox(width: 14),
@@ -1820,7 +2235,8 @@ class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Contact Sales', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _C.text)),
+                    Text('Contact Sales',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _C.text)),
                     Text('We\'ll get back to you within 24 hours.',
                         style: TextStyle(color: _C.subtext, fontSize: 13)),
                   ],
@@ -1828,12 +2244,12 @@ class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
               ),
             ]),
             const SizedBox(height: 24),
-            _field(_name, 'Full Name', required: true),
-            _field(_company, 'Company / Hotel Group', required: true),
-            _field(_email, 'Work Email', required: true, email: true),
-            _field(_phone, 'Phone Number'),
-            _field(_propCount, 'Number of Properties', number: true),
-            _field(_message, 'Tell us about your needs', maxLines: 3),
+            _field(_name,     'Full Name',                required: true),
+            _field(_company,  'Company / Hotel Group',    required: true),
+            _field(_email,    'Work Email',               required: true, email: true),
+            _field(_phone,    'Phone Number'),
+            _field(_propCount,'Number of Properties',     number: true),
+            _field(_message,  'Tell us about your needs', maxLines: 3),
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
@@ -1847,8 +2263,10 @@ class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
                   elevation: 0,
                 ),
                 child: _submitting
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Send Request', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                    ? const SizedBox(width: 20, height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Send Request',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
               ),
             ),
           ],
@@ -1864,7 +2282,11 @@ class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
       child: TextFormField(
         controller: ctrl,
         maxLines: maxLines,
-        keyboardType: number ? TextInputType.number : email ? TextInputType.emailAddress : TextInputType.text,
+        keyboardType: number
+            ? TextInputType.number
+            : email
+                ? TextInputType.emailAddress
+                : TextInputType.text,
         inputFormatters: number ? [FilteringTextInputFormatter.digitsOnly] : null,
         decoration: InputDecoration(
           labelText: label,

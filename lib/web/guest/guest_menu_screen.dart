@@ -21,6 +21,7 @@ class _CartItem {
   final MenuItem item;
   int qty;
   String notes = '';
+  bool isTakeaway = false;
   final Map<String, List<String>> selectedModifiers;
 
   _CartItem({
@@ -67,7 +68,8 @@ class _CartItem {
 class _PlacedOrder {
   final String id;
   final List<_CartItem> items;
-  final bool isAddOn;       // true if parentOrderId was set
+  final bool isAddOn;
+  final bool isTakeaway;
   String status = 'pending';
   String paymentStatus = 'pending';
   StreamSubscription<({String status, String paymentStatus})>? sub;
@@ -76,6 +78,7 @@ class _PlacedOrder {
     required this.id,
     required this.items,
     required this.isAddOn,
+    required this.isTakeaway,
   });
 
   bool get isActive =>
@@ -132,7 +135,6 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
   bool _isPlacing = false;
   // When true, user is back on menu to add more items
   bool _addingMore = false;
-
   // ── Feedback + session state ───────────────────────────────────────────────
   bool _showFeedback = false;
   bool _sessionEnded = false;
@@ -154,8 +156,11 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
   double get _cartSubtotal => _cart.fold(0.0, (s, c) => s + c.subtotal);
   double get _allOrdersSubtotal =>
       _orders.fold(0.0, (s, o) => s + o.subtotal);
+  // Service charge applies only to dine-in orders, not takeaway
+  double get _dineInOrdersSubtotal =>
+      _orders.where((o) => !o.isTakeaway).fold(0.0, (s, o) => s + o.subtotal);
   double get _tax => _allOrdersSubtotal * _taxRate;
-  double get _serviceCharge => _allOrdersSubtotal * _serviceRate;
+  double get _serviceCharge => _dineInOrdersSubtotal * _serviceRate;
   double get _grandTotal => _allOrdersSubtotal + _tax + _serviceCharge;
 
   int get _totalCartItems => _cart.fold(0, (s, c) => s + c.qty);
@@ -362,7 +367,35 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
     );
 
     if (result != null) {
-      _addToCartWithMods(item, result.mods, result.qty);
+      _addSplitToCart(item, result.mods, result.qty);
+    }
+  }
+
+  // Splits allowMultiple modifier selections into separate cart items so each
+  // option can be individually toggled for takeaway, qty-adjusted, etc.
+  void _addSplitToCart(MenuItem item, Map<String, List<String>> mods, int qty) {
+    final multiMod = item.modifiers
+        .where((m) => m.allowMultiple && (mods[m.name]?.isNotEmpty ?? false))
+        .firstOrNull;
+
+    if (multiMod == null) {
+      _addToCartWithMods(item, mods, qty);
+      return;
+    }
+
+    final optionCounts = <String, int>{};
+    for (final opt in mods[multiMod.name]!) {
+      optionCounts[opt] = (optionCounts[opt] ?? 0) + 1;
+    }
+
+    final sharedMods = Map<String, List<String>>.from(mods)..remove(multiMod.name);
+
+    for (final entry in optionCounts.entries) {
+      _addToCartWithMods(
+        item,
+        {...sharedMods, multiMod.name: [entry.key]},
+        entry.value * qty,
+      );
     }
   }
 
@@ -403,51 +436,67 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
   int _qtyInCart(MenuItem item) =>
       _cart.where((c) => c.item.id == item.id).fold(0, (s, c) => s + c.qty);
 
-  // ── Place / add-on order ───────────────────────────────────────────────────
+  // ── Place / add-on order (auto-splits cart into dine-in + takeaway orders) ──
   Future<void> _placeOrder() async {
     if (_cart.isEmpty) return;
     setState(() => _isPlacing = true);
 
-    // For add-on orders, link to the primary order
     final parentId = _addingMore ? _primaryOrder?.id : null;
 
+    // Split cart by per-item takeaway flag
+    final dineInCart   = _cart.where((c) => !c.isTakeaway).toList();
+    final takeawayCart = _cart.where((c) =>  c.isTakeaway).toList();
+
     try {
-      final id = await _service.placeOrder(
-        propertyId: widget.propertyId,
-        tableId:    widget.tableId,
-        cartItems:  _cart.map((c) => (
-          item: c.item,
-          qty: c.qty,
-          notes: '',
-          modifiers: c.selectedModifiers.isNotEmpty ? c.selectedModifiers : null
-        )).toList(),
-        parentOrderId: parentId,
-      );
+      final newOrders = <_PlacedOrder>[];
+      // For a mixed split: the second ticket links to the first so that both
+      // appear as one combined group in the kitchen payment column.
+      String? splitParentId;
 
-      final placed = _PlacedOrder(
-        id: id,
-        items: List.of(_cart),
-        isAddOn: parentId != null,
-      );
-
-      // Watch this order's status + payment_status in real-time
-      placed.sub = _service.watchOrder(id).listen((data) {
-        if (!mounted) return;
-        setState(() {
-          placed.status = data.status;
-          placed.paymentStatus = data.paymentStatus;
-          // Trigger feedback form when payment is collected
-          if (placed.isPaid && !_showFeedback && !_sessionEnded) {
-            _showFeedback = true;
-          }
+      for (final (items, type) in [
+        (dineInCart,   'dineIn'),
+        (takeawayCart, 'takeaway'),
+      ]) {
+        if (items.isEmpty) continue;
+        // Use session parent (add-on) → then split parent → null for first ticket
+        final effectiveParent = parentId ?? splitParentId;
+        final id = await _service.placeOrder(
+          propertyId:    widget.propertyId,
+          tableId:       widget.tableId,
+          cartItems:     items.map((c) => (
+            item:      c.item,
+            qty:       c.qty,
+            notes:     '',
+            modifiers: c.selectedModifiers.isNotEmpty ? c.selectedModifiers : null,
+          )).toList(),
+          parentOrderId: effectiveParent,
+          type:          type,
+        );
+        splitParentId ??= id; // remember first placed ID for linking
+        final placed = _PlacedOrder(
+          id:         id,
+          items:      List.of(items),
+          isAddOn:    effectiveParent != null,
+          isTakeaway: type == 'takeaway',
+        );
+        placed.sub = _service.watchOrder(id).listen((data) {
+          if (!mounted) return;
+          setState(() {
+            placed.status        = data.status;
+            placed.paymentStatus = data.paymentStatus;
+            if (placed.isPaid && !_showFeedback && !_sessionEnded) {
+              _showFeedback = true;
+            }
+          });
         });
-      });
+        newOrders.add(placed);
+      }
 
       setState(() {
-        _orders.add(placed);
+        _orders.addAll(newOrders);
         _cart.clear();
-        _isPlacing   = false;
-        _addingMore  = false;
+        _isPlacing  = false;
+        _addingMore = false;
       });
     } catch (e) {
       setState(() => _isPlacing = false);
@@ -460,12 +509,57 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
     }
   }
 
-  // ── "Add more items" — go back to menu ────────────────────────────────────
+  // ── "Add more items" — go back to menu (with ready-state warning) ───────────
   void _startAddMore() {
     setState(() {
       _cart.clear();
       _addingMore = true;
     });
+  }
+
+  Future<void> _onAddMore() async {
+    if (_orders.any((o) => o.status == 'ready')) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: _C.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: _C.divider),
+          ),
+          title: const Row(children: [
+            Icon(Icons.room_service_rounded, color: _C.gold, size: 20),
+            SizedBox(width: 8),
+            Text('Order ready to be served',
+                style: TextStyle(color: _C.text, fontSize: 16, fontWeight: FontWeight.w700)),
+          ]),
+          content: const Text(
+            'Your current order is ready and your server is about to bring it to your table.\n\n'
+            'Adding more items will create a separate order that your server will handle next.',
+            style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.55),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(_, false),
+              child: const Text('Cancel', style: TextStyle(color: _C.subtext)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(_, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _C.gold,
+                foregroundColor: _C.bg,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true && mounted) _startAddMore();
+    } else {
+      _startAddMore();
+    }
   }
 
   // ── Logo helper ────────────────────────────────────────────────────────────
@@ -581,12 +675,12 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
               const SizedBox(height: 20),
 
               // Action buttons
-              if (_canAddMore)
+              if (_canAddMore) ...[
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton.icon(
-                    onPressed: _startAddMore,
+                    onPressed: _onAddMore,
                     icon: const Icon(Icons.add_rounded),
                     label: const Text('Add More Items',
                         style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
@@ -597,6 +691,22 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
                     ),
                   ),
                 ),
+                if (_orders.any((o) => o.status == 'ready')) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: _C.gold.withAlpha(180), size: 14),
+                      const SizedBox(width: 6),
+                      const Expanded(
+                        child: Text(
+                          'Your order is ready — your server is about to bring it. New items will be a separate order.',
+                          style: TextStyle(color: _C.subtext, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
 
               if (allServed) ...[
                 const SizedBox(height: 12),
@@ -664,6 +774,19 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
                   Row(children: [
                     Text(order.isAddOn ? 'Add-on Order' : 'Order',
                         style: const TextStyle(color: _C.subtext, fontSize: 11)),
+                    if (order.isTakeaway) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text('📦 Takeaway',
+                            style: TextStyle(color: Colors.amber,
+                                fontSize: 10, fontWeight: FontWeight.w700)),
+                      ),
+                    ],
                     const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -746,8 +869,13 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
         _invoiceRow('Subtotal', _allOrdersSubtotal, fmt),
         if (_taxRate > 0)
           _invoiceRow('Tax (${(_taxRate * 100).toStringAsFixed(0)}%)', _tax, fmt),
-        if (_serviceRate > 0)
-          _invoiceRow('Service (${(_serviceRate * 100).toStringAsFixed(0)}%)', _serviceCharge, fmt),
+        if (_serviceRate > 0 && _serviceCharge > 0) ...[
+          _invoiceRow(
+            _orders.any((o) => o.isTakeaway)
+                ? 'Service (${(_serviceRate * 100).toStringAsFixed(0)}%) — dine-in only'
+                : 'Service (${(_serviceRate * 100).toStringAsFixed(0)}%)',
+            _serviceCharge, fmt),
+        ],
         const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1215,8 +1343,12 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
 
   Widget _cartFab() {
     final fmt = _fmt;
-    // For add-on, show running total including previous orders
-    final cartWithCharges = _cartSubtotal * (1 + _taxRate + _serviceRate);
+    // Service charge only on dine-in cart items
+    final cartDineInSubtotal = _cart
+        .where((c) => !c.isTakeaway)
+        .fold(0.0, (s, c) => s + c.subtotal);
+    final cartWithCharges =
+        _cartSubtotal * (1 + _taxRate) + cartDineInSubtotal * _serviceRate;
     final displayTotal = _addingMore
         ? _grandTotal + cartWithCharges
         : cartWithCharges;
@@ -1262,12 +1394,18 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _CartSheet(
+      builder: (_) {
+        final cartDineIn = _cart
+            .where((c) => !c.isTakeaway)
+            .fold(0.0, (s, c) => s + c.subtotal);
+        final cartSvc  = cartDineIn * _serviceRate;
+        final cartTax  = _cartSubtotal * _taxRate;
+        return _CartSheet(
         cart: _cart,
         subtotal: _cartSubtotal,
-        tax: _cartSubtotal * _taxRate,
-        serviceCharge: _cartSubtotal * _serviceRate,
-        total: _cartSubtotal * (1 + _taxRate + _serviceRate),
+        tax: cartTax,
+        serviceCharge: cartSvc,
+        total: _cartSubtotal + cartTax + cartSvc,
         taxRate: _taxRate,
         serviceRate: _serviceRate,
         currencySymbol: _currencySymbol,
@@ -1276,7 +1414,8 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
         onAdd: (item) { _addToCart(item); },
         onRemove: (item) { _removeFromCart(item); },
         onPlace: () { Navigator.pop(context); _placeOrder(); },
-      ),
+      );
+      },
     );
   }
 
@@ -1360,6 +1499,10 @@ class _CartSheetState extends State<_CartSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final hasTakeaway = widget.cart.any((c) => c.isTakeaway);
+    final hasDineIn   = widget.cart.any((c) => !c.isTakeaway);
+    final isMixed     = hasTakeaway && hasDineIn;
+
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
       minChildSize: 0.4,
@@ -1473,8 +1616,41 @@ class _CartSheetState extends State<_CartSheet> {
                         ],
                       ],
                     )),
-                    Text(fmt.format(c.subtotal),
-                        style: const TextStyle(color: _C.subtext, fontSize: 13)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(fmt.format(c.subtotal),
+                            style: const TextStyle(color: _C.subtext, fontSize: 13)),
+                        const SizedBox(height: 5),
+                        GestureDetector(
+                          onTap: () => setState(() => c.isTakeaway = !c.isTakeaway),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: c.isTakeaway
+                                  ? Colors.amber.withOpacity(0.15)
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: c.isTakeaway
+                                    ? Colors.amber.withOpacity(0.5)
+                                    : _C.divider,
+                              ),
+                            ),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Text('🛍️', style: TextStyle(fontSize: 10)),
+                              const SizedBox(width: 3),
+                              Text('TO GO',
+                                  style: TextStyle(
+                                      color: c.isTakeaway ? Colors.amber : _C.subtext,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700)),
+                            ]),
+                          ),
+                        ),
+                      ],
+                    ),
                   ]),
                 );
               },
@@ -1488,9 +1664,13 @@ class _CartSheetState extends State<_CartSheet> {
               _totalRow('Subtotal', widget.subtotal),
               if (widget.taxRate > 0)
                 _totalRow('Tax (${(widget.taxRate * 100).toStringAsFixed(0)}%)', widget.tax),
-              if (widget.serviceRate > 0)
-                _totalRow('Service (${(widget.serviceRate * 100).toStringAsFixed(0)}%)',
-                    widget.serviceCharge),
+              if (widget.serviceRate > 0 && widget.serviceCharge > 0)
+                _totalRow(
+                  isMixed
+                      ? 'Service (${(widget.serviceRate * 100).toStringAsFixed(0)}%) — dine-in only'
+                      : 'Service (${(widget.serviceRate * 100).toStringAsFixed(0)}%)',
+                  widget.serviceCharge,
+                ),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1515,6 +1695,28 @@ class _CartSheetState extends State<_CartSheet> {
                   ],
                 ),
               ],
+              // Mixed-order info banner
+              if (isMixed) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                  ),
+                  child: const Row(children: [
+                    Text('📦', style: TextStyle(fontSize: 14)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Mixed order — dine-in & takeaway items will be sent as 2 separate tickets to the kitchen.',
+                        style: TextStyle(color: Colors.amber, fontSize: 11, height: 1.5),
+                      ),
+                    ),
+                  ]),
+                ),
+              ],
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -1532,7 +1734,11 @@ class _CartSheetState extends State<_CartSheet> {
                           child: CircularProgressIndicator(
                               color: _C.bg, strokeWidth: 2))
                       : Text(
-                          widget.isAddOn ? 'Add to Order' : 'Place Order',
+                          isMixed
+                              ? (widget.isAddOn ? 'Add 2 Separate Orders' : 'Place 2 Separate Orders')
+                              : hasTakeaway
+                                  ? (widget.isAddOn ? 'Add to Order — Takeaway 📦' : 'Place Takeaway Order 📦')
+                                  : (widget.isAddOn ? 'Add to Order' : 'Place Order'),
                           style: const TextStyle(
                               fontWeight: FontWeight.w800, fontSize: 16),
                         ),

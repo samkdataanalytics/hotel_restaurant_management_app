@@ -204,7 +204,14 @@ class _PaymentDialogState extends State<_PaymentDialog> {
             : _discountAmount;
     final subtotal      = (itemsTotal - discountValue).clamp(0.0, double.infinity);
     final tax           = subtotal * taxRate;
-    final serviceCharge = subtotal * serviceChargeRate;
+    // Service charge only on dine-in / room-service portion
+    final dineInItemsTotal = widget.orders
+        .where((o) => o.type != OrderType.takeaway && o.type != OrderType.delivery)
+        .fold(0.0, (s, o) => s + o.itemsTotal);
+    final dineInFraction = itemsTotal > 0 ? dineInItemsTotal / itemsTotal : 1.0;
+    final serviceCharge = (dineInFraction * subtotal) * serviceChargeRate;
+    final hasMixedTypes = widget.orders.any((o) => o.type == OrderType.takeaway || o.type == OrderType.delivery)
+        && widget.orders.any((o) => o.type != OrderType.takeaway && o.type != OrderType.delivery);
     final total         = subtotal + tax + serviceCharge;
     final orderNumbers  = widget.orders.map((o) => '#${o.orderNumber}').join(' + ');
 
@@ -326,9 +333,13 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                           ),
                         Text('Tax (${(taxRate * 100).toStringAsFixed(0)}%)   ${widget.currency.format(tax)}',
                             style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                        if (serviceChargeRate > 0)
-                          Text('Service   ${widget.currency.format(serviceCharge)}',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                        if (serviceChargeRate > 0 && serviceCharge > 0)
+                          Text(
+                            hasMixedTypes
+                                ? 'Service (dine-in only)   ${widget.currency.format(serviceCharge)}'
+                                : 'Service   ${widget.currency.format(serviceCharge)}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                          ),
                       ],
                     ),
                     Column(
@@ -535,7 +546,9 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
 
   // ── Item picker state
   String? _selectedCategory; // null = All
-  final List<OrderItem> _addCart = []; 
+  final List<OrderItem> _addCart = [];
+  // Per-item takeaway flag (keyed by OrderItem.id)
+  final Map<String, bool> _cartItemTakeaway = {};
   String _itemSearchQuery = '';
   final _itemSearchController = TextEditingController();
 
@@ -583,6 +596,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
         if (_addCart[idx].quantity > 1) {
           _addCart[idx].quantity--;
         } else {
+          _cartItemTakeaway.remove(_addCart[idx].id);
           _addCart.removeAt(idx);
         }
       }
@@ -729,8 +743,30 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
     );
 
     if (result != null) {
-      for (int i = 0; i < result.qty; i++) {
-        _addToCart(item, selectedModifiers: result.mods);
+      _splitToCart(item, result.mods, result.qty);
+    }
+  }
+
+  // Splits allowMultiple modifier selections into separate cart items so each
+  // option can be individually toggled for takeaway.
+  void _splitToCart(MenuItem item, Map<String, List<String>> mods, int qty) {
+    final multiMod = item.modifiers
+        .where((m) => m.allowMultiple && (mods[m.name]?.isNotEmpty ?? false))
+        .firstOrNull;
+    if (multiMod == null) {
+      for (int i = 0; i < qty; i++) {
+        _addToCart(item, selectedModifiers: mods);
+      }
+      return;
+    }
+    final optionCounts = <String, int>{};
+    for (final opt in mods[multiMod.name]!) {
+      optionCounts[opt] = (optionCounts[opt] ?? 0) + 1;
+    }
+    final sharedMods = Map<String, List<String>>.from(mods)..remove(multiMod.name);
+    for (final entry in optionCounts.entries) {
+      for (int i = 0; i < entry.value * qty; i++) {
+        _addToCart(item, selectedModifiers: {...sharedMods, multiMod.name: [entry.key]});
       }
     }
   }
@@ -848,36 +884,61 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
     setState(() => _isProcessing = true);
 
     try {
-      final newItems = List<OrderItem>.from(_addCart);
+      final dineInItems  = _addCart.where((i) => !(_cartItemTakeaway[i.id] ?? false)).toList();
+      final takeawayItems = _addCart.where((i) =>  (_cartItemTakeaway[i.id] ?? false)).toList();
 
-      final openOrders = _allTableOrders[_selectedTableId!];
+      final openOrders  = _allTableOrders[_selectedTableId!];
       final latestOrder = openOrders?.isNotEmpty == true ? openOrders!.last : null;
-      RestaurantOrder updated;
-
       final isInKitchen = latestOrder != null &&
           (latestOrder.status == OrderStatus.preparing ||
               latestOrder.status == OrderStatus.ready ||
               latestOrder.status == OrderStatus.served);
 
-      if (latestOrder == null || isInKitchen) {
-        // New tab OR add-on when latest order is already in-kitchen/served.
-        // Link to the root parent so all add-ons share one parent.
-        final parentId = latestOrder == null
-            ? null
-            : (latestOrder.parentOrderId ?? latestOrder.id);
-        updated = await _service.createTableOrder(
-            tableId: _selectedTableId!, items: newItems, parentOrderId: parentId);
-      } else {
-        // Latest order is still pending — append items to it
-        updated = await _service.addItemsToOrder(latestOrder.id, newItems);
+      // Root parent for this table session (links add-ons together)
+      final sessionParentId = latestOrder != null
+          ? (latestOrder.parentOrderId ?? latestOrder.id)
+          : null;
+
+      RestaurantOrder? firstUpdated;
+      String? splitParentId; // ID of first placed order for mixed-order linking
+
+      // ── Dine-in items ──────────────────────────────────────────────────────
+      if (dineInItems.isNotEmpty) {
+        if (latestOrder == null || isInKitchen) {
+          firstUpdated = await _service.createTableOrder(
+            tableId:       _selectedTableId!,
+            items:         dineInItems,
+            parentOrderId: sessionParentId,
+            type:          OrderType.dineIn,
+          );
+          splitParentId = firstUpdated.id;
+        } else {
+          // Append to existing pending dine-in order
+          firstUpdated = await _service.addItemsToOrder(latestOrder.id, dineInItems);
+          splitParentId = sessionParentId;
+        }
+      }
+
+      // ── Takeaway items — always a new separate kitchen ticket ──────────────
+      if (takeawayItems.isNotEmpty) {
+        // For add-ons: link to session root; for fresh mixed: link to dine-in ticket
+        final effectiveParent = sessionParentId ?? splitParentId;
+        final takeawayOrder = await _service.createTableOrder(
+          tableId:       _selectedTableId!,
+          items:         takeawayItems,
+          parentOrderId: effectiveParent,
+          type:          OrderType.takeaway,
+        );
+        firstUpdated ??= takeawayOrder;
       }
 
       await _load();
       if (!mounted) return;
       setState(() {
-        _selectedTableId = updated.tableId;
+        _selectedTableId = firstUpdated?.tableId ?? _selectedTableId;
         _isAddingItems = false;
         _addCart.clear();
+        _cartItemTakeaway.clear();
         _isProcessing = false;
       });
     } catch (e) {
@@ -925,11 +986,29 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
         ];
       }
 
+      // Compute correct finalTotal (service charge on dine-in only)
+      final settings2 = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+      final _taxRate2   = settings2?.taxRate           ?? 0.0;
+      final _svcRate2   = settings2?.serviceChargeRate ?? 0.0;
+      final _iTotal2    = updatedOrders.fold<double>(0.0, (s, o) => s + o.itemsTotal);
+      final _dv2 = result.discountAmount <= 0
+          ? 0.0
+          : result.discountType == 'percentage'
+              ? _iTotal2 * (result.discountAmount / 100)
+              : result.discountAmount;
+      final _sub2 = (_iTotal2 - _dv2).clamp(0.0, double.infinity);
+      final _dineIn2 = updatedOrders
+          .where((o) => o.type != OrderType.takeaway && o.type != OrderType.delivery)
+          .fold<double>(0.0, (s, o) => s + o.itemsTotal);
+      final _frac2 = _iTotal2 > 0 ? _dineIn2 / _iTotal2 : 1.0;
+      final _finalTotal2 = _sub2 + _sub2 * _taxRate2 + (_frac2 * _sub2) * _svcRate2;
+
       final settledOrders = await _service.settleAllTableOrders(
         tableId: table.id,
         paymentStatus: result.paymentStatus,
         bookingId: result.bookingId,
         roomId: result.roomId,
+        finalTotal: _finalTotal2,
       );
 
       if (!mounted) return;
@@ -1345,7 +1424,13 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
     final serviceChargeRate = settings?.serviceChargeRate ?? 0.0;
     final subtotal = openOrders.fold(0.0, (s, o) => s + o.totalAmount);
     final tax = subtotal * taxRate;
-    final serviceCharge = subtotal * serviceChargeRate;
+    // Service charge applies only to dine-in / room-service orders
+    final dineInSubtotal = openOrders
+        .where((o) => o.type != OrderType.takeaway && o.type != OrderType.delivery)
+        .fold(0.0, (s, o) => s + o.totalAmount);
+    final dineInFraction = subtotal > 0 ? dineInSubtotal / subtotal : 1.0;
+    final serviceCharge = (dineInFraction * subtotal) * serviceChargeRate;
+    final hasTakeaway = openOrders.any((o) => o.type == OrderType.takeaway || o.type == OrderType.delivery);
     final total = subtotal + tax + serviceCharge;
     final totalItems = openOrders.fold(
         0, (s, o) => s + o.items.fold(0, (s2, i) => s2 + i.activeQuantity));
@@ -1444,9 +1529,13 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                 const SizedBox(height: 5),
                 _totalRow('Tax (${(taxRate * 100).toStringAsFixed(0)}%)', _currency.format(tax), muted: true),
               ],
-              if (serviceChargeRate > 0) ...[
+              if (serviceChargeRate > 0 && serviceCharge > 0) ...[
                 const SizedBox(height: 5),
-                _totalRow('Service (${(serviceChargeRate * 100).toStringAsFixed(0)}%)', _currency.format(serviceCharge), muted: true),
+                _totalRow(
+                  hasTakeaway
+                      ? 'Service (${(serviceChargeRate * 100).toStringAsFixed(0)}%) — dine-in only'
+                      : 'Service (${(serviceChargeRate * 100).toStringAsFixed(0)}%)',
+                  _currency.format(serviceCharge), muted: true),
               ],
               const SizedBox(height: 10),
               Container(
@@ -1500,15 +1589,19 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  isChild
-                      ? 'Add-On #${order.orderNumber}'
-                      : 'Ticket #${order.orderNumber}',
+                  order.type == OrderType.takeaway
+                      ? '📦 Takeaway #${order.orderNumber}'
+                      : isChild
+                          ? 'Add-On #${order.orderNumber}'
+                          : 'Ticket #${order.orderNumber}',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: isChild
-                        ? Colors.teal.shade700
-                        : Colors.blue.shade700,
+                    color: order.type == OrderType.takeaway
+                        ? Colors.amber.shade700
+                        : isChild
+                            ? Colors.teal.shade700
+                            : Colors.blue.shade700,
                   ),
                 ),
               ),
@@ -1802,8 +1895,91 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
           ),
         ),
 
-        // Cart footer
-        Container(
+        // ── Cart review (per-item TO GO toggles) ─────────────────────────
+        if (cartCount > 0) ...[
+          Builder(builder: (context) {
+            final hasTakeawayInCart = _addCart.any((i) => _cartItemTakeaway[i.id] ?? false);
+            final hasDineInInCart   = _addCart.any((i) => !(_cartItemTakeaway[i.id] ?? false));
+            final isMixedCart = hasTakeawayInCart && hasDineInInCart;
+            return Container(
+              constraints: const BoxConstraints(maxHeight: 200),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
+                    child: Row(children: [
+                      Text('ORDER ITEMS',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.grey.shade400,
+                              letterSpacing: 0.8)),
+                      const Spacer(),
+                      if (isMixedCart)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                                color: Colors.amber.withOpacity(0.35)),
+                          ),
+                          child: const Text('📦 Mixed — 2 kitchen tickets',
+                              style: TextStyle(
+                                  color: Colors.amber,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700)),
+                        )
+                      else
+                        Text('Tap 🛍️ TO GO to mark takeaway',
+                            style: TextStyle(
+                                fontSize: 10, color: Colors.grey.shade400)),
+                    ]),
+                  ),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      itemCount: _addCart.length,
+                      itemBuilder: (_, i) =>
+                          _buildCartItemRow(_addCart[i]),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+
+        // ── Cart footer ───────────────────────────────────────────────────
+        Builder(builder: (context) {
+          final hasTakeawayInCart = _addCart.any((i) => _cartItemTakeaway[i.id] ?? false);
+          final hasDineInInCart   = _addCart.any((i) => !(_cartItemTakeaway[i.id] ?? false));
+          final isMixedCart     = hasTakeawayInCart && hasDineInInCart;
+          final allTakeawayCart = hasTakeawayInCart && !hasDineInInCart;
+
+          final btnLabel = isMixedCart
+              ? (isAddOn ? 'Send 2 Tickets' : isNewTab ? 'Open Mixed Tab' : 'Add (2 Tickets)')
+              : allTakeawayCart
+                  ? (isAddOn ? 'Send Takeaway' : isNewTab ? 'Open Takeaway Tab' : 'Add Takeaway')
+                  : isAddOn
+                      ? 'Send to Kitchen'
+                      : isNewTab ? 'Open Tab' : 'Add to Tab';
+
+          final btnColor = (isMixedCart || allTakeawayCart)
+              ? Colors.amber.shade700
+              : isAddOn
+                  ? const Color(0xFF0D9488)
+                  : _kOrange;
+
+          return Container(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -1835,14 +2011,17 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                 onPressed: () => setState(() {
                   _isAddingItems = false;
                   _addCart.clear();
+                  _cartItemTakeaway.clear();
                   if (isNewTab) _selectedTableId = null;
                 }),
                 child: const Text('Cancel'),
               ),
               const SizedBox(width: 10),
               ElevatedButton.icon(
-                onPressed:
-                    cartCount > 0 && !_isProcessing && canEditSection(ref, 'restaurant_tables') ? _confirmAddItems : null,
+                onPressed: cartCount > 0 && !_isProcessing &&
+                        canEditSection(ref, 'restaurant_tables')
+                    ? _confirmAddItems
+                    : null,
                 icon: _isProcessing
                     ? const SizedBox(
                         width: 14,
@@ -1850,30 +2029,89 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white))
                     : Icon(
-                        isAddOn
-                            ? Icons.send_rounded
-                            : Icons.check_rounded,
+                        isAddOn ? Icons.send_rounded : Icons.check_rounded,
                         size: 16),
-                label: Text(isAddOn
-                    ? 'Send to Kitchen'
-                    : isNewTab
-                        ? 'Open Tab'
-                        : 'Add to Tab'),
+                label: Text(btnLabel),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor:
-                      isAddOn ? const Color(0xFF0D9488) : _kOrange,
+                  backgroundColor: btnColor,
                   foregroundColor: Colors.white,
                   elevation: 0,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 10),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10)),
                 ),
               ),
             ],
           ),
-        ),
+        );
+        }),
       ],
+    );
+  }
+
+  Widget _buildCartItemRow(OrderItem item) {
+    final isTakeaway = _cartItemTakeaway[item.id] ?? false;
+    final modSummary = item.selectedModifiers.entries
+        .where((e) => e.value.isNotEmpty)
+        .map((e) {
+          final counts = <String, int>{};
+          for (final n in e.value) counts[n] = (counts[n] ?? 0) + 1;
+          final s = counts.entries
+              .map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key)
+              .join(', ');
+          return '${e.key}: $s';
+        })
+        .join(' · ');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(children: [
+        Text('${item.quantity}×',
+            style: const TextStyle(
+                fontWeight: FontWeight.w700, color: _kOrange, fontSize: 13)),
+        const SizedBox(width: 10),
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(item.menuItem.name,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            if (modSummary.isNotEmpty)
+              Text(modSummary,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+          ],
+        )),
+        GestureDetector(
+          onTap: () => setState(
+              () => _cartItemTakeaway[item.id] = !isTakeaway),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              color: isTakeaway
+                  ? Colors.amber.withOpacity(0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isTakeaway
+                    ? Colors.amber.shade400
+                    : Colors.grey.shade300,
+              ),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Text('🛍️', style: TextStyle(fontSize: 11)),
+              const SizedBox(width: 4),
+              Text('TO GO',
+                  style: TextStyle(
+                      color: isTakeaway
+                          ? Colors.amber.shade800
+                          : Colors.grey.shade400,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700)),
+            ]),
+          ),
+        ),
+      ]),
     );
   }
 
