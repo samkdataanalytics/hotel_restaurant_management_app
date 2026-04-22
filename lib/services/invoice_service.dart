@@ -12,6 +12,7 @@ import '../models/booking.dart';
 import '../models/room.dart';
 import '../models/expense.dart';
 import '../models/guest.dart';
+import '../models/menu_item.dart';
 import '../models/restaurant_order.dart';
 import '../providers/hotel_session.dart';
 
@@ -543,6 +544,80 @@ class InvoiceService {
     );
   }
 
+  /// Expands one OrderItem into one or more invoice row maps.
+  ///
+  /// When a modifier has allowMultiple=true and the guest selected more than
+  /// one option (e.g. Size: Small + Medium), each option becomes its own row
+  /// with its own price so the invoice clearly shows what was ordered.
+  ///
+  /// Single-select modifiers are always shown as one row with the option
+  /// names indented below the item name.
+  List<Map<String, dynamic>> _itemRows(OrderItem item, NumberFormat fmt) {
+    if (item.isFullyRefunded) return [];
+
+    final qty = item.activeQuantity;
+
+    // Separate multi-select (allowMultiple + >1 chosen) from single-select mods
+    final multiEntries = <MapEntry<MenuModifier, List<String>>>[];
+    double singleAdj = 0.0;
+    final singleDescParts = <String>[];
+
+    for (final mod in item.menuItem.modifiers) {
+      final selected = item.selectedModifiers[mod.name] ?? [];
+      if (selected.isEmpty) continue;
+
+      if (mod.allowMultiple && selected.length > 1) {
+        multiEntries.add(MapEntry(mod, selected));
+      } else {
+        final optName = selected.first;
+        final opt = mod.options.firstWhere(
+          (o) => o.name == optName,
+          orElse: () => MenuModifierOption(name: optName),
+        );
+        singleAdj += opt.priceAdjustment;
+        singleDescParts.add('${mod.name}: $optName');
+      }
+    }
+
+    if (multiEntries.isEmpty) {
+      // No expansion — single row with modifiers on the second line
+      final descSuffix = singleDescParts.isEmpty ? '' : '\n${singleDescParts.join(' · ')}';
+      return [{
+        'isSubHeader': false,
+        'desc':  '${item.menuItem.name}$descSuffix',
+        'qty':   '$qty',
+        'price': fmt.format(item.unitPrice),
+        'total': fmt.format(item.subtotal),
+      }];
+    }
+
+    // Expand: one row per selected option in each allowMultiple modifier
+    final rows = <Map<String, dynamic>>[];
+    for (final entry in multiEntries) {
+      final mod = entry.key;
+      for (final optName in entry.value) {
+        final opt = mod.options.firstWhere(
+          (o) => o.name == optName,
+          orElse: () => MenuModifierOption(name: optName),
+        );
+        final variantPrice = item.menuItem.price + singleAdj + opt.priceAdjustment;
+
+        // Build description: item name + this variant option + any single-selects
+        final variantParts = ['${mod.name}: $optName', ...singleDescParts];
+        final desc = '${item.menuItem.name}\n${variantParts.join(' · ')}';
+
+        rows.add({
+          'isSubHeader': false,
+          'desc':  desc,
+          'qty':   '$qty',
+          'price': fmt.format(variantPrice),
+          'total': fmt.format(variantPrice * qty),
+        });
+      }
+    }
+    return rows;
+  }
+
   pw.Widget _buildFnbTable(
     List<RestaurantOrder> orders,
     double taxRate,
@@ -556,29 +631,7 @@ class InvoiceService {
       rowData.add({'isSubHeader': true, 'label': 'Order #${order.orderNumber}'});
 
       for (final item in order.items) {
-        if (item.isFullyRefunded) continue;
-        // Build description with modifier details
-        String desc = item.menuItem.name;
-        if (item.selectedModifiers.isNotEmpty) {
-          final modParts = item.selectedModifiers.entries
-              .where((e) => e.value.isNotEmpty)
-              .map((e) {
-                final counts = <String, int>{};
-                for (final n in e.value) {
-                  counts[n] = (counts[n] ?? 0) + 1;
-                }
-                final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
-                return '${e.key}: $summary';
-              }).toList();
-          if (modParts.isNotEmpty) desc += '\n${modParts.join(' · ')}';
-        }
-        rowData.add({
-          'isSubHeader': false,
-          'desc':  desc,
-          'qty':   '${item.activeQuantity}',
-          'price': fmt.format(item.unitPrice),
-          'total': fmt.format(item.subtotal),
-        });
+        rowData.addAll(_itemRows(item, fmt));
       }
 
       // Discount sub-line

@@ -428,134 +428,196 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   // ── Order card (Pending / Preparing / Ready) ─────────────────────────────────
   Widget _buildOrderCard(
       RestaurantOrder order, OrderStatus nextStatus, MaterialColor color) {
-    final age    = DateTime.now().difference(order.createdAt);
-    final isNew  = order.status == OrderStatus.pending && age.inSeconds < 30;
-    final isAddon = order.parentOrderId != null;
+    final age        = DateTime.now().difference(order.createdAt);
+    final isNew      = order.status == OrderStatus.pending && age.inSeconds < 30;
+    final isAddon    = order.parentOrderId != null;
+    final isTakeaway = order.type == OrderType.takeaway;
 
     return Card(
-      color: _cardBgColor(order.createdAt),
+      color: isTakeaway ? const Color(0xFF2D2208) : _cardBgColor(order.createdAt),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: _cardBorderSide(order.createdAt, isNew),
+        side: isTakeaway
+            ? const BorderSide(color: Colors.amber, width: 2)
+            : _cardBorderSide(order.createdAt, isNew),
       ),
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('#${order.orderNumber}',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold)),
-                Text(_timeFormat.format(order.createdAt),
-                    style: TextStyle(
-                        color: Colors.grey.shade400, fontSize: 14)),
-              ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Takeaway banner ───────────────────────────────────────────────
+          if (isTakeaway)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: const BoxDecoration(
+                color: Color(0xFFB45309),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('📦', style: TextStyle(fontSize: 15)),
+                  SizedBox(width: 8),
+                  Text('PACK FOR TAKEAWAY',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                          letterSpacing: 1.5)),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      if (order.type == OrderType.roomService)
-                        _badge('ROOM SERVICE', Colors.purple.withOpacity(0.3), Colors.purpleAccent.shade100)
-                      else
-                        _badge(order.type.name.toUpperCase(), Colors.black38, Colors.white70),
-                      if (order.type == OrderType.roomService && order.tableId != null)
-                        _badge(_roomName(order.tableId),
-                            Colors.purple.withOpacity(0.2), Colors.purple.shade200)
-                      else if (order.tableId != null)
-                        _badge(_tableName(order.tableId),
-                            Colors.blue.withOpacity(0.3), Colors.blue),
-                      if (isAddon)
-                        _badge('ADD-ON', Colors.amber.withOpacity(0.25), Colors.amber.shade300),
-                      if (isNew)
-                        _badge('NEW', Colors.orange.shade700, Colors.white),
-                    ],
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('#${order.orderNumber}',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold)),
+                    Text(_timeFormat.format(order.createdAt),
+                        style: TextStyle(
+                            color: Colors.grey.shade400, fontSize: 14)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (order.type == OrderType.roomService)
+                            _badge('ROOM SERVICE', Colors.purple.withOpacity(0.3), Colors.purpleAccent.shade100)
+                          else if (isTakeaway)
+                            _badge('TAKEAWAY', Colors.amber.withOpacity(0.3), Colors.amber.shade300)
+                          else
+                            _badge(order.type.name.toUpperCase(), Colors.black38, Colors.white70),
+                          if (order.type == OrderType.roomService && order.tableId != null)
+                            _badge(_roomName(order.tableId),
+                                Colors.purple.withOpacity(0.2), Colors.purple.shade200)
+                          else if (order.tableId != null)
+                            _badge(_tableName(order.tableId),
+                                Colors.blue.withOpacity(0.3), Colors.blue),
+                          if (isAddon)
+                            _badge('ADD-ON', Colors.amber.withOpacity(0.25), Colors.amber.shade300),
+                          if (isNew)
+                            _badge('NEW', Colors.orange.shade700, Colors.white),
+                        ],
+                      ),
+                    ),
+                    _ElapsedTimerBadge(createdAt: order.createdAt),
+                  ],
+                ),
+                const Divider(color: Colors.white24, height: 24),
+                ...order.items.map((item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${item.quantity}x',
+                              style: TextStyle(
+                                  color: isTakeaway
+                                      ? Colors.amber.shade300
+                                      : color.shade300,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item.menuItem.name,
+                                    style: const TextStyle(
+                                        color: Colors.white, fontSize: 16)),
+                                if (item.selectedModifiers.isNotEmpty)
+                                  ...item.selectedModifiers.entries
+                                      .where((e) => e.value.isNotEmpty)
+                                      .map((e) {
+                                        final counts = <String, int>{};
+                                        for (final n in e.value) {
+                                          counts[n] = (counts[n] ?? 0) + 1;
+                                        }
+                                        final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
+                                        return Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: Text(
+                                            '${e.key}: $summary',
+                                            style: TextStyle(
+                                              color: Colors.blue.shade200,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        );
+                                      }),
+                                if (item.notes.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      '⚠ ${item.notes}',
+                                      style: TextStyle(
+                                        color: Colors.orange.shade300,
+                                        fontSize: 12,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
+                // Reminder shown in the Ready column for takeaway
+                if (isTakeaway && nextStatus == OrderStatus.served) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.amber.withOpacity(0.35)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Text('📦', style: TextStyle(fontSize: 13)),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text('Hand to customer — do not plate',
+                              style: TextStyle(
+                                  color: Colors.amber,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: canEditSection(ref, 'restaurant_kitchen') ? () => _updateStatus(order, nextStatus) : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isTakeaway ? Colors.amber.shade700 : color.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: Text(
+                    isTakeaway && nextStatus == OrderStatus.ready
+                        ? 'Mark as Ready — Packed ✓'
+                        : 'Mark as ${nextStatus.name[0].toUpperCase()}${nextStatus.name.substring(1)}',
                   ),
                 ),
-                _ElapsedTimerBadge(createdAt: order.createdAt),
               ],
             ),
-            const Divider(color: Colors.white24, height: 24),
-            ...order.items.map((item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('${item.quantity}x',
-                          style: TextStyle(
-                              color: color.shade300,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16)),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(item.menuItem.name,
-                                style: const TextStyle(
-                                    color: Colors.white, fontSize: 16)),
-                            if (item.selectedModifiers.isNotEmpty)
-                              ...item.selectedModifiers.entries
-                                  .where((e) => e.value.isNotEmpty)
-                                  .map((e) {
-                                    final counts = <String, int>{};
-                                    for (final n in e.value) {
-                                      counts[n] = (counts[n] ?? 0) + 1;
-                                    }
-                                    final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
-                                    return Padding(
-                                      padding: const EdgeInsets.only(top: 2),
-                                      child: Text(
-                                        '${e.key}: $summary',
-                                        style: TextStyle(
-                                          color: Colors.blue.shade200,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                            if (item.notes.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  '⚠ ${item.notes}',
-                                  style: TextStyle(
-                                    color: Colors.orange.shade300,
-                                    fontSize: 12,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                )),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: canEditSection(ref, 'restaurant_kitchen') ? () => _updateStatus(order, nextStatus) : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color.shade700,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              child: Text(
-                  'Mark as ${nextStatus.name[0].toUpperCase()}${nextStatus.name.substring(1)}'),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -614,8 +676,15 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
               spacing: 6,
               runSpacing: 4,
               children: [
-                _badge(parent.type.name.toUpperCase(), Colors.black38,
-                    Colors.white70),
+                if (orderGroup.any((o) => o.type == OrderType.dineIn))
+                  _badge('DINE-IN', Colors.blue.withOpacity(0.2), Colors.blue.shade300),
+                if (orderGroup.any((o) => o.type == OrderType.takeaway))
+                  _badge('📦 TAKEAWAY', Colors.amber.withOpacity(0.2), Colors.amber.shade300),
+                if (orderGroup.any((o) => o.type == OrderType.roomService))
+                  _badge('ROOM SERVICE', Colors.purple.withOpacity(0.2), Colors.purple.shade300),
+                if (!orderGroup.any((o) => o.type == OrderType.dineIn ||
+                    o.type == OrderType.takeaway || o.type == OrderType.roomService))
+                  _badge(parent.type.name.toUpperCase(), Colors.black38, Colors.white70),
                 if (parent.tableId != null)
                   _badge(
                       _tableName(parent.tableId),
@@ -632,16 +701,21 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
             ...orderGroup.expand((o) {
               final visibleItems =
                   o.items.where((i) => !i.isFullyRefunded).toList();
+              final isTakeawayTicket = o.type == OrderType.takeaway;
               return [
                 if (isMulti)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
                     child: Text(
-                      o.parentOrderId != null
-                          ? '— Add-On #${o.orderNumber}'
-                          : '— Ticket #${o.orderNumber}',
+                      isTakeawayTicket
+                          ? '📦 Takeaway #${o.orderNumber}'
+                          : o.parentOrderId != null
+                              ? '— Add-On #${o.orderNumber}'
+                              : '— Ticket #${o.orderNumber}',
                       style: TextStyle(
-                          color: o.parentOrderId != null
+                          color: isTakeawayTicket
+                              ? Colors.amber.shade300
+                              : o.parentOrderId != null
                               ? Colors.teal.shade300
                               : Colors.blue.shade300,
                           fontSize: 12,
@@ -976,11 +1050,26 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
     String? bookingId,
     String? roomId,
   }) async {
-    final parent = widget.orderGroup.first;
-    final itemsTotal = widget.orderGroup.fold(0.0, (s, o) => s + o.itemsTotal);
+    final orders    = widget.orderGroup;
+    final parent    = orders.first;
+    final settings  = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+    final taxRate           = settings?.taxRate           ?? 0.0;
+    final serviceChargeRate = settings?.serviceChargeRate ?? 0.0;
+
+    final itemsTotal = orders.fold(0.0, (s, o) => s + o.itemsTotal);
     final dv = _discountValue(itemsTotal);
     final String? dType  = dv > 0 ? _discountType : null;
     final double  dAmt   = _discountAmount;
+
+    final subtotal = (itemsTotal - dv).clamp(0.0, double.infinity);
+    final tax      = subtotal * taxRate;
+    // Service charge only on dine-in / room-service orders
+    final dineInItemsTotal = orders
+        .where((o) => o.type != OrderType.takeaway && o.type != OrderType.delivery)
+        .fold(0.0, (s, o) => s + o.itemsTotal);
+    final dineInFraction = itemsTotal > 0 ? dineInItemsTotal / itemsTotal : 1.0;
+    final svc      = (dineInFraction * subtotal) * serviceChargeRate;
+    final finalTotal = subtotal + tax + svc;
 
     // Apply discount to first order in DB
     if (dType != null) {
@@ -997,23 +1086,25 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
         paymentStatus: paymentStatus,
         bookingId: bookingId,
         roomId: roomId,
+        finalTotal: finalTotal,
       );
     } else {
-      final nums = widget.orderGroup.map((o) => '#${o.orderNumber}').join(', ');
-      for (final o in widget.orderGroup) {
+      final nums = orders.map((o) => '#${o.orderNumber}').join(', ');
+      for (final o in orders) {
         await widget.restaurantService.collectTablePayment(
           orderId: o.id,
           paymentStatus: paymentStatus,
           bookingId: bookingId,
-          roomId: roomId,
+          // Pass roomId: null here — we create ONE combined expense below
+          // to avoid double-billing (collectTablePayment would also add an expense).
+          roomId: null,
         );
       }
       if (paymentStatus == PaymentStatus.chargedToRoom && bookingId != null) {
-        final subtotal = (itemsTotal - dv).clamp(0.0, double.infinity);
         await widget.bookingService.addExpense(Expense(
           id: _uuid.v4(),
           description: 'Restaurant Orders $nums',
-          amount: subtotal,
+          amount: finalTotal,
           date: DateTime.now(),
           category: ExpenseCategory.restaurant,
           isBillable: true,
@@ -1039,8 +1130,15 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
     final dv       = _discountValue(itemsTotal);
     final subtotal = (itemsTotal - dv).clamp(0.0, double.infinity);
     final tax      = subtotal * taxRate;
-    final svc      = subtotal * serviceChargeRate;
+    // Service charge applies only to dine-in / room-service orders, not takeaway
+    final dineInItemsTotal = orders
+        .where((o) => o.type != OrderType.takeaway && o.type != OrderType.delivery)
+        .fold(0.0, (s, o) => s + o.itemsTotal);
+    final dineInFraction = itemsTotal > 0 ? dineInItemsTotal / itemsTotal : 1.0;
+    final svc      = (dineInFraction * subtotal) * serviceChargeRate;
     final total    = subtotal + tax + svc;
+    final hasMixedTypes = orders.any((o) => o.type == OrderType.takeaway || o.type == OrderType.delivery)
+        && orders.any((o) => o.type != OrderType.takeaway && o.type != OrderType.delivery);
     final titleText = orders.length == 1
         ? 'Collect Payment — #${orders.first.orderNumber}'
         : 'Collect Payment — ${orders.map((o) => "#${o.orderNumber}").join(" + ")}';
@@ -1162,7 +1260,12 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Service (${(serviceChargeRate * 100).toStringAsFixed(0)}%)', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                              Text(
+                                hasMixedTypes
+                                    ? 'Service (${(serviceChargeRate * 100).toStringAsFixed(0)}%) — dine-in only'
+                                    : 'Service (${(serviceChargeRate * 100).toStringAsFixed(0)}%)',
+                                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                              ),
                               Text(_currency.format(svc), style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                             ],
                           ),

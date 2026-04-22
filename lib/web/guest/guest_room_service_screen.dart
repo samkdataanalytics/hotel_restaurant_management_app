@@ -389,6 +389,53 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
   double get _cartService => _cartSubtotal * _serviceRate;
   double get _cartTotal => _cartSubtotal + _cartTax + _cartService;
 
+  // ── Order more (with ready-state warning) ────────────────────────────────────
+
+  Future<void> _onOrderMore() async {
+    if (_orders.any((o) => o.status == 'ready')) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: _C.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: _C.divider),
+          ),
+          title: const Row(children: [
+            Icon(Icons.delivery_dining_rounded, color: _C.purple, size: 20),
+            SizedBox(width: 8),
+            Text('Order already on its way',
+                style: TextStyle(color: _C.text, fontSize: 16, fontWeight: FontWeight.w700)),
+          ]),
+          content: const Text(
+            'Your current order is already being delivered to your room.\n\n'
+            'Adding more items will create a separate order that will be prepared and delivered after.',
+            style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.55),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(_, false),
+              child: const Text('Cancel', style: TextStyle(color: _C.subtext)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(_, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _C.purple,
+                foregroundColor: _C.bg,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true && mounted) setState(() => _addingMore = true);
+    } else {
+      setState(() => _addingMore = true);
+    }
+  }
+
   // ── Place order ──────────────────────────────────────────────────────────────
 
   Future<void> _placeOrder() async {
@@ -745,12 +792,12 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
           const SizedBox(height: 24),
 
           // Add more button
-          if (anyActive)
+          if (anyActive) ...[
             SizedBox(
               width: double.infinity,
               height: 48,
               child: OutlinedButton.icon(
-                onPressed: () => setState(() { _addingMore = true; }),
+                onPressed: () => _onOrderMore(),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: _accent),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -759,6 +806,22 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
                 label: Text('Order More Items', style: TextStyle(color: _accent)),
               ),
             ),
+            if (_orders.any((o) => o.status == 'ready')) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(Icons.delivery_dining_rounded, color: _C.purple, size: 14),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'Your order is already on its way. New items will be a separate delivery.',
+                      style: TextStyle(color: _C.purple, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
         ],
       ),
     );

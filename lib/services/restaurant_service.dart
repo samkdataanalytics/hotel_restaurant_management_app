@@ -483,6 +483,7 @@ class RestaurantService {
     required String tableId,
     required List<OrderItem> items,
     String? parentOrderId,
+    OrderType type = OrderType.dineIn,
   }) async {
     final ts = DateTime.now();
     final orderNumber = ts.millisecondsSinceEpoch.toString().substring(7);
@@ -490,7 +491,7 @@ class RestaurantService {
       id: _uuid.v4(),
       orderNumber: orderNumber,
       tableId: tableId,
-      type: OrderType.dineIn,
+      type: type,
       status: OrderStatus.pending,
       paymentStatus: PaymentStatus.unpaid,
       createdAt: ts,
@@ -618,6 +619,9 @@ class RestaurantService {
     required PaymentStatus paymentStatus,
     String? bookingId,
     String? roomId,
+    // Full amount including tax + service charge; falls back to sum of totalAmount
+    // when not provided (for backwards compatibility with POS and other callers).
+    double? finalTotal,
   }) async {
     final openOrders = await getOpenOrdersForTable(tableId);
     if (openOrders.isEmpty) return [];
@@ -645,12 +649,12 @@ class RestaurantService {
     if (paymentStatus == PaymentStatus.chargedToRoom &&
         bookingId != null &&
         roomId != null) {
-      final totalAmount = openOrders.fold(0.0, (s, o) => s + o.totalAmount);
+      final chargeAmount = finalTotal ?? openOrders.fold<double>(0.0, (s, o) => s + o.totalAmount);
       final nums = openOrders.map((o) => '#${o.orderNumber}').join(', ');
       await _bookingService.addExpense(Expense(
         id: _uuid.v4(),
         description: 'Restaurant Orders $nums',
-        amount: totalAmount,
+        amount: chargeAmount,
         category: ExpenseCategory.restaurant,
         date: DateTime.now(),
         bookingId: bookingId,
