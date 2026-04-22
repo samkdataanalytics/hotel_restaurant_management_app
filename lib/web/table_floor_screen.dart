@@ -950,6 +950,74 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
     }
   }
 
+  // ── Cancel individual order (ticket) from the table panel ───────────────────
+
+  Future<void> _cancelOrderTable(RestaurantOrder order) async {
+    final isPending = order.status == OrderStatus.pending;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(children: [
+          Icon(Icons.cancel_outlined,
+              color: Colors.redAccent, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isPending ? 'Cancel this ticket?' : 'Cancel — food may be ready',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ]),
+        content: Text(
+          isPending
+              ? 'Ticket #${order.orderNumber} will be cancelled and inventory restored.'
+              : 'The kitchen is already working on ticket #${order.orderNumber}. '
+                'Cancelling will NOT restore inventory — food is being prepared.',
+          style: TextStyle(
+            color: isPending ? Colors.black87 : Colors.orange.shade700,
+            fontSize: 14, height: 1.55,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_, false),
+            child: const Text('Keep'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(_, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                elevation: 0),
+            child: const Text('Cancel Ticket'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isProcessing = true);
+    try {
+      await _service.cancelOrder(order.id);
+      await _load(silent: true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to cancel ticket: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
   // ── Collect payment (settles all open orders for the table at once)
 
   Future<void> _collectPayment(
@@ -1491,10 +1559,22 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                   onPressed: () => showDialog(
                         context: context,
                         builder: (_) => RestaurantInvoiceDialog(
-                            order: openOrders.last, 
+                            order: openOrders.last,
                             table: table,
                             allOrders: openOrders.length > 1 ? openOrders : null),
                       )),
+              // Single-ticket cancel — for multi-ticket, cancel is per sub-header row
+              if (openOrders.length == 1 &&
+                  openOrders.first.status != OrderStatus.served &&
+                  openOrders.first.status != OrderStatus.cancelled) ...[
+                const SizedBox(width: 8),
+                _actionBtn(Icons.cancel_outlined, 'Cancel Order',
+                    Colors.red.shade400,
+                    outlined: true,
+                    onPressed: _isProcessing
+                        ? null
+                        : () => _cancelOrderTable(openOrders.first)),
+              ],
               const SizedBox(width: 8),
               _actionBtn(Icons.payment_rounded, 'Collect Payment', _kGreen,
                   onPressed: _isProcessing || !canEditSection(ref, 'restaurant_tables')
@@ -1610,12 +1690,36 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                 _statusLabelShort(order.status),
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
               ),
+              const Spacer(),
+              if (order.status != OrderStatus.served &&
+                  order.status != OrderStatus.cancelled)
+                InkWell(
+                  onTap: () => _cancelOrderTable(order),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 3),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.cancel_outlined,
+                            size: 13, color: Colors.red.shade400),
+                        const SizedBox(width: 3),
+                        Text('Cancel',
+                            style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.red.shade400,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         ));
       }
       for (final item in order.items) {
-        widgets.add(_buildOrderItemRow(item));
+        widgets.add(_buildOrderItemRow(item, order));
       }
     }
     return widgets;
@@ -1636,15 +1740,19 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
     }
   }
 
-  Widget _buildOrderItemRow(OrderItem item) {
+  Widget _buildOrderItemRow(OrderItem item, RestaurantOrder order) {
     final fullyRefunded = item.isFullyRefunded;
+    final canCancel = !fullyRefunded &&
+        order.status != OrderStatus.served &&
+        order.status != OrderStatus.cancelled;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
       decoration: BoxDecoration(
         color: fullyRefunded ? Colors.grey.shade50 : Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(
+            color: fullyRefunded ? Colors.grey.shade200 : Colors.grey.shade200),
       ),
       child: Row(
         children: [
@@ -1700,7 +1808,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                       style: TextStyle(
                           fontSize: 11, color: Colors.grey.shade500)),
                 if (item.refundedQuantity > 0 && !fullyRefunded)
-                  Text('${item.refundedQuantity} unit(s) refunded',
+                  Text('${item.refundedQuantity} unit(s) cancelled',
                       style: TextStyle(
                           fontSize: 11, color: Colors.orange.shade600)),
               ],
@@ -1720,9 +1828,153 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                         ? Colors.grey.shade400
                         : Colors.black87)),
           ),
+          if (canCancel) ...[
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () => _showCancelItemDialog(order, item),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: Icon(Icons.remove_circle_outline_rounded,
+                    size: 18, color: Colors.red.shade300),
+              ),
+            ),
+          ] else
+            const SizedBox(width: 30),
         ],
       ),
     );
+  }
+
+  Future<void> _showCancelItemDialog(
+      RestaurantOrder order, OrderItem item) async {
+    final isPending = order.status == OrderStatus.pending;
+    int cancelQty = 1;
+
+    final confirmed = await showDialog<int>(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: Row(children: [
+            Icon(Icons.remove_circle_outline_rounded,
+                color: Colors.red.shade400, size: 20),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text('Remove Item',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
+          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item.menuItem.name,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 14)),
+              if (item.selectedModifiers.isNotEmpty)
+                Text(
+                  item.selectedModifiers.entries
+                      .where((e) => e.value.isNotEmpty)
+                      .map((e) => '${e.key}: ${e.value.join(", ")}')
+                      .join(' · '),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              const SizedBox(height: 16),
+              if (item.activeQuantity > 1) ...[
+                Text('How many to remove?',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      onPressed: cancelQty > 1
+                          ? () => setSt(() => cancelQty--)
+                          : null,
+                      icon: const Icon(Icons.remove_circle_outline),
+                      color: Colors.red.shade400,
+                    ),
+                    Text('$cancelQty',
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.w800)),
+                    const Text(' / ', style: TextStyle(color: Colors.grey)),
+                    Text('${item.activeQuantity}',
+                        style: TextStyle(
+                            fontSize: 16, color: Colors.grey.shade500)),
+                    IconButton(
+                      onPressed: cancelQty < item.activeQuantity
+                          ? () => setSt(() => cancelQty++)
+                          : null,
+                      icon: const Icon(Icons.add_circle_outline),
+                      color: Colors.green.shade400,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (!isPending)
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(children: [
+                    Icon(Icons.warning_amber_rounded,
+                        color: Colors.orange.shade700, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'The kitchen is already preparing this order. '
+                        'Inventory will not be restored.',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.orange.shade700),
+                      ),
+                    ),
+                  ]),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Keep'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, cancelQty),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade400,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                  elevation: 0),
+              child: const Text('Remove'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed == null || !mounted) return;
+
+    setState(() => _isProcessing = true);
+    try {
+      await _service.cancelOrderItem(order.id, item.id, confirmed);
+      await _load(silent: true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to remove item: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
   }
 
   // ─── Item picker panel ────────────────────────────────
@@ -1747,6 +1999,17 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
     }
     final cartCount = _addCart.fold(0, (s, v) => s + v.quantity);
     final cartTotal = _addCart.fold(0.0, (s, e) => s + e.subtotal);
+    // Service charge only on dine-in items; recomputed on every setState so
+    // toggling TO GO instantly adjusts the footer total.
+    final pickerSettings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+    final _pickerTaxRate = pickerSettings?.taxRate ?? 0.0;
+    final _pickerSvcRate = pickerSettings?.serviceChargeRate ?? 0.0;
+    final cartDineInSubtotal = _addCart
+        .where((i) => !(_cartItemTakeaway[i.id] ?? false))
+        .fold(0.0, (s, e) => s + e.subtotal);
+    final cartTax = cartTotal * _pickerTaxRate;
+    final cartSvc = cartDineInSubtotal * _pickerSvcRate;
+    final cartTotalWithCharges = cartTotal + cartTax + cartSvc;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1995,7 +2258,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                       color: _kOrangeBg,
                       borderRadius: BorderRadius.circular(8)),
                   child: Text(
-                    '$cartCount item${cartCount == 1 ? '' : 's'}  ·  ${_currency.format(cartTotal)}',
+                    '$cartCount item${cartCount == 1 ? '' : 's'}  ·  ${_currency.format(cartTotalWithCharges)}',
                     style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,

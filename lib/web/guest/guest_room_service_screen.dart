@@ -114,6 +114,9 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
   // Polling timer for order status
   Timer? _pollTimer;
 
+  // Cancellation
+  String? _cancellingOrderId;
+
   // Feedback / session
   bool _showFeedback = false;
   bool _sessionEnded = false;
@@ -433,6 +436,144 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
       if (confirmed == true && mounted) setState(() => _addingMore = true);
     } else {
       setState(() => _addingMore = true);
+    }
+  }
+
+  // ── Cancel order ─────────────────────────────────────────────────────────────
+
+  Future<void> _cancelOrder(_PlacedOrder order) async {
+    // Re-fetch live status before showing dialog — avoids stale UI state.
+    final live = await _service.fetchOrderStatus(order.id);
+    if (!mounted) return;
+
+    if (live != null && live.status != 'pending') {
+      // Already past pending — cannot cancel
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: _C.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: _C.divider),
+          ),
+          title: const Row(children: [
+            Icon(Icons.restaurant_rounded, color: Colors.blue, size: 20),
+            SizedBox(width: 8),
+            Text('Order already being prepared',
+                style: TextStyle(color: _C.text, fontSize: 16, fontWeight: FontWeight.w700)),
+          ]),
+          content: const Text(
+            'The kitchen has already started preparing your order. '
+            'Please speak to a staff member if you need to cancel.',
+            style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.55),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(_),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: _C.purple, foregroundColor: _C.bg,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: _C.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: _C.divider),
+        ),
+        title: const Row(children: [
+          Icon(Icons.cancel_outlined, color: Colors.redAccent, size: 20),
+          SizedBox(width: 8),
+          Text('Cancel this order?',
+              style: TextStyle(color: _C.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        ]),
+        content: const Text(
+          'Your order will be cancelled and removed from the kitchen queue.',
+          style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_, false),
+            child: const Text('Keep Order', style: TextStyle(color: _C.subtext)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(_, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0),
+            child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cancellingOrderId = order.id);
+    try {
+      final result = await _service.cancelOrder(order.id);
+      if (!mounted) return;
+      if (result == 'cancelled') {
+        setState(() {
+          order.status = 'cancelled';
+          order.paymentStatus = 'unpaid';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order cancelled.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      } else if (result == 'not_cancellable') {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: _C.surface,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: _C.divider)),
+            title: const Row(children: [
+              Icon(Icons.restaurant_rounded, color: Colors.blue, size: 20),
+              SizedBox(width: 8),
+              Text('Too late to cancel',
+                  style: TextStyle(color: _C.text, fontSize: 16, fontWeight: FontWeight.w700)),
+            ]),
+            content: const Text(
+              'The kitchen started preparing your order just now. '
+              'Please speak to a staff member.',
+              style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.55),
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(_),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: _C.purple, foregroundColor: _C.bg,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    elevation: 0),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error cancelling order: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cancellingOrderId = null);
     }
   }
 
@@ -872,6 +1013,46 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
           Text(fmt.format(order.subtotal),
               style: const TextStyle(color: _C.text, fontWeight: FontWeight.w700, fontSize: 14)),
         ]),
+        // ── Cancel UI ─────────────────────────────────────────────────────
+        if (order.status == 'pending') ...[
+          const SizedBox(height: 10),
+          _cancellingOrderId == order.id
+              ? const Center(
+                  child: SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.redAccent, strokeWidth: 2),
+                  ),
+                )
+              : SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _cancelOrder(order),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.redAccent),
+                      foregroundColor: Colors.redAccent,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    icon: const Icon(Icons.cancel_outlined, size: 16),
+                    label: const Text('Cancel Order',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+        ] else if (order.status == 'preparing' || order.status == 'ready') ...[
+          const SizedBox(height: 10),
+          Row(children: [
+            const Icon(Icons.info_outline_rounded, color: _C.subtext, size: 14),
+            const SizedBox(width: 6),
+            const Expanded(
+              child: Text(
+                'Food is being prepared — speak to a staff member to cancel.',
+                style: TextStyle(color: _C.subtext, fontSize: 11),
+              ),
+            ),
+          ]),
+        ],
       ]),
     );
   }
@@ -915,11 +1096,12 @@ class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
 
   ({String label, Color color, IconData icon}) _statusInfo(String status) {
     return switch (status) {
-      'pending'   => (label: 'Received — your order is queued', color: Colors.orange, icon: Icons.hourglass_empty_rounded),
-      'preparing' => (label: 'Preparing your order…',           color: Colors.blue,   icon: Icons.restaurant_rounded),
-      'ready'     => (label: 'Ready — on its way to your room!', color: Colors.green,  icon: Icons.delivery_dining_rounded),
-      'served'    => (label: 'Delivered — enjoy your meal!',    color: Colors.green,  icon: Icons.check_circle_rounded),
-      _           => (label: status,                            color: _C.subtext,    icon: Icons.info_outline_rounded),
+      'pending'   => (label: 'Received — your order is queued',  color: Colors.orange,    icon: Icons.hourglass_empty_rounded),
+      'preparing' => (label: 'Preparing your order…',            color: Colors.blue,      icon: Icons.restaurant_rounded),
+      'ready'     => (label: 'Ready — on its way to your room!', color: Colors.green,     icon: Icons.delivery_dining_rounded),
+      'served'    => (label: 'Delivered — enjoy your meal!',     color: Colors.green,     icon: Icons.check_circle_rounded),
+      'cancelled' => (label: 'Cancelled',                        color: Colors.redAccent, icon: Icons.cancel_rounded),
+      _           => (label: status,                             color: _C.subtext,       icon: Icons.info_outline_rounded),
     };
   }
 

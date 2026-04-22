@@ -135,6 +135,7 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
   bool _isPlacing = false;
   // When true, user is back on menu to add more items
   bool _addingMore = false;
+  String? _cancellingOrderId;
   // ── Feedback + session state ───────────────────────────────────────────────
   bool _showFeedback = false;
   bool _sessionEnded = false;
@@ -155,10 +156,10 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
 
   double get _cartSubtotal => _cart.fold(0.0, (s, c) => s + c.subtotal);
   double get _allOrdersSubtotal =>
-      _orders.fold(0.0, (s, o) => s + o.subtotal);
-  // Service charge applies only to dine-in orders, not takeaway
+      _orders.where((o) => o.status != 'cancelled').fold(0.0, (s, o) => s + o.subtotal);
+  // Service charge applies only to dine-in orders, not takeaway or cancelled
   double get _dineInOrdersSubtotal =>
-      _orders.where((o) => !o.isTakeaway).fold(0.0, (s, o) => s + o.subtotal);
+      _orders.where((o) => !o.isTakeaway && o.status != 'cancelled').fold(0.0, (s, o) => s + o.subtotal);
   double get _tax => _allOrdersSubtotal * _taxRate;
   double get _serviceCharge => _dineInOrdersSubtotal * _serviceRate;
   double get _grandTotal => _allOrdersSubtotal + _tax + _serviceCharge;
@@ -435,6 +436,141 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
 
   int _qtyInCart(MenuItem item) =>
       _cart.where((c) => c.item.id == item.id).fold(0, (s, c) => s + c.qty);
+
+  // ── Cancel order ─────────────────────────────────────────────────────────────
+
+  Future<void> _cancelOrder(_PlacedOrder order) async {
+    // Re-fetch live status to avoid stale display state
+    final live = await _service.fetchOrderStatus(order.id);
+    if (!mounted) return;
+
+    if (live != null && live.status != 'pending') {
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: _C.surface,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: _C.divider)),
+          title: const Row(children: [
+            Icon(Icons.restaurant_rounded, color: Color(0xFF3B82F6), size: 20),
+            SizedBox(width: 8),
+            Text('Already being prepared',
+                style: TextStyle(color: _C.text, fontSize: 16, fontWeight: FontWeight.w700)),
+          ]),
+          content: const Text(
+            'The kitchen has already started on your order. '
+            'Please speak to a staff member if you need to cancel.',
+            style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.55),
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(_),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: _C.gold, foregroundColor: _C.bg,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 0),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: _C.surface,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: _C.divider)),
+        title: const Row(children: [
+          Icon(Icons.cancel_outlined, color: Colors.redAccent, size: 20),
+          SizedBox(width: 8),
+          Text('Cancel this order?',
+              style: TextStyle(color: _C.text, fontSize: 16, fontWeight: FontWeight.w700)),
+        ]),
+        content: const Text(
+          'Your order will be cancelled and removed from the kitchen queue.',
+          style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.55),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(_, false),
+            child: const Text('Keep Order', style: TextStyle(color: _C.subtext)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(_, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0),
+            child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cancellingOrderId = order.id);
+    try {
+      final result = await _service.cancelOrder(order.id);
+      if (!mounted) return;
+      if (result == 'cancelled') {
+        setState(() {
+          order.status = 'cancelled';
+          order.paymentStatus = 'unpaid';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Order cancelled.'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      } else if (result == 'not_cancellable') {
+        showDialog(
+          context: context,
+          builder: (_) => AlertDialog(
+            backgroundColor: _C.surface,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: _C.divider)),
+            title: const Row(children: [
+              Icon(Icons.restaurant_rounded, color: Color(0xFF3B82F6), size: 20),
+              SizedBox(width: 8),
+              Text('Too late to cancel',
+                  style: TextStyle(color: _C.text, fontSize: 16, fontWeight: FontWeight.w700)),
+            ]),
+            content: const Text(
+              'The kitchen started preparing your order just now. '
+              'Please speak to a staff member.',
+              style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.55),
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(_),
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: _C.gold, foregroundColor: _C.bg,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    elevation: 0),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cancellingOrderId = null);
+    }
+  }
 
   // ── Place / add-on order (auto-splits cart into dine-in + takeaway orders) ──
   Future<void> _placeOrder() async {
@@ -813,27 +949,67 @@ class _GuestMenuScreenState extends State<GuestMenuScreen>
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
             child: Column(
-              children: order.items.map((c) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(children: [
-                  Container(
-                    width: 22, height: 22,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: _C.gold.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(6),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ...order.items.map((c) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(children: [
+                    Container(
+                      width: 22, height: 22,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: _C.gold.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text('${c.qty}',
+                          style: const TextStyle(color: _C.gold,
+                              fontSize: 11, fontWeight: FontWeight.w700)),
                     ),
-                    child: Text('${c.qty}',
-                        style: const TextStyle(color: _C.gold,
-                            fontSize: 11, fontWeight: FontWeight.w700)),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(c.item.name,
-                      style: const TextStyle(color: _C.text, fontSize: 13))),
-                  Text(fmt.format(c.subtotal),
-                      style: const TextStyle(color: _C.subtext, fontSize: 12)),
-                ]),
-              )).toList(),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(c.item.name,
+                        style: const TextStyle(color: _C.text, fontSize: 13))),
+                    Text(fmt.format(c.subtotal),
+                        style: const TextStyle(color: _C.subtext, fontSize: 12)),
+                  ]),
+                )),
+                // ── Cancel UI ──────────────────────────────────────────────
+                if (order.status == 'pending') ...[
+                  const SizedBox(height: 10),
+                  _cancellingOrderId == order.id
+                      ? const Center(
+                          child: SizedBox(
+                            width: 20, height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.redAccent, strokeWidth: 2),
+                          ),
+                        )
+                      : OutlinedButton.icon(
+                          onPressed: () => _cancelOrder(order),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.redAccent),
+                            foregroundColor: Colors.redAccent,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          icon: const Icon(Icons.cancel_outlined, size: 16),
+                          label: const Text('Cancel Order',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        ),
+                ] else if (order.status == 'preparing' || order.status == 'ready') ...[
+                  const SizedBox(height: 8),
+                  Row(children: const [
+                    Icon(Icons.info_outline_rounded, color: _C.subtext, size: 14),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Food is being prepared — speak to a staff member to cancel.',
+                        style: TextStyle(color: _C.subtext, fontSize: 11),
+                      ),
+                    ),
+                  ]),
+                ],
+              ],
             ),
           ),
         ],
@@ -1503,6 +1679,13 @@ class _CartSheetState extends State<_CartSheet> {
     final hasDineIn   = widget.cart.any((c) => !c.isTakeaway);
     final isMixed     = hasTakeaway && hasDineIn;
 
+    // Recompute live from mutable cart — reflects TO GO toggles immediately.
+    final liveSubtotal    = widget.cart.fold(0.0, (s, c) => s + c.subtotal);
+    final liveDineIn      = widget.cart.where((c) => !c.isTakeaway).fold(0.0, (s, c) => s + c.subtotal);
+    final liveSvc         = liveDineIn * widget.serviceRate;
+    final liveTax         = liveSubtotal * widget.taxRate;
+    final liveTotal       = liveSubtotal + liveTax + liveSvc;
+
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
       minChildSize: 0.4,
@@ -1661,15 +1844,15 @@ class _CartSheetState extends State<_CartSheet> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
             child: Column(children: [
-              _totalRow('Subtotal', widget.subtotal),
+              _totalRow('Subtotal', liveSubtotal),
               if (widget.taxRate > 0)
-                _totalRow('Tax (${(widget.taxRate * 100).toStringAsFixed(0)}%)', widget.tax),
-              if (widget.serviceRate > 0 && widget.serviceCharge > 0)
+                _totalRow('Tax (${(widget.taxRate * 100).toStringAsFixed(0)}%)', liveTax),
+              if (widget.serviceRate > 0 && liveSvc > 0)
                 _totalRow(
                   isMixed
                       ? 'Service (${(widget.serviceRate * 100).toStringAsFixed(0)}%) — dine-in only'
                       : 'Service (${(widget.serviceRate * 100).toStringAsFixed(0)}%)',
-                  widget.serviceCharge,
+                  liveSvc,
                 ),
               const SizedBox(height: 8),
               Row(
@@ -1678,7 +1861,7 @@ class _CartSheetState extends State<_CartSheet> {
                   Text(widget.isAddOn ? 'This order' : 'Total',
                       style: const TextStyle(color: _C.text,
                           fontWeight: FontWeight.w800, fontSize: 16)),
-                  Text(fmt.format(widget.total),
+                  Text(fmt.format(liveTotal),
                       style: const TextStyle(color: _C.gold,
                           fontWeight: FontWeight.w800, fontSize: 18)),
                 ],
