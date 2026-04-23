@@ -20,7 +20,9 @@
       "Bash(curl -s \"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\" -A \"Mozilla/5.0\")",
       "Bash(curl -s \"https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap\" -A \"Mozilla/5.0\")",
       "Bash(curl -s \"https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap\" -A \"Mozilla/5.0\")",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(find c:\\\\\\\\Users\\\\\\\\gphks\\\\\\\\Documents\\\\\\\\MyDoc\\\\\\\\Proj\\\\\\\\ideadeck\\\\\\\\my_projects\\\\\\\\proj_1 -name \"*route*\" -type f)",
+      "Bash(awk '/final result = await showDialog<.*mods.*qty/,/if \\\\\\(result/ {print NR\": \"$0}' /c/Users/gphks/Documents/MyDoc/Proj/ideadeck/my_projects/proj_1/lib/web/pos_screen.dart)"
     ]
   }
 }

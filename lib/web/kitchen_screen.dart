@@ -1259,7 +1259,7 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
         ],
       ),
       content: SizedBox(
-        width: 420,
+        width: double.maxFinite,
         child: _loading
             ? const SizedBox(
                 height: 120,

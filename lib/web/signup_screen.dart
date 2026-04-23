@@ -60,7 +60,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
       setState(() => _error = 'Please fill in all fields.');
       return;
     }
-    if (!email.contains('@')) {
+    final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    if (!_emailRegex.hasMatch(email)) {
       setState(() => _error = 'Please enter a valid email address.');
       return;
     }

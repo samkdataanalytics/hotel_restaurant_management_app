@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'url_strategy_stub.dart'
+    if (dart.library.html) 'url_strategy_web.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider, Provider;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +13,7 @@ import 'router.dart';
 import 'app_theme.dart';
 
 void main() async {
+  configureUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
   // All fonts are bundled locally — disable GoogleFonts HTTP fetching entirely.
   GoogleFonts.config.allowRuntimeFetching = false;

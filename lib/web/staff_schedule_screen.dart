@@ -8,6 +8,7 @@ import '../models/staff_permission.dart';
 import '../services/shift_service.dart';
 import '../services/staff_service.dart';
 import '../providers/app_auth_provider.dart';
+import 'widgets/responsive_dialog.dart';
 
 // ─── Accent colours for the TEAM section ─────────────────────────────────────
 
@@ -1183,11 +1184,10 @@ class _ShiftDialogState extends State<_ShiftDialog> {
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: SizedBox(
-        width: 420,
-        child: Padding(
+    return ResponsiveDialog(
+      maxWidth: 420,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1344,7 +1344,6 @@ class _ShiftDialogState extends State<_ShiftDialog> {
             ],
           ),
         ),
-      ),
     );
   }
 

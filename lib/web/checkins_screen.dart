@@ -10,6 +10,7 @@ import '../models/room.dart';
 import '../models/booking.dart';
 import '../services/booking_service.dart';
 import '../services/restaurant_service.dart';
+import 'widgets/responsive_dialog.dart';
 import 'package:provider/provider.dart';
 import '../providers/hotel_session.dart';
 import '../services/invoice_service.dart';
@@ -50,17 +51,24 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
   }
 
   Future<void> _loadData() async {
-    final checkIns = await _bookingService.getEnrichedCheckIns();
-    final bookings = await _bookingService.getEnrichedBookings();
-
-    if (!mounted) return;
-    setState(() {
-      _allCheckIns = checkIns;
-      _filteredCheckIns = checkIns;
-      _allBookings = bookings;
-      _filteredBookings = bookings;
-      _isLoading = false;
-    });
+    try {
+      final checkIns = await _bookingService.getEnrichedCheckIns();
+      final bookings = await _bookingService.getEnrichedBookings();
+      if (!mounted) return;
+      setState(() {
+        _allCheckIns = checkIns;
+        _filteredCheckIns = checkIns;
+        _allBookings = bookings;
+        _filteredBookings = bookings;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load data: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   void _filterData(String query) {
@@ -445,8 +453,8 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
     return InkWell(
       onTap: () async {
         final updated = booking.copyWith(isQrSent: false);
-        await _bookingService.updateBooking(updated);
-        _loadData();
+        try { await _bookingService.updateBooking(updated); } catch (_) { return; }
+        if (mounted) _loadData();
       },
       borderRadius: BorderRadius.circular(6),
       child: Container(
@@ -468,8 +476,8 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
     return InkWell(
       onTap: () async {
         final updated = booking.copyWith(isQrSent: true);
-        await _bookingService.updateBooking(updated);
-        _loadData();
+        try { await _bookingService.updateBooking(updated); } catch (_) { return; }
+        if (mounted) _loadData();
       },
       borderRadius: BorderRadius.circular(6),
       child: Container(
@@ -518,22 +526,21 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
 
   Future<void> _showQrDialog(Booking booking) async {
     final baseUrl = Uri.base.origin; // Gets e.g 'http://localhost:8080'
-    final url = '$baseUrl/#/guest-registration?ref=${booking.bookingRef}';
+    final url = '$baseUrl/guest-registration?ref=${booking.bookingRef}';
 
     if (!booking.isQrGenerated) {
       final updated = booking.copyWith(isQrGenerated: true);
-      await _bookingService.updateBooking(updated);
-      _loadData();
+      try { await _bookingService.updateBooking(updated); } catch (_) {}
+      if (mounted) _loadData();
     }
 
     if (!mounted) return;
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: SizedBox(
-          width: 380,
-          child: Padding(
+      builder: (ctx) => ResponsiveDialog(
+        maxWidth: 380,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -580,7 +587,6 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
               ],
             ),
           ),
-        ),
       ),
     );
   }

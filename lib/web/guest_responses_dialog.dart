@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../app_theme.dart';
 import '../models/booking.dart';
 import '../models/guest.dart';
+import 'widgets/responsive_dialog.dart';
 
 class GuestResponsesDialog extends StatelessWidget {
   final Booking booking;
@@ -18,11 +19,10 @@ class GuestResponsesDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final dateFormatter = DateFormat('MMM dd, yyyy');
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 600,
-        constraints: const BoxConstraints(maxHeight: 800),
+    return ResponsiveDialogNoScroll(
+      maxWidth: 600,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
         child: Column(
           children: [
             // Header

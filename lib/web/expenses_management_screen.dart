@@ -37,20 +37,25 @@ class _ExpensesManagementScreenState extends ConsumerState<ExpensesManagementScr
   }
 
   Future<void> _loadData() async {
-    final expenses = await _bookingService.getAllExpenses();
-    final rooms = await _bookingService.getAllRooms();
-    final bookings = await _bookingService.getEnrichedBookings();
-    
-    // Sort expenses strictly by most recent
-    expenses.sort((a, b) => b.date.compareTo(a.date));
-
-    if (!mounted) return;
-    setState(() {
-      _expenses = expenses;
-      _rooms = rooms;
-      _bookings = bookings;
-      _isLoading = false;
-    });
+    try {
+      final expenses = await _bookingService.getAllExpenses();
+      final rooms = await _bookingService.getAllRooms();
+      final bookings = await _bookingService.getEnrichedBookings();
+      expenses.sort((a, b) => b.date.compareTo(a.date));
+      if (!mounted) return;
+      setState(() {
+        _expenses = expenses;
+        _rooms = rooms;
+        _bookings = bookings;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load expenses: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _deleteExpense(Expense expense) async {

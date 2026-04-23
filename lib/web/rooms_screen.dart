@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
+import 'widgets/responsive_dialog.dart';
 import '../providers/hotel_session.dart';
 import '../providers/app_auth_provider.dart';
 import '../models/room.dart';
@@ -36,12 +37,20 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
   }
 
   Future<void> _loadRooms() async {
-    final rooms = await _bookingService.getAllRooms();
-    if (!mounted) return;
-    setState(() {
-      _rooms = rooms;
-      _isLoading = false;
-    });
+    try {
+      final rooms = await _bookingService.getAllRooms();
+      if (!mounted) return;
+      setState(() {
+        _rooms = rooms;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load rooms: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   List<Room> get _filteredRooms {
@@ -120,19 +129,33 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
         status: RoomStatus.available,
         clearMaintenance: true,
       );
-      await _bookingService.updateRoom(updated);
+      try {
+        await _bookingService.updateRoom(updated);
+        if (!mounted) return;
+        setState(() {
+          final index = _rooms.indexWhere((r) => r.id == room.id);
+          if (index != -1) _rooms[index] = updated;
+        });
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update room: $e'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+
+    try {
+      final updated = await _bookingService.toggleRoomStatus(room);
+      if (!mounted) return;
       setState(() {
         final index = _rooms.indexWhere((r) => r.id == room.id);
         if (index != -1) _rooms[index] = updated;
       });
-      return;
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update room status: $e'), backgroundColor: Colors.red),
+      );
     }
-
-    final updated = await _bookingService.toggleRoomStatus(room);
-    setState(() {
-      final index = _rooms.indexWhere((r) => r.id == room.id);
-      if (index != -1) _rooms[index] = updated;
-    });
   }
 
   void _showPlanLimitDialog(String resource) {
@@ -178,8 +201,14 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
       builder: (context) => _RoomFormDialog(title: 'Edit Room', room: room),
     );
     if (result != null) {
-      await _bookingService.updateRoom(result);
-      await _loadRooms();
+      try {
+        await _bookingService.updateRoom(result);
+        await _loadRooms();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save room: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -187,17 +216,16 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
     final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
     final propertyId = session.hotelId ?? '';
     final baseUrl = Uri.base.origin;
-    final url = '$baseUrl/#/room-service/$propertyId/${room.roomNumber}';
+    final url = '$baseUrl/room-service/$propertyId/${room.roomNumber}';
 
     showDialog(
       context: context,
       // Use Dialog (not AlertDialog) — AlertDialog wraps content in IntrinsicWidth
       // which is incompatible with QrImageView's internal LayoutBuilder.
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: SizedBox(
-          width: 380,
-          child: Padding(
+      builder: (ctx) => ResponsiveDialog(
+        maxWidth: 380,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -273,7 +301,6 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
               ],
             ),
           ),
-        ),
       ),
     );
   }

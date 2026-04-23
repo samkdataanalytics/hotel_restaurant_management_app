@@ -18,6 +18,7 @@ import '../models/staff_permission.dart';
 import '../services/restaurant_service.dart';
 import 'restaurant_invoice_dialog.dart';
 import 'widgets/split_payment_inputs.dart';
+import 'widgets/responsive_dialog.dart';
 
 const _kOrange = AppTheme.restaurantAccent;
 const _kOrangeBg = AppTheme.restaurantAccentBg;
@@ -237,13 +238,11 @@ class _PaymentDialogState extends State<_PaymentDialog> {
     final total         = subtotal + tax + serviceCharge;
     final orderNumbers  = widget.orders.map((o) => '#${o.orderNumber}').join(' + ');
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: SizedBox(
-        width: 480,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
+    return ResponsiveDialog(
+      maxWidth: 480,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -564,7 +563,6 @@ class _PaymentDialogState extends State<_PaymentDialog> {
             ],
           ),
         ),
-      ),
     );
   }
 }
@@ -683,9 +681,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Text('Customize ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            content: SizedBox(
-              width: 400,
-              child: SingleChildScrollView(
+            content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -787,7 +783,6 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                   ],
                 ),
               ),
-            ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
@@ -1172,6 +1167,22 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    if (isMobile) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF1F5F9),
+        body: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: _selectedTableId != null
+                  ? _buildDetailPanel()
+                  : _buildTableGrid(),
+            ),
+          ],
+        ),
+      );
     }
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
@@ -1571,10 +1582,16 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
       children: [
         // ── Panel header
         Container(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 14),
+          padding: const EdgeInsets.fromLTRB(8, 16, 24, 14),
           color: Colors.white,
           child: Row(
             children: [
+              if (MediaQuery.of(context).size.width < 700)
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  onPressed: () => setState(() => _selectedTableId = null),
+                  style: IconButton.styleFrom(foregroundColor: Colors.black54),
+                ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2260,7 +2277,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                                   fontWeight: FontWeight.w700)),
                         )
                       else
-                        Text('Tap 🛍️ TO GO to mark takeaway',
+                        Text('Tap 🛍️ Takeaway to mark as takeaway',
                             style: TextStyle(
                                 fontSize: 10, color: Colors.grey.shade400)),
                     ]),
@@ -2423,7 +2440,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Text('🛍️', style: TextStyle(fontSize: 11)),
               const SizedBox(width: 4),
-              Text('TO GO',
+              Text('Takeaway',
                   style: TextStyle(
                       color: isTakeaway
                           ? Colors.amber.shade800

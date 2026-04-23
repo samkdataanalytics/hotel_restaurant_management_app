@@ -10,6 +10,7 @@ import '../models/guest.dart';
 import '../models/room.dart';
 import '../services/booking_service.dart';
 import '../services/restaurant_service.dart';
+import 'widgets/responsive_dialog.dart';
 import 'package:provider/provider.dart' as pkg_provider;
 import '../providers/hotel_session.dart';
 import '../services/invoice_service.dart';
@@ -59,14 +60,22 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
   }
 
   Future<void> _loadData() async {
-    final bookings = await _bookingService.getEnrichedBookings();
-    final rooms = await _bookingService.getAllRooms();
-    if (!mounted) return;
-    setState(() {
-      _enrichedBookings = bookings;
-      _rooms = rooms;
-      _isLoading = false;
-    });
+    try {
+      final bookings = await _bookingService.getEnrichedBookings();
+      final rooms = await _bookingService.getAllRooms();
+      if (!mounted) return;
+      setState(() {
+        _enrichedBookings = bookings;
+        _rooms = rooms;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load reservations: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   // ─── Helpers ──────────────────────────────────────────────
@@ -1112,7 +1121,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
 
   Future<void> _showQrDialog(Booking booking) async {
     final baseUrl = Uri.base.origin; // Gets e.g 'http://localhost:8080' or whatever is being used
-    final url = '$baseUrl/#/guest-registration?ref=${booking.bookingRef}';
+    final url = '$baseUrl/guest-registration?ref=${booking.bookingRef}';
 
     if (!booking.isQrGenerated) {
       final updated = booking.copyWith(isQrGenerated: true);
@@ -1123,11 +1132,10 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     if (!mounted) return;
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: SizedBox(
-          width: 380,
-          child: Padding(
+      builder: (ctx) => ResponsiveDialog(
+        maxWidth: 380,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1174,7 +1182,6 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
               ],
             ),
           ),
-        ),
       ),
     );
   }

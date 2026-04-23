@@ -391,7 +391,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // duplicate round of DB calls on every startup.
     ref.listen<OrgProperty?>(activePropertyProvider, (previous, next) {
       if (previous != null && next != null && next.id != previous.id) {
-        _applyActiveProperty(next);
+        unawaited(_applyActiveProperty(next));
       }
     });
 
@@ -1526,7 +1526,7 @@ class _ManagePropertiesDialogState extends State<_ManagePropertiesDialog> {
         ],
       ),
       content: SizedBox(
-        width: 480,
+        width: double.maxFinite,
         child: _loading
             ? const Center(child: Padding(
                 padding: EdgeInsets.all(32),

@@ -1824,7 +1824,7 @@ class _CartSheetState extends State<_CartSheet> {
                             child: Row(mainAxisSize: MainAxisSize.min, children: [
                               const Text('🛍️', style: TextStyle(fontSize: 10)),
                               const SizedBox(width: 3),
-                              Text('TO GO',
+                              Text('Takeaway',
                                   style: TextStyle(
                                       color: c.isTakeaway ? Colors.amber : _C.subtext,
                                       fontSize: 10,
