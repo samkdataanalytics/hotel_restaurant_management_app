@@ -6,6 +6,7 @@ import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
+import 'widgets/responsive_dialog.dart';
 import '../providers/hotel_session.dart';
 import '../models/menu_item.dart';
 import '../models/ingredient.dart';
@@ -176,22 +177,28 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
   }
 
   Future<void> _load() async {
-    final items = await widget.service.getMenuItems();
-    final ingredients = await widget.service.getIngredients();
-    final costs = <String, double>{};
-    for (final item in items) {
-      // Use live computed cost (current prices × recipe quantities) so the
-      // display is never stale from old stored records.
-      final c = await widget.service.getComputedCostForItem(item);
-      if (c != null) costs[item.id] = c;
+    try {
+      final items = await widget.service.getMenuItems();
+      final ingredients = await widget.service.getIngredients();
+      final costs = <String, double>{};
+      for (final item in items) {
+        final c = await widget.service.getComputedCostForItem(item);
+        if (c != null) costs[item.id] = c;
+      }
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _ingredients = ingredients;
+        _currentCosts = costs;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load menu data: $e'), backgroundColor: Colors.red),
+      );
     }
-    if (!mounted) return;
-    setState(() {
-      _items = items;
-      _ingredients = ingredients;
-      _currentCosts = costs;
-      _loading = false;
-    });
   }
 
   void _openDialog([MenuItem? item]) async {
@@ -759,14 +766,13 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.item != null;
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: SizedBox(
-        width: 680,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
+    return ResponsiveDialogNoScroll(
+      maxWidth: 680,
+      borderRadius: BorderRadius.circular(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
             Container(
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
@@ -992,7 +998,6 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
             ),
           ],
         ),
-      ),
     );
   }
 
@@ -1143,13 +1148,12 @@ class _ModifierDialogState extends State<_ModifierDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: 560,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ResponsiveDialogNoScroll(
+      maxWidth: 560,
+      borderRadius: BorderRadius.circular(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
               padding: const EdgeInsets.all(20),
@@ -1322,7 +1326,6 @@ class _ModifierDialogState extends State<_ModifierDialog> {
             )
           ],
         ),
-      ),
     );
   }
 }
@@ -1339,17 +1342,16 @@ class _CostHistoryDialog extends StatelessWidget {
     final sym = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
     final currency = NumberFormat.currency(symbol: sym, decimalDigits: 2);
     final dateF = DateFormat('MMM dd, yyyy HH:mm');
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: 480,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: _RC.costBg,
+    return ResponsiveDialogNoScroll(
+      maxWidth: 480,
+      borderRadius: BorderRadius.circular(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              color: _RC.costBg,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
               child: Row(
@@ -1404,7 +1406,6 @@ class _CostHistoryDialog extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 
@@ -1460,21 +1461,29 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
   }
 
   Future<void> _load() async {
-    final ingredients = await widget.service.getIngredients();
-    final prices = <String, double?>{};
-    for (final ing in ingredients) {
-      prices[ing.id] = await widget.service.getCurrentPriceForIngredient(ing.id);
-    }
-    if (!mounted) return;
-    setState(() {
-      _ingredients = ingredients;
-      _currentPrices = prices;
-      _loading = false;
-      if (_selected != null) {
-        _selected = ingredients.firstWhere((i) => i.id == _selected!.id, orElse: () => ingredients.isNotEmpty ? ingredients.first : _selected!);
+    try {
+      final ingredients = await widget.service.getIngredients();
+      final prices = <String, double?>{};
+      for (final ing in ingredients) {
+        prices[ing.id] = await widget.service.getCurrentPriceForIngredient(ing.id);
       }
-    });
-    if (_selected != null) _loadHistory(_selected!);
+      if (!mounted) return;
+      setState(() {
+        _ingredients = ingredients;
+        _currentPrices = prices;
+        _loading = false;
+        if (_selected != null) {
+          _selected = ingredients.firstWhere((i) => i.id == _selected!.id, orElse: () => ingredients.isNotEmpty ? ingredients.first : _selected!);
+        }
+      });
+      if (_selected != null) _loadHistory(_selected!);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load pricing data: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _loadHistory(Ingredient ing) async {
@@ -1887,13 +1896,12 @@ class _IngredientDialogState extends State<_IngredientDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: 400,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Form(
+    return ResponsiveDialog(
+      maxWidth: 400,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1948,7 +1956,6 @@ class _IngredientDialogState extends State<_IngredientDialog> {
             ),
           ),
         ),
-      ),
     );
   }
 }
@@ -1991,13 +1998,12 @@ class _UpdatePriceDialogState extends State<_UpdatePriceDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: 400,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Form(
+    return ResponsiveDialog(
+      maxWidth: 400,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -2079,7 +2085,6 @@ class _UpdatePriceDialogState extends State<_UpdatePriceDialog> {
             ),
           ),
         ),
-      ),
     );
   }
 }
@@ -2202,17 +2207,16 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
     final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
     final propertyId = session.hotelId ?? '';
     final baseUrl = Uri.base.origin;
-    final menuUrl = '$baseUrl/#/menu/$propertyId/${table.id}';
+    final menuUrl = '$baseUrl/menu/$propertyId/${table.id}';
 
     showDialog(
       context: context,
       // Use Dialog (not AlertDialog) — AlertDialog wraps content in IntrinsicWidth
       // which is incompatible with QrImageView's internal LayoutBuilder.
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: SizedBox(
-          width: 380,
-          child: Padding(
+      builder: (ctx) => ResponsiveDialog(
+        maxWidth: 380,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -2287,7 +2291,6 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
               ],
             ),
           ),
-        ),
       ),
     );
   }
@@ -2605,13 +2608,12 @@ class _AddTableDialogState extends State<_AddTableDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: 380,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Form(
+    return ResponsiveDialog(
+      maxWidth: 380,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -2681,7 +2683,6 @@ class _AddTableDialogState extends State<_AddTableDialog> {
             ),
           ),
         ),
-      ),
     );
   }
 }
@@ -2794,15 +2795,14 @@ class _TableOrderDialog extends StatelessWidget {
       }
     }
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: 480,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Container(
+    return ResponsiveDialogNoScroll(
+      maxWidth: 480,
+      borderRadius: BorderRadius.circular(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Container(
               padding: const EdgeInsets.all(20),
               decoration: const BoxDecoration(
                 color: _RC.occupiedLight,
@@ -2914,7 +2914,6 @@ class _TableOrderDialog extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 
@@ -3154,13 +3153,12 @@ class _StockAdjustDialogState extends State<_StockAdjustDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: 400,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return ResponsiveDialog(
+      maxWidth: 400,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               const Icon(Icons.inventory_2_rounded, color: _RC.accent),
               const SizedBox(width: 10),
@@ -3224,7 +3222,6 @@ class _StockAdjustDialogState extends State<_StockAdjustDialog> {
             ]),
           ]),
         ),
-      ),
     );
   }
 

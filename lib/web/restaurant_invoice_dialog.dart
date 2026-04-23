@@ -6,6 +6,7 @@ import '../providers/hotel_session.dart';
 import '../models/menu_item.dart';
 import '../models/restaurant_order.dart';
 import '../models/restaurant_table.dart';
+import 'widgets/responsive_dialog.dart';
 
 /// Full-page invoice dialog.
 ///
@@ -62,11 +63,9 @@ class RestaurantInvoiceDialog extends StatelessWidget {
     final serviceCharge = (dineInFraction * subtotal) * serviceChargeRate;
     final grandTotal = subtotal + tax + serviceCharge;
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: 460,
-        child: Column(
+    return ResponsiveDialogNoScroll(
+      maxWidth: 460,
+      child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // ─ Header buttons bar
@@ -330,7 +329,6 @@ class RestaurantInvoiceDialog extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 

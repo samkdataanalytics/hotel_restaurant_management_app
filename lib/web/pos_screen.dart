@@ -6,6 +6,8 @@ import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
+import 'widgets/responsive_dialog.dart';
+import 'widgets/split_payment_inputs.dart';
 import '../providers/hotel_session.dart';
 import '../models/menu_item.dart';
 import '../models/restaurant_table.dart';
@@ -83,8 +85,18 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   }
 
   Future<void> _loadData() async {
-    final items = await _restaurantService.getMenuItems();
-    final tables = await _restaurantService.getTables();
+    List<MenuItem> items = [];
+    List<RestaurantTable> tables = [];
+    try {
+      items  = await _restaurantService.getMenuItems();
+      tables = await _restaurantService.getTables();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load POS data: $e'), backgroundColor: Colors.red),
+      );
+      return;
+    }
 
     // Load orders and inventory in parallel — failures should not block the menu
     List<RestaurantOrder> orders = [];
@@ -238,9 +250,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: Text('Customize ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-            content: SizedBox(
-              width: 400,
-              child: SingleChildScrollView(
+            content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -342,7 +352,6 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   ],
                 ),
               ),
-            ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
@@ -483,9 +492,13 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlg) => Dialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: SizedBox(
-            width: 420,
-            child: Padding(
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: MediaQuery.of(ctx).size.width < 600 ? 8 : 40,
+            vertical: 24,
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SingleChildScrollView(child: Padding(
               padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -545,7 +558,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   ),
                 ],
               ),
-            ),
+            )),
           ),
         ),
       ),
@@ -602,7 +615,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           ],
         ),
         content: SizedBox(
-          width: 480,
+          width: double.maxFinite,
           height: 360,
           child: active.isEmpty
               ? const Center(child: Text('No checked-in guests found.', style: TextStyle(color: Colors.black38)))
@@ -2266,7 +2279,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              '${newItems.length} item(s) added to Table ${_tables.firstWhere((t) => t.id == _selectedTableId).tableNumber} tab.'),
+              '${newItems.length} item(s) added to Table ${_tables.firstWhere((t) => t.id == _selectedTableId, orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0)).tableNumber} tab.'),
           backgroundColor: _kOrange,
         ),
       );
@@ -2286,7 +2299,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     setState(() => _isLoading = true);
     try {
       final tableNum = _tables
-          .firstWhere((t) => t.id == _selectedTableId)
+          .firstWhere((t) => t.id == _selectedTableId, orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0))
           .tableNumber;
       // Find the root parent for this table's session
       final openOrders = _allTableOrders[_selectedTableId!] ?? [];
@@ -2532,16 +2545,14 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: SizedBox(
-        width: 480,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    return ResponsiveDialog(
+      maxWidth: 480,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
               // Title
               Row(
                 children: [
@@ -2873,7 +2884,6 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
             ],
           ),
         ),
-      ),
     );
   }
 }

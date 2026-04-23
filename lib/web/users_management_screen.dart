@@ -2158,7 +2158,7 @@ class _AssignToPropertyDialogState extends State<_AssignToPropertyDialog> {
         ],
       ),
       content: SizedBox(
-        width: 480,
+        width: double.maxFinite,
         child: _loading
             ? const SizedBox(
                 height: 120,

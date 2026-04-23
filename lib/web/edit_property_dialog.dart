@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../app_theme.dart';
 import '../providers/hotel_session.dart' show hexToColor;
 import '../services/organization_service.dart';
+import 'widgets/responsive_dialog.dart';
 
 // ─── Preset brand colours ─────────────────────────────────────────────────────
 const _kPresetColors = [
@@ -124,6 +125,7 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
     if (file.bytes == null) return;
     // Compress to max 400×400 px, JPEG 85% — keeps stored logo small
     final compressed = await _compressImageBytes(file.bytes!, maxDimension: 400, quality: 0.85);
+    if (!mounted) return;
     setState(() {
       _newLogoBytes    = compressed;
       _newLogoFileName = '${file.name.split('.').first}.jpg';
@@ -225,11 +227,9 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: 560,
-        child: Column(
+    return ResponsiveDialogNoScroll(
+      maxWidth: 560,
+      child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // ─ Header
@@ -468,7 +468,6 @@ class _EditPropertyDialogState extends State<EditPropertyDialog> {
             ),
           ],
         ),
-      ),
     );
   }
 

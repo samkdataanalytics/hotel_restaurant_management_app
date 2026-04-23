@@ -7,6 +7,7 @@ import '../app_theme.dart';
 import '../models/expense.dart';
 import '../models/room.dart';
 import '../services/booking_service.dart';
+import 'widgets/responsive_dialog.dart';
 
 class RoomExpensesDialog extends StatefulWidget {
   final Room room;
@@ -91,14 +92,22 @@ class _RoomExpensesDialogState extends State<RoomExpensesDialog> {
       roomId: widget.room.id,
     );
 
-    await _bookingService.addExpense(expense);
+    try {
+      await _bookingService.addExpense(expense);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add expense: $e'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
     _formKey.currentState!.reset();
     setState(() {
       _expenseDate = DateTime.now();
       _category = ExpenseCategory.other;
     });
-    
-    // Clear text fields without losing focus context implicitly by resetting form state
     _loadExpenses();
   }
 
@@ -147,11 +156,13 @@ class _RoomExpensesDialogState extends State<RoomExpensesDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 600,
-        height: 700,
+    return ResponsiveDialogNoScroll(
+      maxWidth: 600,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -341,6 +352,7 @@ class _RoomExpensesDialogState extends State<RoomExpensesDialog> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

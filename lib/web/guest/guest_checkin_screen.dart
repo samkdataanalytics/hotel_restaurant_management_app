@@ -139,7 +139,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
     // Pre-fill personal form
     _nameCtrl.text        = guest.fullName;
     _emailCtrl.text       = guest.email;
-    _passportCtrl.text    = guest.passportOrNic ?? guest.idNumber;
+    _passportCtrl.text    = guest.passportOrNic ?? guest.idNumber ?? '';
     _nationalityCtrl.text = guest.nationality;
     _whatsAppCtrl.text    = guest.whatsApp ?? guest.phone;
     if (guest.dateOfBirth != null) {
@@ -165,7 +165,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
   Future<void> _submit() async {
     if (!_agreedToTerms) return;
     setState(() => _submitting = true);
-
+    try {
     final updatedGuest = _guest!.copyWith(
       fullName:      _nameCtrl.text.trim(),
       email:         _emailCtrl.text.trim(),
@@ -196,6 +196,17 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
     await _bookingService.updateBooking(updatedBooking);
 
     if (mounted) setState(() { _done = true; _submitting = false; });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _submitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Submission failed. Please check your connection and try again.'),
+            backgroundColor: _C.error,
+          ),
+        );
+      }
+    }
   }
 
   // ── Navigation ─────────────────────────────────────────────────────────────

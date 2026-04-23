@@ -176,7 +176,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
               ],
             ),
             content: SizedBox(
-              width: 440,
+              width: double.maxFinite,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,11 +349,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     if (confirmed != true || !mounted) return;
 
     int processedCount = 0;
+    int failCount = 0;
     for (final item in refundable) {
       final qty = refundQtys[item.id] ?? 0;
       if (qty > 0) {
-        await _service.refundOrderItem(order.id, item.id, qty);
-        processedCount++;
+        try {
+          await _service.refundOrderItem(order.id, item.id, qty);
+          processedCount++;
+        } catch (_) {
+          failCount++;
+        }
       }
     }
 
@@ -361,8 +366,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$processedCount item line(s) refunded. (Inventory unchanged — food was served.)'),
-        backgroundColor: _kOrange,
+        content: Text(failCount > 0
+            ? '$processedCount item line(s) refunded. $failCount failed — please retry.'
+            : '$processedCount item line(s) refunded. (Inventory unchanged — food was served.)'),
+        backgroundColor: failCount > 0 ? Colors.red : _kOrange,
       ),
     );
     _load();

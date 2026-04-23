@@ -396,7 +396,7 @@ class _RestaurantAnalyticsScreenState
                           ),
                         Text(
                           // Show chosen range when custom is active
-                          selected && scale == _TimeScale.custom && _customStart != null
+                          selected && scale == _TimeScale.custom && _customStart != null && _customEnd != null
                               ? '${DateFormat('MMM d').format(_customStart!)} – ${DateFormat('MMM d').format(_customEnd!)}'
                               : scale.label,
                           style: TextStyle(

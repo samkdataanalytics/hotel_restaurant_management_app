@@ -83,6 +83,7 @@ class _CancellationsRefundsScreenState
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
+    try {
     final orders = await _service.getOrders();
     final tables = await _service.getTables();
 
@@ -153,6 +154,13 @@ class _CancellationsRefundsScreenState
     _ordersWithRefunds = ordersWithRef;
 
     if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load data: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   // ─── Build ───────────────────────────────────────────

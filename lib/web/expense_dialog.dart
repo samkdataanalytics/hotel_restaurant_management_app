@@ -7,6 +7,7 @@ import '../models/room.dart';
 import '../models/booking.dart';
 import '../models/guest.dart';
 import '../services/booking_service.dart';
+import 'widgets/responsive_dialog.dart';
 
 class ExpenseDialog extends StatefulWidget {
   final Expense? expense;
@@ -176,14 +177,23 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
       bookingId: _isBillable ? _bookingId : null,
     );
 
-    if (widget.expense == null) {
-      await _bookingService.addExpense(expense);
-    } else {
-      await _bookingService.updateExpense(expense);
-    }
-    
-    if (mounted) {
-      Navigator.of(context).pop(true);
+    try {
+      if (widget.expense == null) {
+        await _bookingService.addExpense(expense);
+      } else {
+        await _bookingService.updateExpense(expense);
+      }
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save expense: $e'),
+            backgroundColor: AppTheme.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -204,10 +214,9 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
         ? '${_dateFormat.format(_startDate)} - ${_dateFormat.format(_endDate!)}'
         : _dateFormat.format(_startDate);
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return ResponsiveDialogNoScroll(
+      maxWidth: 600,
       child: Container(
-        width: 600,
         padding: const EdgeInsets.all(32),
         child: SingleChildScrollView(
           child: Column(
