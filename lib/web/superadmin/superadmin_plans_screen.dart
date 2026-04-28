@@ -300,7 +300,7 @@ class _PlanEditorCardState extends State<_PlanEditorCard> {
             const SizedBox(height: 12),
 
             // Price row
-            _label('Monthly Price (\$)'),
+            _label('Monthly Price (LKR)'),
             Row(
               children: [
                 Expanded(

@@ -783,7 +783,7 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
             Expanded(
               child: _priceField(
                 ctrl:    _monthlyCtrl,
-                label:   'Monthly Charge (\$)',
+                label:   'Monthly Charge (LKR)',
                 hint:    'e.g. 299.00',
                 enabled: _billingCycle == 'monthly',
               ),
@@ -792,7 +792,7 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
             Expanded(
               child: _priceField(
                 ctrl:    _annuallyCtrl,
-                label:   'Annual Charge (\$)',
+                label:   'Annual Charge (LKR)',
                 hint:    'e.g. 2999.00',
                 enabled: _billingCycle == 'annually',
               ),
@@ -926,7 +926,10 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
         style: TextStyle(
             fontSize: 14,
             color: enabled ? const Color(0xFF1E293B) : const Color(0xFFB0BAC7)),
-        decoration: _inputDeco(hint: hint, icon: Icons.attach_money_rounded).copyWith(
+        decoration: _inputDeco(hint: hint).copyWith(
+          prefixIcon: null,
+          prefixText: 'LKR ',
+          prefixStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
           filled: true,
           fillColor: enabled ? const Color(0xFFF8FAFC) : const Color(0xFFF1F5F9),
           enabledBorder: OutlineInputBorder(

@@ -34,6 +34,7 @@ const Map<int, String> kPageRoutes = {
   12: '/app/cancellations',
   13: '/app/team',
   14: '/app/shifts',
+  15: '/app/help',
 };
 
 const Map<String, int> kRoutePageIndex = {
@@ -52,6 +53,7 @@ const Map<String, int> kRoutePageIndex = {
   '/app/cancellations': 12,
   '/app/team':          13,
   '/app/shifts':        14,
+  '/app/help': 15,
 };
 
 // ─── Nav models ───────────────────────────────────────────────────────────────
@@ -1025,6 +1027,47 @@ class _AppShellState extends ConsumerState<AppShell> {
                           fontWeight: FontWeight.w500,
                         ),
                       ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Help & Guide button
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: expanded ? 10 : 8, vertical: 2),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => _navigateTo(15),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0, vertical: 10),
+                decoration: BoxDecoration(
+                  color: GoRouterState.of(context).uri.path == '/app/help'
+                      ? const Color(0xFF3B82F6).withOpacity(0.12)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: expanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 28, height: 28,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: const Icon(Icons.auto_stories_rounded, size: 15, color: Color(0xFF60A5FA)),
+                    ),
+                    if (expanded) ...[
+                      const SizedBox(width: 10),
+                      const Text('Guide & Help',
+                          style: TextStyle(color: Color(0xFF60A5FA), fontSize: 13, fontWeight: FontWeight.w500)),
                     ],
                   ],
                 ),

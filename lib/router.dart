@@ -32,6 +32,7 @@ import 'web/guest/guest_menu_screen.dart';
 import 'web/guest/guest_checkin_screen.dart';
 import 'web/guest/guest_room_service_screen.dart';
 import 'web/legal_screen.dart';
+import 'web/help_screen.dart';
 
 // ─── Route names ─────────────────────────────────────────────────────────────
 
@@ -79,6 +80,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (loc.startsWith(AppRoutes.roomService)) return null;
       if (loc.startsWith('/guest-registration')) return null;
       if (loc == '/terms' || loc == '/returns' || loc == '/privacy') return null;
+      if (loc == '/help') return null;
 
       if (!auth.isLoggedIn) {
         if (loc == AppRoutes.login || loc == AppRoutes.signup) return null;
@@ -169,6 +171,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/app/team',          builder: (_, __) => const UsersManagementScreen()),
           GoRoute(path: '/app/shifts',        builder: (_, __) => const StaffScheduleScreen()),
           GoRoute(path: '/app/account',       builder: (_, __) => const AccountSettingsScreen()),
+          GoRoute(path: '/app/help',            builder: (_, __) => const HelpScreen()),
         ],
       ),
       // Staff invite deep link
@@ -196,6 +199,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       // Legal pages — public, no auth required
+      // Public docs page — no auth required
+      GoRoute(path: '/help', builder: (_, __) => const HelpScreen(standalone: true)),
+
       GoRoute(path: '/terms',   builder: (_, __) => const LegalScreen(page: LegalPage.terms)),
       GoRoute(path: '/returns', builder: (_, __) => const LegalScreen(page: LegalPage.returns)),
       GoRoute(path: '/privacy', builder: (_, __) => const LegalScreen(page: LegalPage.privacy)),
