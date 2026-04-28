@@ -62,9 +62,19 @@ class _RestaurantAnalyticsScreenState
   String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   bool _isLoading = true;
+  int  _selectedTab = 0; // 0 = Overview, 1 = Service Charge
+
+  // Overview time scale
   _TimeScale _selectedScale = _TimeScale.sevenDays;
   DateTime? _customStart;
   DateTime? _customEnd;
+
+  // Service charge tab date range (defaults to current month)
+  late DateTime _scStart;
+  late DateTime _scEnd;
+
+  // All orders cache — shared by both tabs
+  List<RestaurantOrder> _allOrders = [];
 
   // KPIs (period-scoped)
   double _periodRevenue = 0;
@@ -103,16 +113,33 @@ class _RestaurantAnalyticsScreenState
   // Food cost (static — not period-dependent)
   List<Map<String, dynamic>> _foodCostData = [];
 
+  // Service charge tab state
+  double _scRate = 0.0;
+  double _scTotal = 0.0;
+  double _scAvgPerDineIn = 0.0;
+  double _scPctOfRevenue = 0.0;
+  int    _scDineInOrders = 0;
+  List<double> _scBarData   = [];
+  List<String> _scBarLabels = [];
+  String _scChartTitle = '';
+  // breakdown table: {label, dineIn, sc, revenue}
+  List<Map<String, dynamic>> _scBreakdown = [];
+
+
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _scStart = DateTime(now.year, now.month, 1);
+    _scEnd   = now;
     _loadData();
   }
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final allOrders = await _service.getOrders();
+      _allOrders = await _service.getOrders();
+      final allOrders = _allOrders;
       final now = DateTime.now();
 
       // Resolve period boundaries
@@ -290,6 +317,7 @@ class _RestaurantAnalyticsScreenState
         _foodCostData = foodCostList;
       }
 
+      _computeScData();
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       if (!mounted) return;
@@ -314,22 +342,29 @@ class _RestaurantAnalyticsScreenState
                 SliverPadding(
                   padding: const EdgeInsets.all(20),
                   sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      _buildKpiRow(),
-                      const SizedBox(height: 20),
-                      _buildChartsRow(),
-                      const SizedBox(height: 20),
-                      _buildBottomRow(),
-                      if (_deliveryCount > 0) ...[
-                        const SizedBox(height: 20),
-                        _buildDeliveryBreakdown(),
-                      ],
-                      if (_foodCostData.isNotEmpty) ...[
-                        const SizedBox(height: 20),
-                        _buildFoodCostSection(),
-                      ],
-                      const SizedBox(height: 20),
-                    ]),
+                    delegate: SliverChildListDelegate(
+                      _selectedTab == 0
+                          ? [
+                              _buildKpiRow(),
+                              const SizedBox(height: 20),
+                              _buildChartsRow(),
+                              const SizedBox(height: 20),
+                              _buildBottomRow(),
+                              if (_deliveryCount > 0) ...[
+                                const SizedBox(height: 20),
+                                _buildDeliveryBreakdown(),
+                              ],
+                              if (_foodCostData.isNotEmpty) ...[
+                                const SizedBox(height: 20),
+                                _buildFoodCostSection(),
+                              ],
+                              const SizedBox(height: 20),
+                            ]
+                          : [
+                              _buildScContent(),
+                              const SizedBox(height: 20),
+                            ],
+                    ),
                   ),
                 ),
               ],
@@ -340,21 +375,27 @@ class _RestaurantAnalyticsScreenState
   Widget _buildHeader() {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-                color: _kOrangeBg, borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.analytics_rounded, color: _kOrange, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Text('Restaurant Analytics',
-              style: Theme.of(context).textTheme.displayMedium),
-          const Spacer(),
-          // ─── Time scale selector ───────────────────────
+          // ── Title row ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: Row(
+              children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                      color: _kOrangeBg, borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.analytics_rounded, color: _kOrange, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Text('Restaurant Analytics',
+                    style: Theme.of(context).textTheme.displayMedium),
+                const Spacer(),
+                // Right-side control switches based on active tab
+                if (_selectedTab == 0) ...[
+                  // ── Overview: time scale selector ──
           Container(
             decoration: BoxDecoration(
               color: const Color(0xFFF1F5F9),
@@ -412,21 +453,63 @@ class _RestaurantAnalyticsScreenState
               }).toList(),
             ),
           ),
-          const SizedBox(width: 16),
-          Text('$_totalOrders orders',
-              style: const TextStyle(
-                  color: Colors.black38,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500)),
-          const SizedBox(width: 16),
-          OutlinedButton.icon(
-            onPressed: _loadData,
-            icon: const Icon(Icons.refresh_rounded, size: 16),
-            label: const Text('Refresh'),
-            style: OutlinedButton.styleFrom(
-                foregroundColor: _kOrange,
-                side: const BorderSide(color: _kOrange)),
+                  const SizedBox(width: 12),
+                  Text('$_totalOrders orders',
+                      style: const TextStyle(
+                          color: Colors.black38, fontSize: 13, fontWeight: FontWeight.w500)),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: _loadData,
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Refresh'),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: _kOrange,
+                        side: const BorderSide(color: _kOrange)),
+                  ),
+                ] else ...[
+                  // ── Service Charge tab: custom date range picker ──
+                  _ScDateRangeButton(
+                    start: _scStart,
+                    end: _scEnd,
+                    onTap: _pickScDateRange,
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _computeScData()),
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Refresh'),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: _kPurple,
+                        side: const BorderSide(color: _kPurple)),
+                  ),
+                ],
+              ],
+            ),
           ),
+          const SizedBox(height: 12),
+          // ── Tab bar ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+            child: Row(children: [
+              _AnalyticsTab(
+                label: 'Overview',
+                icon: Icons.bar_chart_rounded,
+                selected: _selectedTab == 0,
+                accent: _kOrange,
+                onTap: () => setState(() => _selectedTab = 0),
+              ),
+              const SizedBox(width: 4),
+              _AnalyticsTab(
+                label: 'Service Charge',
+                icon: Icons.receipt_long_rounded,
+                selected: _selectedTab == 1,
+                accent: _kPurple,
+                onTap: () => setState(() => _selectedTab = 1),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 1),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
         ],
       ),
     );
@@ -463,6 +546,139 @@ class _RestaurantAnalyticsScreenState
       _foodCostData  = [];
     });
     _loadData();
+  }
+
+  // ─── Service charge compute & date pick ──────────────
+
+  void _computeScData() {
+    final session  = Provider.of<HotelSession>(context, listen: false);
+    _scRate        = session.settings?.serviceChargeRate ?? 0.0;
+
+    double orderSC(RestaurantOrder o) =>
+        o.type == OrderType.dineIn ? o.itemsTotal * _scRate : 0.0;
+
+    final periodStart = DateTime(_scStart.year, _scStart.month, _scStart.day);
+    final periodEnd   = DateTime(_scEnd.year, _scEnd.month, _scEnd.day, 23, 59, 59);
+
+    bool sameDay(DateTime a, DateTime b) =>
+        a.year == b.year && a.month == b.month && a.day == b.day;
+
+    final valid = _allOrders
+        .where((o) =>
+            o.status != OrderStatus.cancelled &&
+            !o.createdAt.isBefore(periodStart) &&
+            !o.createdAt.isAfter(periodEnd))
+        .toList();
+
+    _scTotal        = valid.fold(0.0, (s, o) => s + orderSC(o));
+    _scDineInOrders = valid.where((o) => o.type == OrderType.dineIn).length;
+    _scAvgPerDineIn = _scDineInOrders > 0 ? _scTotal / _scDineInOrders : 0.0;
+    final revenue   = valid.fold(0.0, (s, o) => s + o.totalAmount);
+    _scPctOfRevenue = revenue > 0 ? (_scTotal / revenue * 100) : 0.0;
+
+    final spanDays = periodEnd.difference(periodStart).inDays + 1;
+
+    if (spanDays <= 31) {
+      // Daily
+      _scBarData = List.generate(spanDays, (i) {
+        final day = periodStart.add(Duration(days: i));
+        return valid.where((o) => sameDay(o.createdAt, day)).fold(0.0, (s, o) => s + orderSC(o));
+      });
+      final labelEvery = spanDays > 14 ? 3 : 1;
+      _scBarLabels = List.generate(spanDays, (i) {
+        final day = periodStart.add(Duration(days: i));
+        return i % labelEvery == 0 ? DateFormat('d MMM').format(day) : '';
+      });
+      _scChartTitle = 'Daily Service Charge';
+      _scBreakdown = List.generate(spanDays, (i) {
+        final day   = periodStart.add(Duration(days: i));
+        final dayOr = valid.where((o) => sameDay(o.createdAt, day)).toList();
+        return {
+          'label':   DateFormat('EEE d MMM').format(day),
+          'dineIn':  dayOr.where((o) => o.type == OrderType.dineIn).length,
+          'sc':      dayOr.fold(0.0, (s, o) => s + orderSC(o)),
+          'revenue': dayOr.fold(0.0, (s, o) => s + o.totalAmount),
+        };
+      });
+    } else if (spanDays <= 91) {
+      // Weekly
+      final weeks = (spanDays / 7).ceil();
+      _scBarData = List.generate(weeks, (i) {
+        final wStart = periodStart.add(Duration(days: i * 7));
+        final wEnd   = wStart.add(const Duration(days: 6));
+        return valid.where((o) =>
+            !o.createdAt.isBefore(wStart) && !o.createdAt.isAfter(wEnd))
+            .fold(0.0, (s, o) => s + orderSC(o));
+      });
+      _scBarLabels = List.generate(weeks, (i) =>
+          DateFormat('d MMM').format(periodStart.add(Duration(days: i * 7))));
+      _scChartTitle = 'Weekly Service Charge';
+      _scBreakdown = List.generate(weeks, (i) {
+        final wStart = periodStart.add(Duration(days: i * 7));
+        final wEnd   = wStart.add(const Duration(days: 6));
+        final wOr    = valid.where((o) =>
+            !o.createdAt.isBefore(wStart) && !o.createdAt.isAfter(wEnd)).toList();
+        return {
+          'label':   'Wk ${i + 1}  ${DateFormat('d MMM').format(wStart)}–${DateFormat('d MMM').format(wEnd)}',
+          'dineIn':  wOr.where((o) => o.type == OrderType.dineIn).length,
+          'sc':      wOr.fold(0.0, (s, o) => s + orderSC(o)),
+          'revenue': wOr.fold(0.0, (s, o) => s + o.totalAmount),
+        };
+      });
+    } else {
+      // Monthly
+      final months = <DateTime>[];
+      var cur = DateTime(periodStart.year, periodStart.month, 1);
+      while (!cur.isAfter(periodEnd)) {
+        months.add(cur);
+        cur = DateTime(cur.year, cur.month + 1, 1);
+      }
+      _scBarData = months.map((m) {
+        final mEnd = DateTime(m.year, m.month + 1, 1).subtract(const Duration(seconds: 1));
+        return valid.where((o) =>
+            !o.createdAt.isBefore(m) && !o.createdAt.isAfter(mEnd))
+            .fold(0.0, (s, o) => s + orderSC(o));
+      }).toList();
+      _scBarLabels = months.map((m) => DateFormat('MMM yy').format(m)).toList();
+      _scChartTitle = 'Monthly Service Charge';
+      _scBreakdown = months.map((m) {
+        final mEnd = DateTime(m.year, m.month + 1, 1).subtract(const Duration(seconds: 1));
+        final mOr  = valid.where((o) =>
+            !o.createdAt.isBefore(m) && !o.createdAt.isAfter(mEnd)).toList();
+        return {
+          'label':   DateFormat('MMMM yyyy').format(m),
+          'dineIn':  mOr.where((o) => o.type == OrderType.dineIn).length,
+          'sc':      mOr.fold(0.0, (s, o) => s + orderSC(o)),
+          'revenue': mOr.fold(0.0, (s, o) => s + o.totalAmount),
+        };
+      }).toList();
+    }
+  }
+
+  Future<void> _pickScDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 3),
+      lastDate: now,
+      initialDateRange: DateTimeRange(start: _scStart, end: _scEnd),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(
+            primary: _kPurple,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() {
+      _scStart = picked.start;
+      _scEnd   = picked.end;
+      _computeScData();
+    });
   }
 
   // ─── KPI Row ─────────────────────────────────────────
@@ -1262,6 +1478,263 @@ class _RestaurantAnalyticsScreenState
       ),
     );
   }
+  // ─── Service charge tab content ───────────────────────
+
+  Widget _buildScContent() {
+    if (_scRate <= 0) {
+      return _card(
+        title: 'Service Charge',
+        icon: Icons.receipt_long_rounded,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Text(
+              'No service charge configured.\n'
+              'Set a service charge rate in Account Settings.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.black45, fontSize: 13),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final maxSC = _scBarData.isEmpty ? 1.0
+        : _scBarData.reduce((a, b) => a > b ? a : b);
+    final totalRev = _scBreakdown.fold(0.0, (s, m) => s + (m['revenue'] as double));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Info banner ──
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: _kPurple.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _kPurple.withOpacity(0.2)),
+          ),
+          child: Row(children: [
+            Icon(Icons.info_outline_rounded, color: _kPurple, size: 15),
+            const SizedBox(width: 8),
+            Text(
+              'Rate: ${(_scRate * 100).toStringAsFixed(1)}% applied to dine-in orders only',
+              style: TextStyle(color: _kPurple, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 16),
+
+        // ── KPI cards ──
+        LayoutBuilder(builder: (_, c) {
+          final wide = c.maxWidth > 650;
+          final kpis = [
+            (label: 'Total Collected', value: _currency.format(_scTotal),
+             icon: Icons.payments_rounded,   color: _kPurple),
+            (label: 'Dine-in Orders',  value: '$_scDineInOrders',
+             icon: Icons.restaurant_rounded, color: _kBlue),
+            (label: 'Avg per Order',   value: _currency.format(_scAvgPerDineIn),
+             icon: Icons.speed_rounded, color: _kOrange),
+            (label: '% of Revenue',    value: '${_scPctOfRevenue.toStringAsFixed(1)}%',
+             icon: Icons.pie_chart_rounded,  color: _kGreen),
+          ];
+          final cards = kpis.map((k) => _scKpiCard(k.label, k.value, k.icon, k.color)).toList();
+          return wide
+              ? Row(children: cards.asMap().entries.map((e) => Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: e.key < cards.length - 1 ? 12 : 0),
+                    child: e.value))).toList())
+              : Wrap(spacing: 12, runSpacing: 12,
+                  children: cards.map((w) => SizedBox(
+                    width: (c.maxWidth - 12) / 2, child: w)).toList());
+        }),
+        const SizedBox(height: 16),
+
+        // ── Bar chart ──
+        _card(
+          title: _scChartTitle,
+          icon: Icons.bar_chart_rounded,
+          child: SizedBox(
+            height: 230,
+            child: _scBarData.isEmpty
+                ? const Center(child: Text('No data for this period',
+                    style: TextStyle(color: Colors.black38)))
+                : LayoutBuilder(builder: (_, bc) {
+                    final barW = ((bc.maxWidth - 60) / _scBarData.length).clamp(6.0, 36.0);
+                    return BarChart(BarChartData(
+                      maxY: maxSC == 0 ? 1 : maxSC * 1.3,
+                      gridData: FlGridData(
+                        show: true, drawVerticalLine: false,
+                        horizontalInterval: maxSC == 0 ? 1 : maxSC / 4,
+                        getDrawingHorizontalLine: (_) =>
+                            FlLine(color: Colors.black.withOpacity(0.05), strokeWidth: 1),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(sideTitles: SideTitles(
+                          showTitles: true, reservedSize: 58,
+                          getTitlesWidget: (v, _) => Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Text(
+                              v == 0 ? '0' : '$_sym${(v / 1000).toStringAsFixed(1)}k',
+                              style: const TextStyle(fontSize: 9, color: Colors.black45),
+                            ),
+                          ),
+                        )),
+                        bottomTitles: AxisTitles(sideTitles: SideTitles(
+                          showTitles: true, reservedSize: 26,
+                          getTitlesWidget: (v, _) {
+                            final i = v.toInt();
+                            if (i < 0 || i >= _scBarLabels.length) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 5),
+                              child: Text(_scBarLabels[i],
+                                  style: const TextStyle(fontSize: 8.5, color: Colors.black45)),
+                            );
+                          },
+                        )),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      ),
+                      barGroups: List.generate(_scBarData.length, (i) =>
+                        BarChartGroupData(x: i, barRods: [
+                          BarChartRodData(
+                            toY: _scBarData[i],
+                            width: barW,
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                              colors: [_kPurple, _kPurple.withOpacity(0.55)],
+                            ),
+                          ),
+                        ])),
+                      barTouchData: BarTouchData(
+                        touchTooltipData: BarTouchTooltipData(
+                          getTooltipColor: (_) => Colors.black87,
+                          getTooltipItem: (group, _, rod, __) {
+                            final m = _scBreakdown[group.x];
+                            return BarTooltipItem(
+                              '${m['label']}\n${_currency.format(rod.toY)}\n${m['dineIn']} dine-in orders',
+                              const TextStyle(color: Colors.white, fontSize: 11, height: 1.5),
+                            );
+                          },
+                        ),
+                      ),
+                    ));
+                  }),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ── Breakdown table ──
+        _card(
+          title: 'Breakdown',
+          icon: Icons.table_rows_rounded,
+          child: Column(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(children: [
+                Expanded(flex: 3, child: Text('Period',   style: _kHdr)),
+                Expanded(child: Text('Dine-in\nOrders', textAlign: TextAlign.center, style: _kHdr)),
+                Expanded(child: Text('Revenue',  textAlign: TextAlign.center, style: _kHdr)),
+                Expanded(child: Text('Service\nCharge', textAlign: TextAlign.center, style: _kHdr)),
+                Expanded(child: Text('SC %\nof Rev.',  textAlign: TextAlign.center, style: _kHdr)),
+              ]),
+            ),
+            const SizedBox(height: 4),
+            ..._scBreakdown.asMap().entries.map((entry) {
+              final i   = entry.key;
+              final m   = entry.value;
+              final sc  = m['sc']      as double;
+              final rev = m['revenue'] as double;
+              final pct = rev > 0 ? sc / rev * 100 : 0.0;
+              return Container(
+                color: i.isOdd ? const Color(0xFFF8FAFC) : Colors.transparent,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                child: Row(children: [
+                  Expanded(flex: 3,
+                    child: Text(m['label'] as String,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                  Expanded(child: Text('${m['dineIn']}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Colors.black54))),
+                  Expanded(child: Text(_currency.format(rev),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Colors.black54))),
+                  Expanded(child: Text(_currency.format(sc),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w700,
+                          color: sc > 0 ? _kPurple : Colors.black26))),
+                  Expanded(child: Text(rev > 0 ? '${pct.toStringAsFixed(1)}%' : '—',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Colors.black54))),
+                ]),
+              );
+            }),
+            // Totals
+            Container(
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+              decoration: BoxDecoration(
+                color: _kPurple.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _kPurple.withOpacity(0.2)),
+              ),
+              child: Row(children: [
+                const Expanded(flex: 3,
+                  child: Text('Total', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800))),
+                Expanded(child: Text('$_scDineInOrders',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                Expanded(child: Text(_currency.format(totalRev),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                Expanded(child: Text(_currency.format(_scTotal),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _kPurple))),
+                Expanded(child: Text(
+                    totalRev > 0 ? '${(_scTotal / totalRev * 100).toStringAsFixed(1)}%' : '—',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+              ]),
+            ),
+          ]),
+        ),
+      ],
+    );
+  }
+
+  Widget _scKpiCard(String label, String value, IconData icon, Color color) =>
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
+            Text(label, style: const TextStyle(fontSize: 11, color: Colors.black45)),
+          ])),
+        ]),
+      );
+
+  static const _kHdr = TextStyle(
+      fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black54);
 }
 
 // Reusable table header cell
@@ -1289,3 +1762,82 @@ class _TH extends StatelessWidget {
     );
   }
 }
+
+// ─── Tab button ───────────────────────────────────────────────────────────────
+
+class _AnalyticsTab extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
+  const _AnalyticsTab({
+    required this.label, required this.icon, required this.selected,
+    required this.accent, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? accent : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 15,
+              color: selected ? accent : Colors.black38),
+          const SizedBox(width: 6),
+          Text(label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? accent : Colors.black45,
+              )),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─── SC date range picker button ──────────────────────────────────────────────
+
+class _ScDateRangeButton extends StatelessWidget {
+  final DateTime start, end;
+  final VoidCallback onTap;
+  const _ScDateRangeButton({required this.start, required this.end, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt   = DateFormat('d MMM yyyy');
+    final label = '${fmt.format(start)}  –  ${fmt.format(end)}';
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.statusPurple.withOpacity(0.4)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.calendar_month_rounded, size: 15, color: AppTheme.statusPurple),
+          const SizedBox(width: 8),
+          Text(label,
+              style: const TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.statusPurple)),
+          const SizedBox(width: 6),
+          const Icon(Icons.expand_more_rounded, size: 16, color: AppTheme.statusPurple),
+        ]),
+      ),
+    );
+  }
+}
+

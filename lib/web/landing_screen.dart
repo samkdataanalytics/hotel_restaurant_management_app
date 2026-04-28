@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:web/web.dart' as webpkg;
 import '../services/plan_service.dart';
 import '../services/lead_service.dart';
 
@@ -86,6 +87,7 @@ class _LandingScreenState extends State<LandingScreen> {
                   const SizedBox(height: 100),
                   _HeroSection(isMobile: isMobile),
                   _StatsStrip(isMobile: isMobile),
+                  _RevealOnScroll(child: _PainSection(isMobile: isMobile)),
                   _RevealOnScroll(child: _HowItWorksSection(isMobile: isMobile)),
                   _RevealOnScroll(
                     child: SizedBox(
@@ -93,6 +95,7 @@ class _LandingScreenState extends State<LandingScreen> {
                       child: _FeaturesSection(isMobile: isMobile),
                     ),
                   ),
+                  _RevealOnScroll(child: _ComparisonSection(isMobile: isMobile)),
                   _RevealOnScroll(child: _TestimonialsSection(isMobile: isMobile)),
                   _RevealOnScroll(
                     child: SizedBox(
@@ -114,7 +117,12 @@ class _LandingScreenState extends State<LandingScreen> {
               isMobile: isMobile,
               onFeatures: () => _scrollTo(_featuresKey),
               onPricing:  () => _scrollTo(_pricingKey),
+              onDocs:     () => context.go('/help'),
             ),
+          ),
+          const Positioned(
+            bottom: 28, right: 28,
+            child: _WhatsAppFab(),
           ),
         ],
       ),
@@ -196,7 +204,8 @@ class _NavBar extends StatelessWidget {
   final bool isMobile;
   final VoidCallback onFeatures;
   final VoidCallback onPricing;
-  const _NavBar({required this.solid, required this.isMobile, required this.onFeatures, required this.onPricing});
+  final VoidCallback onDocs;
+  const _NavBar({required this.solid, required this.isMobile, required this.onFeatures, required this.onPricing, required this.onDocs});
 
   @override
   Widget build(BuildContext context) {
@@ -227,6 +236,7 @@ class _NavBar extends StatelessWidget {
           if (!isMobile) ...[
             _NavLink(label: 'Features', onTap: onFeatures),
             _NavLink(label: 'Pricing',  onTap: onPricing),
+            _NavLink(label: 'Docs',     onTap: onDocs),
             const SizedBox(width: 8),
             TextButton(
               onPressed: () => context.go('/login'),
@@ -381,11 +391,11 @@ class _HeroSection extends StatelessWidget {
           ),
           const SizedBox(height: 36),
           Text(
-            'The All-in-One Platform\nfor Modern Hospitality',
+            'Stop Running Your Hotel\nWith WhatsApp & Spreadsheets',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: _C.text,
-              fontSize: isMobile ? 34 : 62,
+              fontSize: isMobile ? 32 : 60,
               fontWeight: FontWeight.w900,
               height: 1.08,
               letterSpacing: -1.5,
@@ -393,11 +403,11 @@ class _HeroSection extends StatelessWidget {
           ),
           const SizedBox(height: 22),
           ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
+            constraints: const BoxConstraints(maxWidth: 580),
             child: Text(
-              'Manage bookings, rooms, restaurant orders, staff schedules, '
-              'and guest experiences — all from one beautiful dashboard. '
-              'Built for hotels and restaurants that demand excellence.',
+              'Independent hotels and restaurants waste hours every day '
+              'juggling check-ins on WhatsApp, menus on paper, and finances in Excel. '
+              'HotRest replaces all of it — one beautiful dashboard for every department.',
               textAlign: TextAlign.center,
               style: TextStyle(color: _C.subtext, fontSize: isMobile ? 15 : 17, height: 1.65),
             ),
@@ -1308,6 +1318,24 @@ class _PricingSectionState extends State<_PricingSection> {
             textAlign: TextAlign.center,
             style: TextStyle(color: _C.subtext, fontSize: 15.5),
           ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEF4444).withAlpha(12),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: const Color(0xFFEF4444).withAlpha(60)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.local_fire_department_rounded, color: Color(0xFFEF4444), size: 14),
+                SizedBox(width: 7),
+                Text('Early-Access Pricing — Rates locked in for life when you sign up now',
+                    style: TextStyle(color: Color(0xFFEF4444), fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
           const SizedBox(height: 32),
           // Billing toggle
           Row(
@@ -1440,7 +1468,7 @@ class _PricingCard extends StatelessWidget {
         ? 'Custom'
         : effectiveMonthly == 0
             ? 'Free'
-            : '\$$effectiveMonthly';
+            : 'LKR $effectiveMonthly';
     final periodStr = isAnnual && !isEnterprise && effectiveMonthly > 0
         ? '/ mo, billed annually'
         : plan.priceMonthly > 0 ? '/ month' : '';
@@ -1845,6 +1873,7 @@ class _Footer extends StatelessWidget {
                     _FooterColumn(title: 'Product', items: [
                       const _FooterItem('Features', null),
                       const _FooterItem('Pricing', null),
+                      _FooterItem('Docs', () => context.go('/help')),
                       _FooterItem('Sign In', () => context.go('/login')),
                       _FooterItem('Get Started', () => context.go('/signup')),
                     ]),
@@ -2019,95 +2048,164 @@ class _GoldButtonState extends State<_GoldButton> {
 }
 
 // ─── Demo Dialog ──────────────────────────────────────────────────────────────
-class _DemoDialog extends StatelessWidget {
+class _DemoDialog extends StatefulWidget {
   const _DemoDialog();
+  @override
+  State<_DemoDialog> createState() => _DemoDialogState();
+}
+
+class _DemoDialogState extends State<_DemoDialog> {
+  int _activeTab = 0;
+
+  static const _tabs = ['Hotel', 'Restaurant', 'Guest Portal'];
+
+  static const _highlights = [
+    [
+      (icon: Icons.how_to_reg_rounded,   color: Color(0xFF3B82F6), title: 'One-click check-in',        desc: 'Front desk checks in a guest in under 10 seconds — folio auto-generated, room assigned, key ready.'),
+      (icon: Icons.king_bed_rounded,      color: Color(0xFF22C55E), title: 'Live room availability',    desc: 'Color-coded room grid shows occupied, available, and maintenance rooms in real time.'),
+      (icon: Icons.receipt_long_rounded,  color: Color(0xFFD4A853), title: 'Instant folio billing',     desc: 'Auto-calculates room charges, extras and taxes — export to PDF with one click.'),
+      (icon: Icons.people_alt_rounded,    color: Color(0xFF8B5CF6), title: 'Staff shift management',    desc: 'Assign and track shifts, clock-ins and attendance — no third-party HR tool needed.'),
+    ],
+    [
+      (icon: Icons.point_of_sale_rounded, color: Color(0xFFF97316), title: 'Table-side ordering',       desc: 'Waiters take orders on any device — sent instantly to the kitchen display, no paper tickets.'),
+      (icon: Icons.kitchen_rounded,       color: Color(0xFFEF4444), title: 'Kitchen display system',    desc: 'KDS shows orders in real time, with timers and priority flags so chefs never miss a ticket.'),
+      (icon: Icons.splitscreen_rounded,   color: Color(0xFF22C55E), title: 'Split bills & payments',    desc: 'Split any bill by item or equally across guests — supports cash, card and mixed payments.'),
+      (icon: Icons.analytics_rounded,     color: Color(0xFF06B6D4), title: 'Sales analytics',           desc: 'See your top-selling dishes, peak hours, and daily revenue at a glance.'),
+    ],
+    [
+      (icon: Icons.qr_code_2_rounded,    color: Color(0xFF22C55E), title: 'QR self check-in',          desc: 'Guests scan a QR at reception, fill in details on their phone and check in — no queue, no paperwork.'),
+      (icon: Icons.room_service_rounded,  color: Color(0xFFD4A853), title: 'Room service on phone',     desc: 'Guests order food from their room by scanning a QR — order goes straight to the kitchen.'),
+      (icon: Icons.restaurant_menu_rounded, color: Color(0xFF3B82F6), title: 'Digital table menu',      desc: 'Diners scan a table QR, browse the menu and order — no app download required.'),
+      (icon: Icons.no_accounts_rounded,   color: Color(0xFF8B5CF6), title: 'No app needed',             desc: 'Everything runs in the mobile browser. Guests do not install anything.'),
+    ],
+  ];
 
   @override
   Widget build(BuildContext context) {
+    final items = _highlights[_activeTab];
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 540),
+        constraints: const BoxConstraints(maxWidth: 600),
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: const EdgeInsets.all(28),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: double.infinity,
-                height: 220,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF0F172A), Color(0xFF1E3A5F)],
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 64, height: 64,
-                      decoration: BoxDecoration(
-                        color: _C.gold.withAlpha(30),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: _C.gold.withAlpha(80), width: 2),
-                      ),
-                      child: const Icon(Icons.play_arrow_rounded, color: _C.gold, size: 36),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text('Product Demo',
-                        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 6),
-                    Text('Full walkthrough video — coming soon',
-                        style: TextStyle(color: Colors.white.withAlpha(130), fontSize: 13)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text('See HotRest in Action',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _C.text)),
-              const SizedBox(height: 10),
-              const Text(
-                'Our product demo video is being produced. In the meantime, sign up free and '
-                'explore the full platform yourself — no credit card needed.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.55),
-              ),
-              const SizedBox(height: 24),
               Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: _C.border),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text('Close', style: TextStyle(color: _C.subtext)),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('See HotRest in Action',
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _C.text)),
+                        SizedBox(height: 4),
+                        Text('What you get — out of the box, day one.',
+                            style: TextStyle(color: _C.subtext, fontSize: 13)),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        context.go('/signup');
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _C.gold,
-                        foregroundColor: _C.bg,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 0,
-                      ),
-                      child: const Text('Try Free', style: TextStyle(fontWeight: FontWeight.w700)),
-                    ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded, color: _C.muted),
                   ),
                 ],
+              ),
+              const SizedBox(height: 20),
+              // Tabs
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: _C.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _C.border),
+                ),
+                child: Row(
+                  children: List.generate(_tabs.length, (i) => Expanded(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _activeTab = i),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _activeTab == i ? _C.gold : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(_tabs[i],
+                          style: TextStyle(
+                            color: _activeTab == i ? Colors.white : _C.subtext,
+                            fontSize: 13,
+                            fontWeight: _activeTab == i ? FontWeight.w700 : FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Feature highlights grid
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 2.1,
+                children: items.map((item) => Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: item.color.withAlpha(8),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: item.color.withAlpha(40)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Icon(item.icon, color: item.color, size: 16),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(item.title,
+                            style: const TextStyle(color: _C.text, fontSize: 12, fontWeight: FontWeight.w700),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ]),
+                      const SizedBox(height: 5),
+                      Expanded(
+                        child: Text(item.desc,
+                          style: const TextStyle(color: _C.subtext, fontSize: 10.5, height: 1.45),
+                          overflow: TextOverflow.fade,
+                        ),
+                      ),
+                    ],
+                  ),
+                )).toList(),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    context.go('/signup');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _C.gold,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  icon: const Icon(Icons.rocket_launch_rounded, size: 16),
+                  label: const Text('Try It Free — No Credit Card',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                ),
               ),
             ],
           ),
@@ -2304,6 +2402,435 @@ class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
                 return null;
               }
             : null,
+      ),
+    );
+  }
+}
+
+// ─── Pain section (Before / After) ───────────────────────────────────────────
+class _PainSection extends StatelessWidget {
+  final bool isMobile;
+  const _PainSection({required this.isMobile});
+
+  static const _before = [
+    (icon: Icons.chat_bubble_rounded,        text: 'WhatsApp & phone calls for every booking'),
+    (icon: Icons.table_chart_rounded,        text: 'Spreadsheets that break during peak hours'),
+    (icon: Icons.receipt_rounded,            text: 'Paper order tickets lost in the kitchen'),
+    (icon: Icons.supervised_user_circle_rounded, text: 'Staff asking each other what to do next'),
+    (icon: Icons.alarm_off_rounded,          text: 'Hours wasted on manual data entry daily'),
+    (icon: Icons.sentiment_dissatisfied_rounded, text: 'Guests waiting 10 minutes to check in'),
+  ];
+
+  static const _after = [
+    (icon: Icons.dashboard_rounded,          text: 'One dashboard for front desk, kitchen & finance'),
+    (icon: Icons.cloud_sync_rounded,         text: 'Real-time sync across all departments'),
+    (icon: Icons.kitchen_rounded,            text: 'Digital kitchen display — zero lost tickets'),
+    (icon: Icons.task_alt_rounded,           text: 'Every staff member knows their tasks instantly'),
+    (icon: Icons.flash_on_rounded,           text: 'Save 4+ hours of admin work every single day'),
+    (icon: Icons.qr_code_2_rounded,          text: 'Guests self-check-in in under 30 seconds'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 100),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFF8FAFC), Color(0xFFFFFFFF)],
+        ),
+      ),
+      child: Column(
+        children: [
+          const _SectionLabel(label: 'THE DIFFERENCE'),
+          const SizedBox(height: 16),
+          Text(
+            'Life Before & After HotRest',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: _C.text,
+              fontSize: isMobile ? 28 : 44,
+              fontWeight: FontWeight.w800,
+              height: 1.15,
+              letterSpacing: -0.8,
+            ),
+          ),
+          const SizedBox(height: 14),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 540),
+            child: const Text(
+              "Sound familiar? You're not alone. Most independent hotels and "
+              'restaurants operate the same way — until they find HotRest.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _C.subtext, fontSize: 15.5, height: 1.55),
+            ),
+          ),
+          const SizedBox(height: 56),
+          isMobile
+              ? Column(children: [
+                  _PainPanel(title: 'Before HotRest', isAfter: false, items: _before),
+                  const SizedBox(height: 20),
+                  _PainPanel(title: 'With HotRest', isAfter: true, items: _after),
+                ])
+              : IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: _PainPanel(title: 'Before HotRest', isAfter: false, items: _before)),
+                      Container(
+                        width: 2, margin: const EdgeInsets.symmetric(horizontal: 20),
+                        color: _C.border,
+                      ),
+                      Expanded(child: _PainPanel(title: 'With HotRest', isAfter: true, items: _after)),
+                    ],
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PainPanel extends StatelessWidget {
+  final String title;
+  final bool isAfter;
+  final List<({IconData icon, String text})> items;
+  const _PainPanel({required this.title, required this.isAfter, required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = isAfter ? const Color(0xFF22C55E) : const Color(0xFFEF4444);
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: accent.withAlpha(8),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withAlpha(40)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: accent.withAlpha(20), borderRadius: BorderRadius.circular(10)),
+              child: Icon(
+                isAfter ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                color: accent, size: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(title,
+                style: TextStyle(color: accent, fontSize: 15, fontWeight: FontWeight.w800)),
+          ]),
+          const SizedBox(height: 20),
+          ...items.map((item) => Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: accent.withAlpha(15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(item.icon, color: accent, size: 16),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(item.text,
+                        style: TextStyle(
+                          color: isAfter ? _C.text : _C.subtext,
+                          fontSize: 13.5,
+                          height: 1.4,
+                          fontWeight: isAfter ? FontWeight.w600 : FontWeight.w400,
+                          decoration: isAfter ? null : TextDecoration.none,
+                        )),
+                  ),
+                ),
+              ],
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Comparison section ───────────────────────────────────────────────────────
+class _ComparisonSection extends StatelessWidget {
+  final bool isMobile;
+  const _ComparisonSection({required this.isMobile});
+
+  static const _features = [
+    'Starting price',
+    'Setup time',
+    'Hotel + Restaurant in one',
+    'QR guest self-check-in',
+    'Built-in kitchen display',
+    'Digital guest menu',
+    'Multi-property support',
+    'White-label branding',
+    'Free plan available',
+  ];
+
+  static const _hotrest  = ['Free / LKR 3,500', '< 20 min', true, true, true, true, true, true, true];
+  static const _trad     = ['LKR 20,000+/mo',   'Days–Weeks', false, false, false, false, true, false, false];
+  static const _manual   = ['Ongoing hidden costs', 'Never done', false, false, false, false, false, false, true];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 80, vertical: isMobile ? 60 : 100),
+      decoration: const BoxDecoration(color: Color(0xFF0F172A)),
+      child: Column(
+        children: [
+          const _SectionLabel(label: 'WHY HOTREST'),
+          const SizedBox(height: 16),
+          Text(
+            'How We Compare',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: isMobile ? 28 : 44,
+              fontWeight: FontWeight.w800,
+              height: 1.15,
+              letterSpacing: -0.8,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Traditional hotel software is expensive, slow to set up, and missing key features. '
+            'HotRest was built from the ground up for independent properties.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white.withAlpha(160), fontSize: 15.5, height: 1.55),
+          ),
+          const SizedBox(height: 48),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 860),
+            child: isMobile ? _buildMobile() : _buildDesktop(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktop() {
+    return Column(
+      children: [
+        // Header row
+        Row(children: [
+          const Expanded(flex: 3, child: SizedBox()),
+          Expanded(flex: 2, child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: _C.gold,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            alignment: Alignment.center,
+            child: const Text('HotRest', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
+          )),
+          const SizedBox(width: 8),
+          Expanded(flex: 2, child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(10),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            alignment: Alignment.center,
+            child: Text('Traditional PMS', style: TextStyle(color: Colors.white.withAlpha(180), fontWeight: FontWeight.w600, fontSize: 13)),
+          )),
+          const SizedBox(width: 8),
+          Expanded(flex: 2, child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withAlpha(10),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            alignment: Alignment.center,
+            child: Text('Manual / Spreadsheet', style: TextStyle(color: Colors.white.withAlpha(180), fontWeight: FontWeight.w600, fontSize: 12)),
+          )),
+        ]),
+        // Data rows
+        ...List.generate(_features.length, (i) => Container(
+          decoration: BoxDecoration(
+            color: i.isEven ? Colors.white.withAlpha(5) : Colors.transparent,
+          ),
+          child: Row(children: [
+            Expanded(flex: 3,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                child: Text(_features[i], style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 13)),
+              ),
+            ),
+            Expanded(flex: 2, child: _cell(_hotrest[i],  _C.gold,                    isHighlighted: true)),
+            const SizedBox(width: 8),
+            Expanded(flex: 2, child: _cell(_trad[i],     Colors.white.withAlpha(130))),
+            const SizedBox(width: 8),
+            Expanded(flex: 2, child: _cell(_manual[i],   Colors.white.withAlpha(130))),
+          ]),
+        )),
+        const SizedBox(height: 2),
+      ],
+    );
+  }
+
+  Widget _buildMobile() {
+    return Column(
+      children: List.generate(_features.length, (i) => Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withAlpha(8),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withAlpha(15)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_features[i], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: _mobileCell('HotRest', _hotrest[i], _C.gold)),
+              const SizedBox(width: 6),
+              Expanded(child: _mobileCell('Trad. PMS', _trad[i], Colors.white.withAlpha(100))),
+              const SizedBox(width: 6),
+              Expanded(child: _mobileCell('Manual', _manual[i], Colors.white.withAlpha(100))),
+            ]),
+          ],
+        ),
+      )),
+    );
+  }
+
+  Widget _cell(dynamic value, Color color, {bool isHighlighted = false}) {
+    if (value is bool) {
+      return Container(
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Icon(
+          value ? Icons.check_circle_rounded : Icons.cancel_rounded,
+          color: value ? color : Colors.white.withAlpha(40),
+          size: 20,
+        ),
+      );
+    }
+    return Container(
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
+      child: Text(value.toString(),
+          textAlign: TextAlign.center,
+          style: TextStyle(color: color, fontSize: 12, fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w400)),
+    );
+  }
+
+  Widget _mobileCell(String colLabel, dynamic value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withAlpha(15)),
+      ),
+      child: Column(
+        children: [
+          Text(colLabel, style: TextStyle(color: Colors.white.withAlpha(120), fontSize: 10)),
+          const SizedBox(height: 4),
+          value is bool
+              ? Icon(value ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                  color: value ? color : Colors.white.withAlpha(40), size: 18)
+              : Text(value.toString(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Floating WhatsApp button ─────────────────────────────────────────────────
+class _WhatsAppFab extends StatefulWidget {
+  const _WhatsAppFab();
+  @override
+  State<_WhatsAppFab> createState() => _WhatsAppFabState();
+}
+
+class _WhatsAppFabState extends State<_WhatsAppFab>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
+  bool _hovered = false;
+
+  // Replace with your actual WhatsApp number (international format, no '+' or spaces)
+  static const _waNumber  = '94XXXXXXXXX';
+  static const _waMessage = 'Hi! I\'m interested in HotRest for my property.';
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 180));
+    _scale = Tween<double>(begin: 1.0, end: 1.08)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _open() {
+    final uri = Uri.encodeFull('https://wa.me/$_waNumber?text=$_waMessage');
+    webpkg.window.open(uri, '_blank');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) { setState(() => _hovered = true);  _ctrl.forward(); },
+      onExit:  (_) { setState(() => _hovered = false); _ctrl.reverse(); },
+      child: ScaleTransition(
+        scale: _scale,
+        child: GestureDetector(
+          onTap: _open,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF25D366),
+              borderRadius: BorderRadius.circular(32),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF25D366).withAlpha(_hovered ? 100 : 60),
+                  blurRadius: _hovered ? 24 : 14,
+                  spreadRadius: _hovered ? 4 : 2,
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.chat_rounded, color: Colors.white, size: 20),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 200),
+                  child: _hovered
+                      ? const Row(children: [
+                          SizedBox(width: 8),
+                          Text('Chat with us',
+                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+                        ])
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
