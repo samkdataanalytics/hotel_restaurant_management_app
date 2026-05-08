@@ -3,9 +3,9 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../app_theme.dart';
 import '../providers/hotel_session.dart';
-import '../models/menu_item.dart';
-import '../models/restaurant_order.dart';
-import '../models/restaurant_table.dart';
+import '../domain/entities/menu_item.dart';
+import '../domain/entities/restaurant_order.dart';
+import '../domain/entities/restaurant_table.dart';
 import 'widgets/responsive_dialog.dart';
 
 /// Full-page invoice dialog.

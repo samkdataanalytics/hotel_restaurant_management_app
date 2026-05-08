@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../app_theme.dart';
 import '../providers/app_auth_provider.dart';
-import '../services/organization_service.dart';
+import '../services/plan_service.dart';
+import '../providers/service_providers.dart';
 
 class AccountSettingsScreen extends ConsumerStatefulWidget {
   const AccountSettingsScreen({super.key});
@@ -37,7 +38,7 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
   }
 
   Future<void> _loadProfile() async {
-    final profile = await OrganizationService().getMyProfile();
+    final profile = await ref.read(organizationServiceProvider).getMyProfile();
     if (!mounted) return;
     setState(() {
       _nameCtrl.text     = profile?['full_name']  as String? ?? '';
@@ -52,7 +53,7 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {
-      await OrganizationService().updateProfile(
+      await ref.read(organizationServiceProvider).updateProfile(
         fullName: _nameCtrl.text.trim(),
         jobTitle: _jobTitleCtrl.text.trim(),
         phone:    _phoneCtrl.text.trim(),
@@ -196,7 +197,7 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
 
     // Step 3: perform soft delete + sign out
     try {
-      await OrganizationService().softDeleteMyAccount();
+      await ref.read(organizationServiceProvider).softDeleteMyAccount();
       await ref.read(authProvider.notifier).signOut();
       if (!mounted) return;
       context.go('/');
@@ -316,6 +317,11 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
 
             const SizedBox(height: 24),
 
+            // ─── Plan & Billing card
+            _PlanBillingCard(),
+
+            const SizedBox(height: 24),
+
             // ─── Danger zone card
             _SectionCard(
               title: 'Danger Zone',
@@ -374,6 +380,148 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
       ),
     );
   }
+}
+
+// ─── Plan & Billing card ──────────────────────────────────────────────────────
+
+class _PlanBillingCard extends ConsumerWidget {
+  const _PlanBillingCard();
+
+  static const _planColors = {
+    'free':       Color(0xFF64748B),
+    'starter':    Color(0xFF2563EB),
+    'pro':        Color(0xFF7C3AED),
+    'enterprise': Color(0xFFD97706),
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final org      = ref.watch(authProvider).valueOrNull?.organization;
+    final planSlug = org?.plan ?? 'free';
+    final accent   = _planColors[planSlug] ?? const Color(0xFF64748B);
+
+    return _SectionCard(
+      title: 'Plan & Billing',
+      icon: Icons.workspace_premium_rounded,
+      child: FutureBuilder<List<PlanModel>>(
+        future: ref.read(planServiceProvider).getActivePlans(),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+
+          final plans   = snap.data ?? [];
+          final current = plans.firstWhere(
+            (p) => p.slug == planSlug,
+            orElse: () => PlanModel(
+              id: '', name: planSlug == 'free' ? 'Free' : planSlug,
+              slug: planSlug, priceMonthly: 0, isCustomPrice: false,
+              maxProperties: 1, maxUsers: 3, maxRooms: 10, maxTables: 5,
+              isHighlighted: false, isActive: true, sortOrder: 0,
+            ),
+          );
+
+          final canUpgrade = plans.any(
+            (p) => p.sortOrder > current.sortOrder && !p.isCustomPrice,
+          );
+          final isEnterprise = current.isCustomPrice;
+
+          String lim(int v) => v == -1 ? 'Unlimited' : '$v';
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Current plan badge row
+              Row(children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: accent.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.verified_rounded, size: 14, color: accent),
+                    const SizedBox(width: 6),
+                    Text(current.name,
+                        style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w700, color: accent)),
+                  ]),
+                ),
+                if (!isEnterprise && current.priceMonthly > 0) ...[
+                  const SizedBox(width: 10),
+                  Text('LKR ${current.priceMonthly.toInt()} / month',
+                      style: const TextStyle(fontSize: 13, color: Colors.black45)),
+                ],
+                if (current.priceMonthly == 0 && !isEnterprise)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 10),
+                    child: Text('Free forever',
+                        style: const TextStyle(fontSize: 13, color: Colors.black45)),
+                  ),
+              ]),
+              const SizedBox(height: 16),
+
+              // Limits row
+              Wrap(spacing: 10, runSpacing: 8, children: [
+                _limitChip(Icons.domain_rounded,   '${lim(current.maxProperties)} ${current.maxProperties == 1 ? "property" : "properties"}'),
+                _limitChip(Icons.bed_rounded,       '${lim(current.maxRooms)} rooms'),
+                _limitChip(Icons.people_rounded,    '${lim(current.maxUsers)} staff'),
+                _limitChip(Icons.table_bar_rounded, '${lim(current.maxTables)} tables'),
+              ]),
+              const SizedBox(height: 20),
+
+              // Action row
+              if (isEnterprise)
+                const Text(
+                  'You\'re on an Enterprise plan. Contact support to make changes.',
+                  style: TextStyle(fontSize: 13, color: Colors.black45),
+                )
+              else if (canUpgrade)
+                Row(children: [
+                  ElevatedButton.icon(
+                    onPressed: () => context.go('/app/upgrade'),
+                    icon: const Icon(Icons.rocket_launch_rounded, size: 16),
+                    label: const Text('Upgrade Plan'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      elevation: 0,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  const Text('Unlock more properties, rooms & staff.',
+                      style: TextStyle(fontSize: 12, color: Colors.black38)),
+                ])
+              else
+                const Text(
+                  'You\'re on the highest available plan.',
+                  style: TextStyle(fontSize: 13, color: Colors.black45),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _limitChip(IconData icon, String label) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF1F5F9),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 13, color: Colors.black38),
+      const SizedBox(width: 5),
+      Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+    ]),
+  );
 }
 
 // ─── Reusable section card ────────────────────────────────────────────────────

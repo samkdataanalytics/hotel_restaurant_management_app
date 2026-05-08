@@ -1,7 +1,7 @@
 import 'dart:js_interop';
 import 'package:web/web.dart' as web;
 import 'package:intl/intl.dart';
-import '../models/menu_item.dart';
+import '../domain/entities/menu_item.dart';
 import '../providers/hotel_session.dart';
 
 /// Generates a styled HTML menu document and triggers a browser download.

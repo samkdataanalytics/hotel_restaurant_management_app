@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/service_providers.dart';
 import '../app_theme.dart';
 import '../providers/hotel_session.dart';
 import '../services/booking_service.dart';
@@ -115,14 +117,14 @@ const _sections = <_NavSection>[
 
 // ─── Main layout ─────────────────────────────────────────────────────────────
 
-class AdminLayout extends StatefulWidget {
+class AdminLayout extends ConsumerStatefulWidget {
   const AdminLayout({super.key});
 
   @override
-  State<AdminLayout> createState() => _AdminLayoutState();
+  ConsumerState<AdminLayout> createState() => _AdminLayoutState();
 }
 
-class _AdminLayoutState extends State<AdminLayout> {
+class _AdminLayoutState extends ConsumerState<AdminLayout> {
   int _selectedIndex = 0;
   bool _sidebarExpanded = true;
 
@@ -132,8 +134,8 @@ class _AdminLayoutState extends State<AdminLayout> {
     // Propagate hotel_id into singleton services so every write is scoped.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final hotelId = context.read<HotelSession>().hotelId;
-      BookingService().hotelId    = hotelId;
-      RestaurantService().hotelId = hotelId;
+      ref.read(bookingServiceProvider).hotelId    = hotelId;
+      ref.read(restaurantServiceProvider).hotelId = hotelId;
     });
   }
 

@@ -4,10 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
-import '../models/staff_permission.dart';
+import '../domain/entities/staff_permission.dart';
 import '../providers/app_auth_provider.dart';
 import '../services/staff_service.dart';
 import '../services/organization_service.dart';
+import '../providers/service_providers.dart';
 import 'widgets/upgrade_plan_dialog.dart';
 
 class UsersManagementScreen extends ConsumerStatefulWidget {
@@ -20,7 +21,7 @@ class UsersManagementScreen extends ConsumerStatefulWidget {
 
 class _UsersManagementScreenState
     extends ConsumerState<UsersManagementScreen> {
-  final _staffService = StaffService();
+  StaffService get _staffService => ref.read(staffServiceProvider);
   List<PropertyStaffMember> _staff = [];
   bool _isLoading = true;
   bool _isHotel = true;
@@ -61,7 +62,7 @@ class _UsersManagementScreenState
     if (property == null || authState?.organization == null) return;
 
     final orgId = authState!.organization!.id;
-    final canAdd = await OrganizationService().canAddStaff(orgId);
+    final canAdd = await ref.read(organizationServiceProvider).canAddStaff(orgId);
     if (!canAdd && mounted) {
       _showPlanLimitDialog();
       return;
@@ -793,7 +794,7 @@ class _RoleChip extends StatelessWidget {
 
 // ─── Add staff dialog (username + password) ───────────────────────────────────
 
-class _AddStaffDialog extends StatefulWidget {
+class _AddStaffDialog extends ConsumerStatefulWidget {
   final String propertyId;
   final String orgId;
   final bool isHotel;
@@ -809,15 +810,15 @@ class _AddStaffDialog extends StatefulWidget {
   });
 
   @override
-  State<_AddStaffDialog> createState() => _AddStaffDialogState();
+  ConsumerState<_AddStaffDialog> createState() => _AddStaffDialogState();
 }
 
-class _AddStaffDialogState extends State<_AddStaffDialog> {
+class _AddStaffDialogState extends ConsumerState<_AddStaffDialog> {
   final _formKey      = GlobalKey<FormState>();
   final _usernameCtrl = TextEditingController();
   final _passCtrl     = TextEditingController();
   final _confirmCtrl  = TextEditingController();
-  final _staffService = StaffService();
+  StaffService get _staffService => ref.read(staffServiceProvider);
   // propertyId → { sectionKey → PrivilegeLevel }
   final Map<String, Map<String, PrivilegeLevel>> _propertyPerms = {};
   bool _saving         = false;
@@ -1458,19 +1459,19 @@ class _AddStaffDialogState extends State<_AddStaffDialog> {
 
 // ─── Reset password dialog ────────────────────────────────────────────────────
 
-class _ResetPasswordDialog extends StatefulWidget {
+class _ResetPasswordDialog extends ConsumerStatefulWidget {
   final PropertyStaffMember member;
   const _ResetPasswordDialog({required this.member});
 
   @override
-  State<_ResetPasswordDialog> createState() => _ResetPasswordDialogState();
+  ConsumerState<_ResetPasswordDialog> createState() => _ResetPasswordDialogState();
 }
 
-class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
+class _ResetPasswordDialogState extends ConsumerState<_ResetPasswordDialog> {
   final _passCtrl    = TextEditingController();
   final _confirmCtrl = TextEditingController();
   final _formKey     = GlobalKey<FormState>();
-  final _staffService = StaffService();
+  StaffService get _staffService => ref.read(staffServiceProvider);
   bool _obscurePass    = true;
   bool _obscureConfirm = true;
   bool _saving  = false;
@@ -1655,7 +1656,7 @@ class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
 
 // ─── Edit permissions dialog ──────────────────────────────────────────────────
 
-class _EditPermissionsDialog extends StatefulWidget {
+class _EditPermissionsDialog extends ConsumerStatefulWidget {
   final PropertyStaffMember member;
   final String propertyId;
   final bool isHotel;
@@ -1669,12 +1670,12 @@ class _EditPermissionsDialog extends StatefulWidget {
   });
 
   @override
-  State<_EditPermissionsDialog> createState() =>
+  ConsumerState<_EditPermissionsDialog> createState() =>
       _EditPermissionsDialogState();
 }
 
-class _EditPermissionsDialogState extends State<_EditPermissionsDialog> {
-  final _staffService = StaffService();
+class _EditPermissionsDialogState extends ConsumerState<_EditPermissionsDialog> {
+  StaffService get _staffService => ref.read(staffServiceProvider);
   late Map<String, PrivilegeLevel> _permissions;
   bool _saving = false;
 
@@ -2048,7 +2049,7 @@ class _PrivilegeToggle extends StatelessWidget {
 
 // ─── Assign / Transfer to Property Dialog ─────────────────────────────────────
 
-class _AssignToPropertyDialog extends StatefulWidget {
+class _AssignToPropertyDialog extends ConsumerStatefulWidget {
   final PropertyStaffMember member;
   final String              currentPropertyId;
   final List<OrgProperty>   otherProperties;
@@ -2060,12 +2061,12 @@ class _AssignToPropertyDialog extends StatefulWidget {
   });
 
   @override
-  State<_AssignToPropertyDialog> createState() =>
+  ConsumerState<_AssignToPropertyDialog> createState() =>
       _AssignToPropertyDialogState();
 }
 
-class _AssignToPropertyDialogState extends State<_AssignToPropertyDialog> {
-  final _staffService = StaffService();
+class _AssignToPropertyDialogState extends ConsumerState<_AssignToPropertyDialog> {
+  StaffService get _staffService => ref.read(staffServiceProvider);
 
   bool          _loading         = true;
   bool          _saving          = false;

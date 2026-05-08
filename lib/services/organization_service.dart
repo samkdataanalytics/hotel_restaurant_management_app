@@ -14,9 +14,15 @@ class Organization {
   final String country;
   final String phone;
   final String logoUrl;
-  final String plan;   // free | pro | enterprise
+  final String plan;   // free | starter | pro | enterprise
   final String status; // active | suspended
   final DateTime createdAt;
+
+  // Custom pricing — set by superadmin for enterprise customers.
+  // null = not yet agreed / not applicable.
+  final double? customPriceMonthly;
+  final double? customPriceAnnually;
+  final String? billingCycle; // 'monthly' | 'annually'
 
   Organization({
     required this.id,
@@ -28,18 +34,24 @@ class Organization {
     required this.plan,
     required this.status,
     required this.createdAt,
+    this.customPriceMonthly,
+    this.customPriceAnnually,
+    this.billingCycle,
   });
 
   factory Organization.fromRow(Map<String, dynamic> r) => Organization(
-        id:        r['id']         as String,
-        name:      r['name']       as String,
-        slug:      r['slug']       as String,
-        country:   r['country']    as String? ?? '',
-        phone:     r['phone']      as String? ?? '',
-        logoUrl:   r['logo_url']   as String? ?? '',
-        plan:      r['plan']       as String? ?? 'free',
-        status:    r['status']     as String? ?? 'active',
-        createdAt: DateTime.parse(r['created_at'] as String),
+        id:                  r['id']                    as String,
+        name:                r['name']                  as String,
+        slug:                r['slug']                  as String,
+        country:             r['country']               as String? ?? '',
+        phone:               r['phone']                 as String? ?? '',
+        logoUrl:             r['logo_url']              as String? ?? '',
+        plan:                r['plan']                  as String? ?? 'free',
+        status:              r['status']                as String? ?? 'active',
+        createdAt:           DateTime.parse(r['created_at'] as String),
+        customPriceMonthly:  (r['custom_price_monthly']  as num?)?.toDouble(),
+        customPriceAnnually: (r['custom_price_annually'] as num?)?.toDouble(),
+        billingCycle:        r['billing_cycle']          as String?,
       );
 
   // For superadmin usage: property + member counts attached
@@ -48,10 +60,23 @@ class Organization {
   int get memberCount => _memberCount ?? 0;
   int? _memberCount;
 
+  /// Effective custom price based on billing cycle. null if no custom price is set.
+  double? get effectiveCustomPrice {
+    if (billingCycle == 'annually') return customPriceAnnually;
+    return customPriceMonthly;
+  }
+
+  /// True when this org has an enterprise plan with a custom price configured.
+  bool get hasCustomSubscription =>
+      plan == 'enterprise' && (effectiveCustomPrice ?? 0) > 0;
+
   Organization copyWithCounts({int? propertyCount, int? memberCount}) {
     final copy = Organization(
       id: id, name: name, slug: slug, country: country, phone: phone,
       logoUrl: logoUrl, plan: plan, status: status, createdAt: createdAt,
+      customPriceMonthly: customPriceMonthly,
+      customPriceAnnually: customPriceAnnually,
+      billingCycle: billingCycle,
     );
     copy._propertyCount = propertyCount ?? _propertyCount;
     copy._memberCount   = memberCount   ?? _memberCount;
@@ -380,57 +405,32 @@ class OrganizationService {
     String logoUrl = '',
     List<String> bookingChannels = const ['direct'],
   }) async {
-    final userId = _db.auth.currentUser!.id;
+    final slug = '${name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-')}-${DateTime.now().millisecondsSinceEpoch}';
 
-    // slug from name
-    final slug = name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
-
-    final row = await _db
-        .from('hotels')
-        .insert({
-          'name':             name,
-          'slug':             '$slug-${DateTime.now().millisecondsSinceEpoch}',
-          'org_id':           orgId,
-          'type':             type,
-          'address':          address,
-          'city':             city,
-          'country':          country,
-          'phone':            phone,
-          'email':            email,
-          'timezone':         timezone,
-          'currency':         currency,
-          'logo_url':         logoUrl,
-          'status':           'active',
-          'booking_channels': bookingChannels,
-        })
-        .select()
-        .single();
-
-    final property = OrgProperty.fromRow(row);
-
-    // Add creator to property_staff as owner
-    await _db.from('property_staff').insert({
-      'property_id': property.id,
-      'user_id':     userId,
-      'role':        'owner',
+    // Use SECURITY DEFINER RPC to bypass hotels RLS (no INSERT policy exists).
+    final rows = await _db.rpc('create_property', params: {
+      'p_org_id':           orgId,
+      'p_name':             name,
+      'p_slug':             slug,
+      'p_type':             type,
+      'p_address':          address,
+      'p_city':             city,
+      'p_country':          country,
+      'p_phone':            phone,
+      'p_email':            email,
+      'p_timezone':         timezone,
+      'p_currency':         currency,
+      'p_logo_url':         logoUrl,
+      'p_booking_channels': bookingChannels,
     });
 
-    // Also add to hotel_users for backward compat with existing screens
-    await _db.from('hotel_users').insert({
-      'hotel_id': property.id,
-      'user_id':  userId,
-      'role':     'owner',
-    }).onError((_, __) => []);  // ignore if already exists
+    final row = (rows as List).first as Map<String, dynamic>;
+    final property = OrgProperty.fromRow(row);
 
-    // Seed hotel_settings for existing screens
-    await _db.from('hotel_settings').upsert({
-      'hotel_id':        property.id,
-      'display_name':    name,
-      'address':         address,
-      'phone':           phone,
-      'email':           email,
+    // Update currency symbol in hotel_settings (RPC seeds it without symbol)
+    await _db.from('hotel_settings').update({
       'currency_symbol': _currencySymbol(currency),
-    }, onConflict: 'hotel_id');
+    }).eq('hotel_id', property.id);
 
     return property;
   }
@@ -487,6 +487,12 @@ class OrganizationService {
       'user_id': userRows.first['id'] as String,
       'role':    role,
     });
+  }
+
+  // ── Permanent deletion ───────────────────────────────────────────────────────
+
+  Future<void> deleteOrganization(String orgId) async {
+    await _db.rpc('delete_organization_cascade', params: {'p_org_id': orgId});
   }
 
   // ── Plan management ──────────────────────────────────────────────────────────
@@ -575,6 +581,40 @@ class OrganizationService {
     final orgId = memberRows.first['org_id'] as String;
 
     // 3. Apply custom limits + upgrade plan
+    await _db.from('organizations').update({
+      'plan':                  'enterprise',
+      'custom_max_properties': maxProperties,
+      'custom_max_users':      maxUsers,
+      'custom_max_rooms':      maxRooms,
+      'custom_max_tables':     maxTables,
+      if (priceMonthly  != null) 'custom_price_monthly':  priceMonthly,
+      if (priceAnnually != null) 'custom_price_annually': priceAnnually,
+      if (billingCycle  != null) 'billing_cycle':         billingCycle,
+    }).eq('id', orgId);
+  }
+
+  /// Same as [provisionCustomAccess] but accepts a known [userId] directly.
+  /// Used by [AuthNotifier.refreshAfterOnboarding] to auto-apply a pending
+  /// enterprise provision that was set up before the user signed up.
+  Future<void> provisionCustomAccessByUserId({
+    required String userId,
+    required int maxProperties,
+    required int maxUsers,
+    required int maxRooms,
+    required int maxTables,
+    double? priceMonthly,
+    double? priceAnnually,
+    String? billingCycle,
+  }) async {
+    final memberRows = await _db
+        .from('organization_members')
+        .select('org_id')
+        .eq('user_id', userId)
+        .limit(1);
+    if (memberRows.isEmpty) return; // Org not created yet — silently skip
+
+    final orgId = memberRows.first['org_id'] as String;
+
     await _db.from('organizations').update({
       'plan':                  'enterprise',
       'custom_max_properties': maxProperties,

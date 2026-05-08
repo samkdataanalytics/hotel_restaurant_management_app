@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../app_theme.dart';
 import '../../providers/app_auth_provider.dart';
 import '../../services/organization_service.dart';
@@ -102,6 +103,25 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
   String? _logoFileName;
 
   @override
+  void initState() {
+    super.initState();
+    // Always verify the plan limit on load. Onboarding (0 properties) is exempt
+    // because canAddProperty returns true when count=0 < limit=1.
+    // This blocks users who navigate directly to /property-setup via URL bar.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkPlanLimit());
+  }
+
+  Future<void> _checkPlanLimit() async {
+    final orgId = ref.read(authProvider).valueOrNull?.organization?.id;
+    if (orgId == null || !mounted) return;
+    final canAdd = await OrganizationService().canAddProperty(orgId);
+    if (!mounted) return;
+    if (!canAdd) {
+      context.go('/app/upgrade');
+    }
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _addressController.dispose();
@@ -184,7 +204,14 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
       await ref.read(authProvider.notifier).refreshAfterOnboarding();
 
       if (!mounted) return;
-      context.go('/app/dashboard');
+      final prefs = await SharedPreferences.getInstance();
+      final pendingPlan = prefs.getString('pending_plan');
+      if (pendingPlan != null && pendingPlan.isNotEmpty) {
+        await prefs.remove('pending_plan');
+        context.go('/app/upgrade?plan=$pendingPlan');
+      } else {
+        context.go('/app/dashboard');
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

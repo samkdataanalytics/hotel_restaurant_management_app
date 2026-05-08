@@ -7,10 +7,17 @@ import '../../app_theme.dart';
 import '../../providers/app_auth_provider.dart';
 import '../../providers/hotel_session.dart';
 import '../../services/organization_service.dart';
-import '../../services/booking_service.dart';
-import '../../services/restaurant_service.dart';
-import '../../models/staff_permission.dart';
-import '../../services/staff_service.dart';
+import '../../di/injection_container.dart';
+import '../../data/repositories/menu_item_repository_impl.dart';
+import '../../data/repositories/restaurant_table_repository_impl.dart';
+import '../../data/repositories/order_repository_impl.dart';
+import '../../data/repositories/ingredient_repository_impl.dart';
+import '../../domain/repositories/menu_item_repository.dart';
+import '../../domain/repositories/restaurant_table_repository.dart';
+import '../../domain/repositories/order_repository.dart';
+import '../../domain/repositories/ingredient_repository.dart';
+import '../../domain/entities/staff_permission.dart';
+import '../../providers/service_providers.dart';
 import '../edit_property_dialog.dart';
 import '../../services/notification_service.dart';
 import '../widgets/notification_bell.dart';
@@ -143,10 +150,13 @@ class _AppShellState extends ConsumerState<AppShell> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _initialize());
-    // Refresh badge counts every 30 seconds in the background
+    // Refresh badge counts and validate active property every 60 seconds.
     _badgeRefreshTimer = Timer.periodic(
       const Duration(seconds: 60),
-      (_) => _loadBadgeCounts(),
+      (_) {
+        _loadBadgeCounts();
+        _validateActiveProperty();
+      },
     );
   }
 
@@ -168,7 +178,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
       // Resolve the active property from the already-loaded list — no extra
       // DB round-trip. SharedPreferences is local and fast.
-      final savedId = await OrganizationService().getActivePropertyId();
+      final savedId = await ref.read(organizationServiceProvider).getActivePropertyId();
       if (savedId != null) {
         try {
           activeProperty = properties.firstWhere((p) => p.id == savedId);
@@ -211,10 +221,33 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
   }
 
+  /// Called periodically to detect if the active property was deleted or
+  /// unassigned while the user had the app open. Silently switches to the
+  /// first available property; shows the "no properties" screen if none remain.
+  Future<void> _validateActiveProperty() async {
+    if (!mounted) return;
+    try {
+      final freshProperties = await ref.read(organizationServiceProvider).getMyProperties();
+      if (!mounted) return;
+      final current = ref.read(activePropertyProvider);
+      if (current == null) return;
+      final stillExists = freshProperties.any((p) => p.id == current.id);
+      if (!stillExists) {
+        if (freshProperties.isNotEmpty) {
+          await _applyActiveProperty(freshProperties.first);
+        } else {
+          if (mounted) setState(() => _noProperties = true);
+        }
+      }
+    } catch (_) {
+      // Non-critical background check — swallow errors silently.
+    }
+  }
+
   /// Persists, propagates, and syncs [property] across all state holders.
   Future<void> _applyActiveProperty(OrgProperty property) async {
     // Persist to shared prefs (safe even if unmounted — no widget dependency)
-    await OrganizationService().setActivePropertyId(property.id);
+    await ref.read(organizationServiceProvider).setActivePropertyId(property.id);
 
     // Guard: widget may have been disposed during the async gap above
     if (!mounted) return;
@@ -222,8 +255,14 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.read(activePropertyProvider.notifier).setProperty(property);
 
     // Point singleton services at the new property before any parallel work
-    BookingService().hotelId    = property.id;
-    RestaurantService().hotelId = property.id;
+    ref.read(bookingServiceProvider).hotelId    = property.id;
+    ref.read(restaurantServiceProvider).hotelId = property.id;
+
+    // Point new Clean Architecture repositories at the active property
+    (sl<MenuItemRepository>() as MenuItemRepositoryImpl).hotelId = property.id;
+    (sl<RestaurantTableRepository>() as RestaurantTableRepositoryImpl).hotelId = property.id;
+    (sl<OrderRepository>() as OrderRepositoryImpl).hotelId = property.id;
+    (sl<IngredientRepository>() as IngredientRepositoryImpl).hotelId = property.id;
 
     // Run session sync (fetches hotel_settings) and permission load in parallel
     // — they are independent DB calls, no ordering required.
@@ -253,7 +292,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Future<void> _loadUserPermissions(String propertyId) async {
-    final role = await StaffService().getMyRoleForProperty(propertyId);
+    final role = await ref.read(staffServiceProvider).getMyRoleForProperty(propertyId);
     // owner   = created the property (hotel_users) — full admin including team mgmt
     // manager = promoted staff member — full operational access, no team mgmt
     // staff   = limited to their assigned permissions
@@ -267,7 +306,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     final isManager = isOwner || role == 'manager';
     Map<String, PrivilegeLevel> permissions = {};
     if (!isManager) {
-      permissions = await StaffService().getMyPermissions(propertyId);
+      permissions = await ref.read(staffServiceProvider).getMyPermissions(propertyId);
     }
     if (mounted) {
       setState(() {
@@ -288,8 +327,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (!mounted) return;
     try {
       final results = await Future.wait<int>([
-        BookingService().countPendingArrivalsToday(),
-        RestaurantService().countActiveKitchenOrdersToday(),
+        ref.read(bookingServiceProvider).countPendingArrivalsToday(),
+        sl<OrderRepository>().countActiveKitchenOrdersToday(),
       ]);
 
       final pendingArrivals = results[0];
@@ -497,10 +536,10 @@ class _AppShellState extends ConsumerState<AppShell> {
                       ? _InactivePropertyScreen(
                           property: activeProperty!,
                           onReactivate: () async {
-                            await OrganizationService()
+                            await ref.read(organizationServiceProvider)
                                 .updatePropertyStatus(activeProperty.id, 'active');
                             await ref.read(authProvider.notifier).reload();
-                            final updated = await OrganizationService()
+                            final updated = await ref.read(organizationServiceProvider)
                                 .getActiveProperty();
                             if (updated != null) {
                               ref.read(activePropertyProvider.notifier)
@@ -1035,47 +1074,6 @@ class _AppShellState extends ConsumerState<AppShell> {
           ),
         ),
 
-        // Help & Guide button
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: expanded ? 10 : 8, vertical: 2),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () => _navigateTo(15),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0, vertical: 10),
-                decoration: BoxDecoration(
-                  color: GoRouterState.of(context).uri.path == '/app/help'
-                      ? const Color(0xFF3B82F6).withOpacity(0.12)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  mainAxisAlignment: expanded ? MainAxisAlignment.start : MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 28, height: 28,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3B82F6).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(7),
-                      ),
-                      child: const Icon(Icons.auto_stories_rounded, size: 15, color: Color(0xFF60A5FA)),
-                    ),
-                    if (expanded) ...[
-                      const SizedBox(width: 10),
-                      const Text('Guide & Help',
-                          style: TextStyle(color: Color(0xFF60A5FA), fontSize: 13, fontWeight: FontWeight.w500)),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-
         // Sidebar collapse toggle
         if (MediaQuery.of(context).size.width >= 768)
           Padding(
@@ -1225,11 +1223,23 @@ class _AppShellState extends ConsumerState<AppShell> {
               onSelected: (value) {
                 if (value == 'account') {
                   context.go('/app/account');
+                } else if (value == 'help') {
+                  context.go('/app/help');
                 } else if (value == 'logout') {
                   _signOut();
                 }
               },
               itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'help',
+                  child: Row(
+                    children: [
+                      Icon(Icons.auto_stories_rounded, size: 18, color: Colors.grey.shade600),
+                      const SizedBox(width: 10),
+                      const Text('Guide & Help', style: TextStyle(fontSize: 14)),
+                    ],
+                  ),
+                ),
                 PopupMenuItem(
                   value: 'account',
                   child: Row(
@@ -1259,11 +1269,18 @@ class _AppShellState extends ConsumerState<AppShell> {
                     const Icon(Icons.account_circle_rounded, size: 24, color: Color(0xFF94A3B8)),
                     if (!isMobile) ...[
                       const SizedBox(width: 8),
-                      Text(
-                        (authState?.isStaffAccount ?? false)
-                            ? authState!.email!.split('@').first
-                            : authState!.email!,
-                        style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (authState?.isStaffAccount ?? false)
+                                ? authState!.email!.split('@').first
+                                : authState!.email!,
+                            style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                          ),
+                          _PlanBadge(plan: authState?.organization?.plan ?? 'free'),
+                        ],
                       ),
                       const SizedBox(width: 4),
                       const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Color(0xFF94A3B8)),
@@ -1292,7 +1309,7 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     bool canAdd;
     try {
-      canAdd = await OrganizationService().canAddProperty(orgId);
+      canAdd = await ref.read(organizationServiceProvider).canAddProperty(orgId);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1438,7 +1455,7 @@ class _InactivePropertyScreenState extends State<_InactivePropertyScreen> {
 
 // ─── Manage Properties Dialog ─────────────────────────────────────────────────
 
-class _ManagePropertiesDialog extends StatefulWidget {
+class _ManagePropertiesDialog extends ConsumerStatefulWidget {
   final List<OrgProperty> properties;
   final String? activePropertyId;
   final VoidCallback onChanged;
@@ -1450,10 +1467,10 @@ class _ManagePropertiesDialog extends StatefulWidget {
   });
 
   @override
-  State<_ManagePropertiesDialog> createState() => _ManagePropertiesDialogState();
+  ConsumerState<_ManagePropertiesDialog> createState() => _ManagePropertiesDialogState();
 }
 
-class _ManagePropertiesDialogState extends State<_ManagePropertiesDialog> {
+class _ManagePropertiesDialogState extends ConsumerState<_ManagePropertiesDialog> {
   bool _loading = false;
 
   Future<void> _editProperty(OrgProperty p) async {
@@ -1470,7 +1487,7 @@ class _ManagePropertiesDialogState extends State<_ManagePropertiesDialog> {
     final newStatus = p.status == 'active' ? 'inactive' : 'active';
     setState(() => _loading = true);
     try {
-      await OrganizationService().updatePropertyStatus(p.id, newStatus);
+      await ref.read(organizationServiceProvider).updatePropertyStatus(p.id, newStatus);
       widget.onChanged();
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -1545,7 +1562,7 @@ class _ManagePropertiesDialogState extends State<_ManagePropertiesDialog> {
 
     setState(() => _loading = true);
     try {
-      await OrganizationService().deleteProperty(p.id);
+      await ref.read(organizationServiceProvider).deleteProperty(p.id);
       widget.onChanged();
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -1705,6 +1722,39 @@ class _ManagePropertiesDialogState extends State<_ManagePropertiesDialog> {
           child: const Text('Close'),
         ),
       ],
+    );
+  }
+}
+
+// ─── Plan badge ───────────────────────────────────────────────────────────────
+
+class _PlanBadge extends StatelessWidget {
+  final String plan;
+  const _PlanBadge({required this.plan});
+
+  Color get _color {
+    switch (plan) {
+      case 'starter':    return const Color(0xFF10B981);
+      case 'pro':        return const Color(0xFFD4A853);
+      case 'enterprise': return const Color(0xFF8B5CF6);
+      default:           return const Color(0xFF94A3B8); // free
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: _color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        plan.toUpperCase(),
+        style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+            color: _color, letterSpacing: 0.5),
+      ),
     );
   }
 }

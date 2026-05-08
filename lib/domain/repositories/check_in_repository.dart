@@ -5,4 +5,5 @@ abstract class CheckInRepository {
   Future<List<CheckIn>> getAllCheckIns();
   Future<void> insertCheckIn(CheckIn checkIn);
   Future<List<CheckIn>> getTodayCheckIns();
+  Future<List<Map<String, dynamic>>> getEnrichedCheckIns();
 }

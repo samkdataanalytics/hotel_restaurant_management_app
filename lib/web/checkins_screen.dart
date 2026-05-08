@@ -4,29 +4,40 @@ import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
-import '../models/check_in.dart';
-import '../models/guest.dart';
-import '../models/room.dart';
-import '../models/booking.dart';
+import '../domain/entities/check_in.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/booking.dart';
 import '../services/booking_service.dart';
 import '../services/restaurant_service.dart';
-import 'widgets/responsive_dialog.dart';
-import 'package:provider/provider.dart';
-import '../providers/hotel_session.dart';
 import '../services/invoice_service.dart';
+import 'widgets/responsive_dialog.dart';
+import 'package:provider/provider.dart' as pkg_provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/hotel_session.dart';
+import '../providers/service_providers.dart';
+import '../domain/repositories/check_in_repository.dart';
+import '../domain/repositories/booking_repository.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/expense_repository.dart';
+import '../di/injection_container.dart';
 import 'guest_responses_dialog.dart';
 
-class CheckinsScreen extends StatefulWidget {
+class CheckinsScreen extends ConsumerStatefulWidget {
   const CheckinsScreen({super.key});
 
   @override
-  State<CheckinsScreen> createState() => _CheckinsScreenState();
+  ConsumerState<CheckinsScreen> createState() => _CheckinsScreenState();
 }
 
-class _CheckinsScreenState extends State<CheckinsScreen> {
-  final _bookingService    = BookingService();
-  final _restaurantService = RestaurantService();
-  final _invoiceService    = InvoiceService();
+class _CheckinsScreenState extends ConsumerState<CheckinsScreen> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
+  RestaurantService get _restaurantService => ref.read(restaurantServiceProvider);
+  InvoiceService get _invoiceService => ref.read(invoiceServiceProvider);
+  final _checkInRepo       = sl<CheckInRepository>();
+  final _bookingRepo       = sl<BookingRepository>();
+  final _orderRepo         = sl<OrderRepository>();
+  final _expenseRepo       = sl<ExpenseRepository>();
   final _timeFormat = DateFormat('hh:mm a');
   final _dateFormat = DateFormat('MMM dd, yyyy');
   final _searchController = TextEditingController();
@@ -52,8 +63,8 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
 
   Future<void> _loadData() async {
     try {
-      final checkIns = await _bookingService.getEnrichedCheckIns();
-      final bookings = await _bookingService.getEnrichedBookings();
+      final checkIns = await _checkInRepo.getEnrichedCheckIns();
+      final bookings = await _bookingRepo.getEnrichedBookings();
       if (!mounted) return;
       setState(() {
         _allCheckIns = checkIns;
@@ -603,11 +614,11 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
     );
 
     try {
-      final session = Provider.of<HotelSession>(context, listen: false);
+      final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
       _restaurantService.hotelId = session.hotelId;
 
-      final expenses        = await _bookingService.getAllExpenses();
-      final restaurantOrders = await _restaurantService.getChargedToRoomOrders(booking.id);
+      final expenses        = await _expenseRepo.getExpenses();
+      final restaurantOrders = await _orderRepo.getChargedToRoomOrders(booking.id);
 
       if (dialogContext != null && dialogContext!.mounted) {
         Navigator.pop(dialogContext!);

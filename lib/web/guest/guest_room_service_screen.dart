@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../models/menu_item.dart';
+import '../../domain/entities/menu_item.dart';
 import '../../providers/hotel_session.dart' show hexToColor;
 import '../../services/guest_menu_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/service_providers.dart';
 
 // ─── Colour palette (same as guest menu portal) ───────────────────────────────
 class _C {
@@ -68,7 +70,7 @@ class _PlacedOrder {
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
-class GuestRoomServiceScreen extends StatefulWidget {
+class GuestRoomServiceScreen extends ConsumerStatefulWidget {
   final String propertyId;
   final String roomNumber;
 
@@ -79,12 +81,12 @@ class GuestRoomServiceScreen extends StatefulWidget {
   });
 
   @override
-  State<GuestRoomServiceScreen> createState() => _GuestRoomServiceScreenState();
+  ConsumerState<GuestRoomServiceScreen> createState() => _GuestRoomServiceScreenState();
 }
 
-class _GuestRoomServiceScreenState extends State<GuestRoomServiceScreen>
+class _GuestRoomServiceScreenState extends ConsumerState<GuestRoomServiceScreen>
     with TickerProviderStateMixin {
-  final _service = GuestMenuService();
+  GuestMenuService get _service => ref.read(guestMenuServiceProvider);
   NumberFormat get _fmt => NumberFormat.currency(symbol: _currencySymbol, decimalDigits: 2);
   late TabController _tabCtrl;
 

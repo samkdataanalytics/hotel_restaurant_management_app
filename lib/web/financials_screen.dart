@@ -7,10 +7,11 @@ import '../app_theme.dart';
 import 'widgets/skeleton.dart';
 import '../providers/hotel_session.dart';
 import '../providers/app_auth_provider.dart';
-import '../models/booking.dart';
-import '../models/room.dart';
-import '../models/expense.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/expense.dart';
 import '../services/booking_service.dart';
+import '../providers/service_providers.dart';
 
 class FinancialsScreen extends ConsumerStatefulWidget {
   const FinancialsScreen({super.key});
@@ -20,7 +21,7 @@ class FinancialsScreen extends ConsumerStatefulWidget {
 }
 
 class _FinancialsScreenState extends ConsumerState<FinancialsScreen> {
-  final _bookingService = BookingService();
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   final _dateFormat = DateFormat('MMM dd, yyyy');
   final _shortDateFormat = DateFormat('MMM dd');
   String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../models/menu_item.dart';
-import '../../models/restaurant_table.dart';
+import '../../domain/entities/menu_item.dart';
+import '../../domain/entities/restaurant_table.dart';
 import '../../providers/hotel_session.dart' show hexToColor;
 import '../../services/guest_menu_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/service_providers.dart';
 
 // ─── Colour palette (navy + gold) ─────────────────────────────────────────────
 class _C {
@@ -91,7 +93,7 @@ class _PlacedOrder {
 }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
-class GuestMenuScreen extends StatefulWidget {
+class GuestMenuScreen extends ConsumerStatefulWidget {
   final String propertyId;
   final String tableId;
   const GuestMenuScreen({
@@ -101,12 +103,12 @@ class GuestMenuScreen extends StatefulWidget {
   });
 
   @override
-  State<GuestMenuScreen> createState() => _GuestMenuScreenState();
+  ConsumerState<GuestMenuScreen> createState() => _GuestMenuScreenState();
 }
 
-class _GuestMenuScreenState extends State<GuestMenuScreen>
+class _GuestMenuScreenState extends ConsumerState<GuestMenuScreen>
     with TickerProviderStateMixin {
-  final _service = GuestMenuService();
+  GuestMenuService get _service => ref.read(guestMenuServiceProvider);
 
   // ── Data ───────────────────────────────────────────────────────────────────
   RestaurantTable? _table;

@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../app_theme.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
-import '../models/room.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
 import '../services/booking_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/service_providers.dart';
 
-class CheckinConfirmScreen extends StatefulWidget {
+class CheckinConfirmScreen extends ConsumerStatefulWidget {
   const CheckinConfirmScreen({super.key});
 
   @override
-  State<CheckinConfirmScreen> createState() => _CheckinConfirmScreenState();
+  ConsumerState<CheckinConfirmScreen> createState() => _CheckinConfirmScreenState();
 }
 
-class _CheckinConfirmScreenState extends State<CheckinConfirmScreen> {
-  final _bookingService = BookingService();
+class _CheckinConfirmScreenState extends ConsumerState<CheckinConfirmScreen> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   final _dateFormat = DateFormat('MMM dd, yyyy');
   bool _isProcessing = false;
 

@@ -8,12 +8,12 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
-import '../models/booking.dart';
-import '../models/room.dart';
-import '../models/expense.dart';
-import '../models/guest.dart';
-import '../models/menu_item.dart';
-import '../models/restaurant_order.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/expense.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/menu_item.dart';
+import '../domain/entities/restaurant_order.dart';
 import '../providers/hotel_session.dart';
 
 // ─── Brand palette ────────────────────────────────────────────────────────────

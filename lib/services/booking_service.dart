@@ -1,10 +1,17 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../models/booking.dart';
-import '../models/check_in.dart';
-import '../models/guest.dart';
-import '../models/room.dart';
-import '../models/expense.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/check_in.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/expense.dart';
+import '../domain/repositories/booking_repository.dart';
+import '../domain/repositories/room_repository.dart';
+import '../domain/repositories/guest_repository.dart';
+import '../domain/repositories/check_in_repository.dart';
+import '../domain/repositories/expense_repository.dart';
+import '../di/injection_container.dart';
+import '../domain/usecases/get_dashboard_stats.dart';
 import 'notification_service.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
@@ -13,6 +20,12 @@ class BookingService {
   static final BookingService _instance = BookingService._internal();
   factory BookingService() => _instance;
   BookingService._internal();
+
+  final _bookingRepo = sl<BookingRepository>();
+  final _roomRepo = sl<RoomRepository>();
+  final _guestRepo = sl<GuestRepository>();
+  final _checkInRepo = sl<CheckInRepository>();
+  final _expenseRepo = sl<ExpenseRepository>();
 
   final _uuid = const Uuid();
 
@@ -165,17 +178,7 @@ class BookingService {
   //       e.g.  final ref = await bookingService.getNextBookingRef();
 
   Future<String> getNextBookingRef() async {
-    if (hotelId == null) return 'BK-0001';
-    final rows = await _db
-        .from('bookings')
-        .select('booking_ref')
-        .eq('hotel_id', hotelId!)
-        .order('created_at', ascending: false)
-        .limit(1);
-    if (rows.isEmpty) return 'BK-0001';
-    final lastRef = (rows.first['booking_ref'] as String?) ?? 'BK-0000';
-    final n = int.tryParse(lastRef.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
-    return 'BK-${(n + 1).toString().padLeft(4, '0')}';
+    return _bookingRepo.getNextBookingRef();
   }
 
   // ─── Check-In Lookup ──────────────────────────────────────────────────────
@@ -318,45 +321,14 @@ class BookingService {
 
   // ─── Enriched Data ────────────────────────────────────────────────────────
 
+  /// Returns only ACTIVE (currently in-house) check-ins — guests whose booking
+  /// status is still 'checkedIn'. Checked-out and orphaned records are excluded.
   Future<List<Map<String, dynamic>>> getEnrichedCheckIns() async {
-    if (hotelId == null) return [];
-    final rows = await _db
-        .from('check_ins')
-        .select('*, bookings(*), guests(*), rooms(*)')
-        .eq('hotel_id', hotelId!)
-        .order('check_in_time', ascending: false);
-
-    return rows.map<Map<String, dynamic>>((r) => {
-          'checkIn': _checkInFromRow(r),
-          'booking': r['bookings'] != null
-              ? _bookingFromRow(r['bookings'] as Map<String, dynamic>)
-              : null,
-          'guest': r['guests'] != null
-              ? _guestFromRow(r['guests'] as Map<String, dynamic>)
-              : null,
-          'room': r['rooms'] != null
-              ? _roomFromRow(r['rooms'] as Map<String, dynamic>)
-              : null,
-        }).toList();
+    return _checkInRepo.getEnrichedCheckIns();
   }
 
   Future<List<Map<String, dynamic>>> getEnrichedBookings() async {
-    if (hotelId == null) return [];
-    final rows = await _db
-        .from('bookings')
-        .select('*, guests(*), rooms(*)')
-        .eq('hotel_id', hotelId!)
-        .order('created_at', ascending: false);
-
-    return rows.map<Map<String, dynamic>>((r) => {
-          'booking': _bookingFromRow(r),
-          'guest': r['guests'] != null
-              ? _guestFromRow(r['guests'] as Map<String, dynamic>)
-              : null,
-          'room': r['rooms'] != null
-              ? _roomFromRow(r['rooms'] as Map<String, dynamic>)
-              : null,
-        }).toList();
+    return _bookingRepo.getEnrichedBookings();
   }
 
   // ─── Badge counts (lightweight — IDs only, server-filtered) ─────────────
@@ -364,64 +336,19 @@ class BookingService {
   /// Returns the number of pending bookings arriving today.
   /// Used by AppShell badge; fetches only IDs, no joins.
   Future<int> countPendingArrivalsToday() async {
-    if (hotelId == null) return 0;
-    try {
-      final today = DateTime.now();
-      final start = DateTime(today.year, today.month, today.day).toIso8601String();
-      final end   = DateTime(today.year, today.month, today.day, 23, 59, 59).toIso8601String();
-      final rows  = await _db
-          .from('bookings')
-          .select('id')
-          .eq('hotel_id', hotelId!)
-          .eq('status', 'pending')
-          .gte('check_in_date', start)
-          .lte('check_in_date', end);
-      return rows.length;
-    } catch (_) {
-      return 0;
-    }
+    return _bookingRepo.countPendingArrivalsToday();
   }
 
   // ─── Dashboard Stats ──────────────────────────────────────────────────────
 
   Future<Map<String, int>> getDashboardStats() async {
-    final todayStart = DateTime.now();
-    final startOfDay = DateTime(todayStart.year, todayStart.month, todayStart.day)
-        .toIso8601String();
-    final endOfDay = DateTime(todayStart.year, todayStart.month, todayStart.day, 23, 59, 59)
-        .toIso8601String();
-
-    if (hotelId == null) return {'todayCheckIns': 0, 'occupiedRooms': 0, 'availableRooms': 0, 'pendingArrivals': 0};
-    final results = await Future.wait([
-      // Today's check-ins
-      _db.from('check_ins').select('id')
-          .eq('hotel_id', hotelId!)
-          .gte('check_in_time', startOfDay)
-          .lte('check_in_time', endOfDay),
-      // Occupied rooms
-      _db.from('rooms').select('id').eq('hotel_id', hotelId!).eq('status', 'occupied'),
-      // Available rooms
-      _db.from('rooms').select('id').eq('hotel_id', hotelId!).eq('status', 'available'),
-      // Pending arrivals
-      _db.from('bookings').select('id').eq('hotel_id', hotelId!).eq('status', 'pending'),
-    ]);
-
-    return {
-      'todayCheckIns': results[0].length,
-      'occupiedRooms': results[1].length,
-      'availableRooms': results[2].length,
-      'pendingArrivals': results[3].length,
-    };
+    return sl<GetDashboardStats>()();
   }
 
   // ─── Rooms ────────────────────────────────────────────────────────────────
 
   Future<List<Room>> getAllRooms() async {
-    if (hotelId == null) return [];
-    final rows = await _db.from('rooms').select()
-        .eq('hotel_id', hotelId!)
-        .order('room_number');
-    return rows.map(_roomFromRow).toList();
+    return _roomRepo.getAllRooms();
   }
 
   Future<Room> toggleRoomStatus(Room room) async {
@@ -439,21 +366,21 @@ class BookingService {
   }
 
   Future<void> addRoom(Room room) async {
-    await _db.from('rooms').insert(_roomToRow(room));
+    await _roomRepo.addRoom(room);
   }
 
   Future<void> updateRoom(Room room) async {
-    await _db.from('rooms').update(_roomToRow(room)).eq('id', room.id);
+    await _roomRepo.updateRoom(room);
   }
 
   Future<void> deleteRoom(String roomId) async {
-    await _db.from('rooms').delete().eq('id', roomId);
+    await _roomRepo.deleteRoom(roomId);
   }
 
   // ─── Reservations ─────────────────────────────────────────────────────────
 
   Future<void> addReservation(Booking booking) async {
-    await _db.from('bookings').insert(_bookingToRow(booking));
+    await _bookingRepo.addBooking(booking);
     await _syncBookingEffects(booking);
     _fireReservationNotification(booking); // non-blocking
   }
@@ -500,15 +427,12 @@ class BookingService {
   }
 
   Future<void> updateBooking(Booking booking) async {
-    await _db
-        .from('bookings')
-        .update(_bookingToRow(booking))
-        .eq('id', booking.id);
+    await _bookingRepo.updateBooking(booking);
     await _syncBookingEffects(booking);
   }
 
   Future<void> deleteReservation(String bookingId) async {
-    await _db.from('bookings').delete().eq('id', bookingId);
+    await _bookingRepo.deleteBooking(bookingId);
   }
 
   /// Syncs room status and check_in record whenever a booking is saved.
@@ -551,63 +475,40 @@ class BookingService {
   // ─── Guests ───────────────────────────────────────────────────────────────
 
   Future<List<Guest>> getAllGuests() async {
-    if (hotelId == null) return [];
-    final rows = await _db.from('guests').select()
-        .eq('hotel_id', hotelId!)
-        .order('full_name');
-    return rows.map(_guestFromRow).toList();
+    return _guestRepo.getGuests();
   }
 
   Future<void> addGuest(Guest guest) async {
-    await _db.from('guests').insert(_guestToRow(guest));
+    await _guestRepo.addGuest(guest);
   }
 
   Future<void> updateGuest(Guest guest) async {
-    await _db.from('guests').upsert(_guestToRow(guest));
+    await _guestRepo.updateGuest(guest);
   }
 
   // ─── Expenses ─────────────────────────────────────────────────────────────
 
   Future<List<Expense>> getAllExpenses() async {
-    if (hotelId == null) return [];
-    final rows = await _db
-        .from('expenses')
-        .select()
-        .eq('hotel_id', hotelId!)
-        .order('date', ascending: false);
-    return rows.map(_expenseFromRow).toList();
+    return _expenseRepo.getExpenses();
   }
 
   Future<List<Expense>> getRoomExpenses(String roomId) async {
-    final rows = await _db
-        .from('expenses')
-        .select()
-        .eq('room_id', roomId)
-        .order('date', ascending: false);
-    return rows.map(_expenseFromRow).toList();
+    return _expenseRepo.getRoomExpenses(roomId);
   }
 
   Future<List<Expense>> getExpensesByBookingId(String bookingId) async {
-    final rows = await _db
-        .from('expenses')
-        .select()
-        .eq('booking_id', bookingId)
-        .order('date', ascending: false);
-    return rows.map(_expenseFromRow).toList();
+    return _expenseRepo.getExpensesByBookingId(bookingId);
   }
 
   Future<void> addExpense(Expense expense) async {
-    await _db.from('expenses').insert(_expenseToRow(expense));
+    await _expenseRepo.addExpense(expense);
   }
 
   Future<void> updateExpense(Expense expense) async {
-    await _db
-        .from('expenses')
-        .update(_expenseToRow(expense))
-        .eq('id', expense.id);
+    await _expenseRepo.updateExpense(expense);
   }
 
   Future<void> deleteExpense(String expenseId) async {
-    await _db.from('expenses').delete().eq('id', expenseId);
+    await _expenseRepo.deleteExpense(expenseId);
   }
 }

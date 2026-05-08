@@ -7,19 +7,26 @@ import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
 import 'widgets/responsive_dialog.dart';
-import 'widgets/split_payment_inputs.dart';
 import '../providers/hotel_session.dart';
-import '../models/menu_item.dart';
-import '../models/restaurant_table.dart';
-import '../models/restaurant_order.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
-import '../models/room.dart';
-import '../models/expense.dart';
-import '../models/inventory_item.dart';
+import '../providers/app_auth_provider.dart';
+import '../domain/entities/menu_item.dart';
+import '../domain/entities/restaurant_table.dart';
+import '../domain/entities/restaurant_order.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/expense.dart';
+import '../domain/entities/inventory_item.dart';
 import '../services/restaurant_service.dart';
-import '../models/staff_permission.dart';
+import '../domain/entities/staff_permission.dart';
 import '../services/booking_service.dart';
+import '../providers/service_providers.dart';
+import '../domain/repositories/menu_item_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/ingredient_repository.dart';
+import '../domain/repositories/booking_repository.dart';
+import '../di/injection_container.dart';
 import 'restaurant_invoice_dialog.dart';
 import 'widgets/split_payment_inputs.dart';
 
@@ -35,8 +42,13 @@ class PosScreen extends ConsumerStatefulWidget {
 }
 
 class _PosScreenState extends ConsumerState<PosScreen> {
-  final _restaurantService = RestaurantService();
-  final _bookingService = BookingService();
+  RestaurantService get _restaurantService => ref.read(restaurantServiceProvider);
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
+  final _menuItemRepo = sl<MenuItemRepository>();
+  final _tableRepo = sl<RestaurantTableRepository>();
+  final _orderRepo = sl<OrderRepository>();
+  final _ingredientRepo = sl<IngredientRepository>();
+  final _bookingRepo = sl<BookingRepository>();
   NumberFormat get _currencyFormat => NumberFormat.currency(
       symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
@@ -88,8 +100,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     List<MenuItem> items = [];
     List<RestaurantTable> tables = [];
     try {
-      items  = await _restaurantService.getMenuItems();
-      tables = await _restaurantService.getTables();
+      items  = await _menuItemRepo.getMenuItems();
+      tables = await _tableRepo.getTables();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -103,8 +115,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     List<InventoryItem> inventory = [];
     try {
       final results = await Future.wait([
-        _restaurantService.getOrders(),
-        _restaurantService.getInventory(),
+        _orderRepo.getOrders(),
+        _ingredientRepo.getInventory(),
       ]);
       orders    = results[0] as List<RestaurantOrder>;
       inventory = results[1] as List<InventoryItem>;
@@ -591,17 +603,24 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   }
 
   Future<void> _showChargeToRoomDialog() async {
+    // useRootNavigator: true ensures the loading dialog is pushed to (and
+    // popped from) the root navigator, not the ShellRoute's child navigator.
+    // Without this, Navigator.pop(context) removes the POS page itself.
     showDialog(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: true,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-    final enrichedBookings = await _bookingService.getEnrichedBookings();
+    final enrichedBookings = await _bookingRepo.getEnrichedBookings();
+    // Only keep bookings that are checked-in AND have a linked guest record
     final active = enrichedBookings
-        .where((d) => (d['booking'] as Booking).status == BookingStatus.checkedIn)
+        .where((d) =>
+            (d['booking'] as Booking).status == BookingStatus.checkedIn &&
+            d['guest'] != null)
         .toList();
     if (!mounted) return;
-    Navigator.pop(context);
+    Navigator.of(context, rootNavigator: true).pop();
 
     showDialog(
       context: context,
@@ -618,20 +637,36 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           width: double.maxFinite,
           height: 360,
           child: active.isEmpty
-              ? const Center(child: Text('No checked-in guests found.', style: TextStyle(color: Colors.black38)))
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.hotel_outlined, size: 40, color: Colors.black26),
+                      SizedBox(height: 12),
+                      Text('No checked-in guests found.',
+                          style: TextStyle(color: Colors.black38)),
+                      SizedBox(height: 4),
+                      Text('Guests must be checked in via Reservations first.',
+                          style: TextStyle(color: Colors.black26, fontSize: 12),
+                          textAlign: TextAlign.center),
+                    ],
+                  ),
+                )
               : ListView.builder(
                   itemCount: active.length,
                   itemBuilder: (_, i) {
                     final b = active[i]['booking'] as Booking;
                     final g = active[i]['guest'] as Guest;
-                    final r = active[i]['room'];
+                    final r = active[i]['room'] as Room?;
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: AppTheme.adminPrimary.withOpacity(0.1),
                         child: Icon(Icons.bed, color: AppTheme.adminPrimary),
                       ),
-                      title: Text(g.fullName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text('Room ${r?.roomNumber ?? "N/A"} • Ref: ${b.bookingRef}'),
+                      title: Text(g.fullName,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(
+                          'Room ${r?.roomNumber ?? "N/A"} • Ref: ${b.bookingRef}'),
                       trailing: ElevatedButton(
                         onPressed: () {
                           Navigator.pop(context);
@@ -644,7 +679,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.warning,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
                         ),
                         child: const Text('Charge'),
                       ),
@@ -652,7 +688,11 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   },
                 ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel'))],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'))
+        ],
       ),
     );
   }
@@ -848,10 +888,38 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   }
 
   Widget _buildMenuGrid() {
+    final items = _filteredMenu;
     final w = MediaQuery.of(context).size.width;
     final cols = w < 600 ? 2 : (w < 900 ? 3 : 4);
     final pad  = w < 600 ? 12.0 : 20.0;
     final gap  = w < 600 ? 10.0 : 14.0;
+
+    if (items.isEmpty) {
+      final hasSearch = _menuSearchQuery.isNotEmpty || _selectedCategory != 'All';
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(
+            hasSearch ? Icons.search_off_rounded : Icons.restaurant_menu_rounded,
+            size: 52,
+            color: Colors.black12,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            hasSearch ? 'No items match your search' : 'No menu items yet',
+            style: const TextStyle(fontSize: 15, color: Colors.black38,
+                fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            hasSearch
+                ? 'Try a different category or search term'
+                : 'Add items in Restaurant Management → Menu',
+            style: const TextStyle(fontSize: 13, color: Colors.black26),
+          ),
+        ]),
+      );
+    }
+
     return GridView.builder(
       padding: EdgeInsets.all(pad),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -860,8 +928,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         crossAxisSpacing: gap,
         mainAxisSpacing: gap,
       ),
-      itemCount: _filteredMenu.length,
-      itemBuilder: (_, i) => _buildMenuTile(_filteredMenu[i]),
+      itemCount: items.length,
+      itemBuilder: (_, i) => _buildMenuTile(items[i]),
     );
   }
 
@@ -1188,24 +1256,26 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 3,
-                      child: OutlinedButton.icon(
-                        onPressed: _showChargeToRoomDialog,
-                        icon: const Icon(Icons.hotel_rounded, size: 14),
-                        label: const Text('Room',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 12)),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.warning,
-                          side: BorderSide(color: AppTheme.warning),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
+                    if (ref.read(activePropertyProvider)?.isHotel ?? false) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: OutlinedButton.icon(
+                          onPressed: _showChargeToRoomDialog,
+                          icon: const Icon(Icons.hotel_rounded, size: 14),
+                          label: const Text('Room',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.warning,
+                            side: BorderSide(color: AppTheme.warning),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ]),
                   const SizedBox(height: 8),
                   SizedBox(
@@ -1939,20 +2009,22 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _cart.isEmpty ? null : _showChargeToRoomDialog,
-                  icon: const Icon(Icons.hotel_rounded, size: 16),
-                  label: const Text('Room Charge', style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    backgroundColor: AppTheme.warning,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              if (ref.read(activePropertyProvider)?.isHotel ?? false) ...[
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _cart.isEmpty ? null : _showChargeToRoomDialog,
+                    icon: const Icon(Icons.hotel_rounded, size: 16),
+                    label: const Text('Room Charge', style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: AppTheme.warning,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
+                const SizedBox(width: 8),
+              ],
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _cart.isEmpty ? null : () {
@@ -2204,6 +2276,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         taxRate: taxRate,
         serviceChargeRate: serviceChargeRate,
         orderCount: openOrders.length,
+        isHotelProperty: ref.read(activePropertyProvider)?.isHotel ?? false,
         roomNumber: openOrders.last.roomNumber,
       ),
     );
@@ -2385,6 +2458,7 @@ class _PosPaymentDialog extends StatefulWidget {
   final double taxRate;
   final double serviceChargeRate;
   final int orderCount;
+  final bool isHotelProperty;
   /// For room service orders: the room number the order came from.
   /// When set, the Room Charge guest list is pre-filtered to that room.
   final String? roomNumber;
@@ -2398,6 +2472,7 @@ class _PosPaymentDialog extends StatefulWidget {
     required this.taxRate,
     required this.serviceChargeRate,
     this.orderCount = 1,
+    this.isHotelProperty = true,
     this.roomNumber,
   });
 
@@ -2713,8 +2788,10 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
                   _methodTile(Icons.money_rounded, 'Cash', 'cash', Colors.green.shade600),
                   const SizedBox(width: 10),
                   _methodTile(Icons.credit_card_rounded, 'Card', 'card', Colors.blue.shade600),
-                  const SizedBox(width: 10),
-                  _methodTile(Icons.hotel_rounded, 'Room Charge', 'room', _kOrange),
+                  if (widget.isHotelProperty) ...[
+                    const SizedBox(width: 10),
+                    _methodTile(Icons.hotel_rounded, 'Room Charge', 'room', _kOrange),
+                  ],
                 ],
               ),
 

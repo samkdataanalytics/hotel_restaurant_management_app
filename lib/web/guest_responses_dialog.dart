@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../app_theme.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
 import 'widgets/responsive_dialog.dart';
 
 class GuestResponsesDialog extends StatelessWidget {

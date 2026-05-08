@@ -2,24 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
-import '../models/expense.dart';
-import '../models/room.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
+import '../domain/entities/expense.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
 import '../services/booking_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/service_providers.dart';
 import 'widgets/responsive_dialog.dart';
 
-class ExpenseDialog extends StatefulWidget {
+class ExpenseDialog extends ConsumerStatefulWidget {
   final Expense? expense;
 
   const ExpenseDialog({super.key, this.expense});
 
   @override
-  State<ExpenseDialog> createState() => _ExpenseDialogState();
+  ConsumerState<ExpenseDialog> createState() => _ExpenseDialogState();
 }
 
-class _ExpenseDialogState extends State<ExpenseDialog> {
-  final _bookingService = BookingService();
+class _ExpenseDialogState extends ConsumerState<ExpenseDialog> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   final _dateFormat = DateFormat('MMM dd, yyyy');
   final _uuid = const Uuid();
 

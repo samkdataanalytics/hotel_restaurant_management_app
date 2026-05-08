@@ -5,17 +5,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart' as pkg_provider;
 import '../providers/hotel_session.dart';
+import '../providers/app_auth_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:collection/collection.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/restaurant_order.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
-import '../models/expense.dart';
-import '../models/restaurant_table.dart';
+import '../domain/entities/restaurant_order.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/expense.dart';
+import '../domain/entities/restaurant_table.dart';
 import '../services/restaurant_service.dart';
-import '../models/staff_permission.dart';
+import '../domain/entities/staff_permission.dart';
 import '../services/booking_service.dart';
+import '../providers/service_providers.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
+import '../domain/repositories/check_in_repository.dart';
+import '../di/injection_container.dart';
 import 'restaurant_invoice_dialog.dart';
 import 'widgets/split_payment_inputs.dart';
 
@@ -52,8 +58,10 @@ class KitchenScreen extends ConsumerStatefulWidget {
 }
 
 class _KitchenScreenState extends ConsumerState<KitchenScreen> {
-  final _restaurantService = RestaurantService();
-  final _bookingService = BookingService();
+  RestaurantService get _restaurantService => ref.read(restaurantServiceProvider);
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
+  final _orderRepo = sl<OrderRepository>();
+  final _tableRepo = sl<RestaurantTableRepository>();
   final _timeFormat = DateFormat('hh:mm a');
   NumberFormat get _currency => NumberFormat.currency(
       symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
@@ -73,13 +81,22 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
     _loadData();
     _refreshTimer = Timer.periodic(
         const Duration(seconds: 5), (_) => _loadData(silent: true));
-    // Real-time: reload instantly whenever any order row changes
+    // Real-time: reload instantly whenever an order changes for THIS property.
+    // Filtering by hotel_id prevents cross-tenant noise in multi-property deploys.
+    final hotelId = _restaurantService.hotelId;
     _realtimeChannel = Supabase.instance.client
-        .channel('kitchen_orders_rt')
+        .channel('kitchen_orders_rt_${hotelId ?? 'all'}')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'restaurant_orders',
+          filter: hotelId != null
+              ? PostgresChangeFilter(
+                  type: PostgresChangeFilterType.eq,
+                  column: 'hotel_id',
+                  value: hotelId,
+                )
+              : null,
           callback: (_) => _loadData(silent: true),
         )
         .subscribe();
@@ -95,8 +112,8 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
   Future<void> _loadData({bool silent = false}) async {
     if (!silent) setState(() => _isLoading = true);
     try {
-      final ordersFuture = _restaurantService.getOrders();
-      final tablesFuture = _restaurantService.getTables();
+      final ordersFuture = _orderRepo.getOrders();
+      final tablesFuture = _tableRepo.getTables();
       final orders = await ordersFuture;
       final tables = await tablesFuture;
       final now = DateTime.now();
@@ -929,6 +946,7 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
         onComplete: () {
           _loadData(silent: true);
         },
+        isHotelProperty: ref.read(activePropertyProvider)?.isHotel ?? false,
       ),
     );
   }
@@ -1014,6 +1032,7 @@ class _KitchenPaymentDialog extends StatefulWidget {
   final RestaurantService restaurantService;
   final BookingService bookingService;
   final VoidCallback onComplete;
+  final bool isHotelProperty;
 
   const _KitchenPaymentDialog({
     required this.orderGroup,
@@ -1021,6 +1040,7 @@ class _KitchenPaymentDialog extends StatefulWidget {
     required this.restaurantService,
     required this.bookingService,
     required this.onComplete,
+    this.isHotelProperty = true,
   });
 
   @override
@@ -1033,6 +1053,7 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
       symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
   final _uuid = const Uuid();
+  final _checkInRepo = sl<CheckInRepository>();
 
   // 'cash' | 'card' | 'room'
   String _payMethod = 'cash';
@@ -1074,7 +1095,7 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
   }
 
   Future<void> _loadGuests() async {
-    final enriched = await widget.bookingService.getEnrichedCheckIns();
+    final enriched = await _checkInRepo.getEnrichedCheckIns();
     final checkedIn = enriched.where((d) {
       final b = d['booking'] as Booking?;
       return b != null && b.status == BookingStatus.checkedIn;
@@ -1429,15 +1450,17 @@ class _KitchenPaymentDialogState extends State<_KitchenPaymentDialog> {
                           onTap: () => setState(() => _payMethod = 'card'),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _methodBtn(
-                          icon: Icons.hotel_rounded,
-                          label: 'Room Charge',
-                          selected: _payMethod == 'room',
-                          onTap: () => setState(() => _payMethod = 'room'),
+                      if (widget.isHotelProperty) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _methodBtn(
+                            icon: Icons.hotel_rounded,
+                            label: 'Room Charge',
+                            selected: _payMethod == 'room',
+                            onTap: () => setState(() => _payMethod = 'room'),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
 

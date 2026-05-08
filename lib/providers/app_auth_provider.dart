@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/organization_service.dart';
@@ -156,7 +157,44 @@ class AuthNotifier extends AsyncNotifier<AppAuthState> {
     state = const AsyncValue.data(AppAuthState(isLoading: false, isLoggedIn: false));
   }
 
-  Future<void> refreshAfterOnboarding() async => reload();
+  Future<void> refreshAfterOnboarding() async {
+    // Check if a superadmin pre-provisioned enterprise access for this user.
+    // The pending_provisions row is keyed by email and was created when the
+    // superadmin invited a customer who hadn't signed up yet.
+    final user = _db.auth.currentUser;
+    if (user?.email != null) {
+      try {
+        final rows = await _db
+            .from('pending_provisions')
+            .select()
+            .eq('email', user!.email!.toLowerCase())
+            .limit(1);
+
+        if (rows.isNotEmpty) {
+          final row = rows.first;
+          await OrganizationService().provisionCustomAccessByUserId(
+            userId:        user.id,
+            maxProperties: row['max_properties'] as int,
+            maxUsers:      row['max_users']      as int,
+            maxRooms:      row['max_rooms']      as int,
+            maxTables:     row['max_tables']     as int,
+            priceMonthly:  (row['price_monthly']  as num?)?.toDouble(),
+            priceAnnually: (row['price_annually'] as num?)?.toDouble(),
+            billingCycle:  row['billing_cycle']  as String? ?? 'monthly',
+          );
+          // Clean up the pending row now that it's applied
+          await _db
+              .from('pending_provisions')
+              .delete()
+              .eq('email', user.email!.toLowerCase());
+        }
+      } catch (e) {
+        // Non-fatal — continue with normal reload even if auto-apply fails
+        debugPrint('refreshAfterOnboarding: pending provision apply failed: $e');
+      }
+    }
+    await reload();
+  }
 }
 
 final authProvider = AsyncNotifierProvider<AuthNotifier, AppAuthState>(

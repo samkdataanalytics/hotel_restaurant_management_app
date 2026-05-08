@@ -1,13 +1,18 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../models/menu_item.dart';
-import '../models/restaurant_table.dart';
-import '../models/restaurant_order.dart';
-import '../models/ingredient.dart';
-import '../models/ingredient_price.dart';
-import '../models/menu_item_cost_record.dart';
-import '../models/inventory_item.dart';
-import '../models/expense.dart';
+import '../domain/entities/menu_item.dart';
+import '../domain/entities/restaurant_table.dart';
+import '../domain/entities/restaurant_order.dart';
+import '../domain/entities/ingredient.dart';
+import '../domain/entities/ingredient_price.dart';
+import '../domain/entities/menu_item_cost_record.dart';
+import '../domain/entities/inventory_item.dart';
+import '../domain/entities/expense.dart';
+import '../domain/repositories/menu_item_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/ingredient_repository.dart';
+import '../di/injection_container.dart';
 import 'booking_service.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
@@ -19,6 +24,11 @@ class RestaurantService {
   static final RestaurantService _instance = RestaurantService._internal();
   factory RestaurantService() => _instance;
   RestaurantService._internal();
+
+  final _menuItemRepo = sl<MenuItemRepository>();
+  final _tableRepo = sl<RestaurantTableRepository>();
+  final _orderRepo = sl<OrderRepository>();
+  final _ingredientRepo = sl<IngredientRepository>();
 
   /// The hotel_id for the currently logged-in staff member.
   /// Set this after login alongside BookingService.hotelId.
@@ -231,53 +241,38 @@ class RestaurantService {
   // ─── MENU ──────────────────────────────────────────────────────────────────
 
   Future<List<MenuItem>> getMenuItems() async {
-    if (hotelId == null) return [];
-    final rows = await _db.from('menu_items').select()
-        .eq('hotel_id', hotelId!)
-        .order('category')
-        .order('name');
-    return rows.map(_menuItemFromRow).toList();
+    return _menuItemRepo.getMenuItems();
   }
 
   Future<void> saveMenuItem(MenuItem item) async {
-    await _db.from('menu_items').upsert(_menuItemToRow(item));
+    await _menuItemRepo.saveMenuItem(item);
     await _recalcCostForItem(item.id);
   }
 
   Future<void> addMenuItem(MenuItem item) async => saveMenuItem(item);
 
   Future<void> deleteMenuItem(String id) async {
-    await _db.from('menu_items').delete().eq('id', id);
+    await _menuItemRepo.deleteMenuItem(id);
   }
 
   // ─── INGREDIENTS ──────────────────────────────────────────────────────────
 
   Future<List<Ingredient>> getIngredients() async {
-    if (hotelId == null) return [];
-    final rows = await _db.from('ingredients').select()
-        .eq('hotel_id', hotelId!)
-        .order('name');
-    return rows.map(_ingredientFromRow).toList();
+    return _ingredientRepo.getIngredients();
   }
 
   Future<void> saveIngredient(Ingredient ingredient) async {
-    await _db.from('ingredients').upsert(_ingredientToRow(ingredient));
+    await _ingredientRepo.saveIngredient(ingredient);
   }
 
   Future<void> deleteIngredient(String id) async {
-    await _db.from('ingredients').delete().eq('id', id);
+    await _ingredientRepo.deleteIngredient(id);
   }
 
   // ─── INGREDIENT PRICES ────────────────────────────────────────────────────
 
   Future<List<IngredientPrice>> getIngredientPrices() async {
-    if (hotelId == null) return [];
-    final rows = await _db
-        .from('ingredient_prices')
-        .select()
-        .eq('hotel_id', hotelId!)
-        .order('date', ascending: false);
-    return rows.map(_priceFromRow).toList();
+    return _ingredientRepo.getIngredientPrices();
   }
 
   Future<List<IngredientPrice>> getPricesForIngredient(
@@ -360,33 +355,23 @@ class RestaurantService {
   // ─── TABLES ───────────────────────────────────────────────────────────────
 
   Future<List<RestaurantTable>> getTables() async {
-    if (hotelId == null) return [];
-    final rows = await _db.from('restaurant_tables').select()
-        .eq('hotel_id', hotelId!)
-        .order('table_number');
-    return rows.map(_tableFromRow).toList();
+    return _tableRepo.getTables();
   }
 
   Future<void> saveTable(RestaurantTable table) async {
-    await _db.from('restaurant_tables').upsert(_tableToRow(table));
+    await _tableRepo.saveTable(table);
   }
 
   Future<void> updateTable(RestaurantTable table) async => saveTable(table);
 
   Future<void> deleteTable(String id) async {
-    await _db.from('restaurant_tables').delete().eq('id', id);
+    await _tableRepo.deleteTable(id);
   }
 
   // ─── ORDERS ───────────────────────────────────────────────────────────────
 
   Future<List<RestaurantOrder>> getOrders() async {
-    if (hotelId == null) return [];
-    final rows = await _db
-        .from('restaurant_orders')
-        .select()
-        .eq('hotel_id', hotelId!)
-        .order('created_at', ascending: false);
-    return rows.map(_orderFromRow).toList();
+    return _orderRepo.getOrders();
   }
 
   /// Returns all restaurant orders that were charged to a specific hotel booking.
@@ -406,20 +391,7 @@ class RestaurantService {
   /// Returns the number of active kitchen orders created today.
   /// Used by AppShell badge; fetches only IDs, server-filtered.
   Future<int> countActiveKitchenOrdersToday() async {
-    if (hotelId == null) return 0;
-    try {
-      final today = DateTime.now();
-      final start = DateTime(today.year, today.month, today.day).toIso8601String();
-      final rows  = await _db
-          .from('restaurant_orders')
-          .select('id')
-          .eq('hotel_id', hotelId!)
-          .inFilter('status', ['pending', 'preparing'])
-          .gte('created_at', start);
-      return rows.length;
-    } catch (_) {
-      return 0;
-    }
+    return _orderRepo.countActiveKitchenOrdersToday();
   }
 
   /// Upserts an order and keeps table status in sync.

@@ -36,7 +36,7 @@ CREATE POLICY "plans_superadmin_all"
 -- ─── Seed default 4 plans ─────────────────────────────────────────────────────
 INSERT INTO plans (name, slug, price_monthly, is_custom_price, max_properties, max_users, max_rooms, max_tables, is_highlighted, sort_order)
 VALUES
-  ('Free',       'free',       0,   false, 1,  5,   20,  5,  false, 1),
-  ('Starter',    'starter',    49,  false, 1,  10,  50,  15, false, 2),
-  ('Pro',        'pro',        99,  false, 3,  25,  150, 30, true,  3),
-  ('Enterprise', 'enterprise', 0,   true,  -1, -1,  -1,  -1, false, 4);
+  ('Free',       'free',       0,    false, 1,  3,   10,  5,  false, 1),
+  ('Starter',    'starter',    3450, false, 2,  6,   30,  15, false, 2),
+  ('Pro',        'pro',        6990, false, 5,  25,  150, 30, true,  3),
+  ('Enterprise', 'enterprise', 0,    true,  -1, -1,  -1,  -1, false, 4);

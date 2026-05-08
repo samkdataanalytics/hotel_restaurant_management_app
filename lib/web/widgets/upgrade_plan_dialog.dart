@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../app_theme.dart';
 import '../../providers/app_auth_provider.dart';
 import '../../services/plan_service.dart';
-import '../../services/organization_service.dart';
 import '../../services/lead_service.dart';
+import '../../providers/service_providers.dart';
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
@@ -35,11 +36,10 @@ class UpgradePlanDialog extends StatefulWidget {
 }
 
 class _UpgradePlanDialogState extends State<UpgradePlanDialog> {
-  final _planService = PlanService();
+  PlanService get _planService => widget.ref.read(planServiceProvider);
   List<PlanModel> _plans = [];
   bool _loading = true;
   String? _selectedSlug;
-  bool _saving = false;
   String? _error;
 
   String get _currentSlug =>
@@ -60,20 +60,13 @@ class _UpgradePlanDialogState extends State<UpgradePlanDialog> {
     });
   }
 
-  Future<void> _upgrade() async {
+  void _upgrade() {
     if (_selectedSlug == null || _selectedSlug == _currentSlug) return;
-    final authState = widget.ref.read(authProvider).valueOrNull;
-    final orgId = authState?.organization?.id;
-    if (orgId == null) return;
-
-    setState(() { _saving = true; _error = null; });
-    try {
-      await OrganizationService().updateOrgPlan(orgId, _selectedSlug!);
-      await widget.ref.read(authProvider.notifier).reload();
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (e) {
-      if (mounted) setState(() { _saving = false; _error = e.toString(); });
-    }
+    final slug = _selectedSlug!;
+    // Close the dialog first, then navigate — plan is only updated after
+    // successful PayHere payment via the payhere-notify webhook.
+    Navigator.of(context).pop(false);
+    context.go('/app/upgrade?plan=$slug');
   }
 
   @override
@@ -194,12 +187,12 @@ class _UpgradePlanDialogState extends State<UpgradePlanDialog> {
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(context).pop(false),
           child: const Text('Cancel'),
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: _saving || _selectedSlug == null || _selectedSlug == _currentSlug
+          onPressed: _selectedSlug == null || _selectedSlug == _currentSlug
               ? null
               : _upgrade,
           style: ElevatedButton.styleFrom(
@@ -209,10 +202,7 @@ class _UpgradePlanDialogState extends State<UpgradePlanDialog> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
-          child: _saving
-              ? const SizedBox(width: 18, height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : Text(isEnterprise ? 'Contact Sales' : 'Upgrade Now'),
+          child: Text(isEnterprise ? 'Contact Sales' : 'Continue to Payment'),
         ),
       ],
     );
@@ -404,18 +394,18 @@ class _PlanCard extends StatelessWidget {
 
 // ─── Enterprise Contact Form ──────────────────────────────────────────────────
 
-class _EnterpriseContactForm extends StatefulWidget {
+class _EnterpriseContactForm extends ConsumerStatefulWidget {
   final String? prefillEmail;
   final String? prefillName;
   const _EnterpriseContactForm({this.prefillEmail, this.prefillName});
 
   @override
-  State<_EnterpriseContactForm> createState() => _EnterpriseContactFormState();
+  ConsumerState<_EnterpriseContactForm> createState() => _EnterpriseContactFormState();
 }
 
-class _EnterpriseContactFormState extends State<_EnterpriseContactForm> {
+class _EnterpriseContactFormState extends ConsumerState<_EnterpriseContactForm> {
   final _formKey  = GlobalKey<FormState>();
-  final _service  = LeadService();
+  LeadService get _service => ref.read(leadServiceProvider);
 
   late final TextEditingController _name;
   late final TextEditingController _company;

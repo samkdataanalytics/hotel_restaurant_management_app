@@ -5,12 +5,13 @@ import 'package:provider/provider.dart' as pkg_provider;
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
 import '../providers/hotel_session.dart';
-import '../models/expense.dart';
-import '../models/room.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
-import '../models/staff_permission.dart';
+import '../domain/entities/expense.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/staff_permission.dart';
 import '../services/booking_service.dart';
+import '../providers/service_providers.dart';
 import 'expense_dialog.dart';
 
 class ExpensesManagementScreen extends ConsumerStatefulWidget {
@@ -21,7 +22,7 @@ class ExpensesManagementScreen extends ConsumerStatefulWidget {
 }
 
 class _ExpensesManagementScreenState extends ConsumerState<ExpensesManagementScreen> {
-  final _bookingService = BookingService();
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   final _dateFormat = DateFormat('MMM dd, yyyy');
   String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 

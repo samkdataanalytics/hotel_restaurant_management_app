@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../models/restaurant_order.dart';
+import '../domain/entities/restaurant_order.dart';
 import '../providers/hotel_session.dart';
 import '../app_theme.dart';
-import '../services/restaurant_service.dart';
+import '../di/injection_container.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
 
 const _kOrange = AppTheme.restaurantAccent;
 const _kOrangeBg = AppTheme.restaurantAccentBg;
@@ -48,7 +50,8 @@ class CancellationsRefundsScreen extends StatefulWidget {
 class _CancellationsRefundsScreenState
     extends State<CancellationsRefundsScreen>
     with SingleTickerProviderStateMixin {
-  final _service = RestaurantService();
+  final _orderRepo = sl<OrderRepository>();
+  final _tableRepo = sl<RestaurantTableRepository>();
   NumberFormat get _currency => NumberFormat.currency(
       symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
@@ -84,8 +87,8 @@ class _CancellationsRefundsScreenState
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-    final orders = await _service.getOrders();
-    final tables = await _service.getTables();
+    final orders = await _orderRepo.getOrders();
+    final tables = await _tableRepo.getTables();
 
     String tableLabel(String? id) {
       if (id == null) return 'Takeaway';

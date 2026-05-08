@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 import 'package:web/web.dart' as webpkg;
 import '../services/plan_service.dart';
 import '../services/lead_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/service_providers.dart';
 
-// ─── Palette ──────────────────────────────────────────────────────────────────
+// --- Palette ------------------------------------------------------------------
 class _C {
   static const bg        = Color(0xFFFFFFFF);
   static const surface   = Color(0xFFF8FAFC);
@@ -21,7 +23,7 @@ class _C {
   static const darkCard  = Color(0xFF1E293B);
 }
 
-// ─── Inherited scroll scope ───────────────────────────────────────────────────
+// --- Inherited scroll scope ---------------------------------------------------
 class _LandingScrollScope extends InheritedWidget {
   final ScrollController controller;
   const _LandingScrollScope({required this.controller, required super.child});
@@ -33,7 +35,7 @@ class _LandingScrollScope extends InheritedWidget {
   bool updateShouldNotify(_LandingScrollScope old) => controller != old.controller;
 }
 
-// ─── Landing screen ───────────────────────────────────────────────────────────
+// --- Landing screen -----------------------------------------------------------
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
   @override
@@ -130,7 +132,7 @@ class _LandingScreenState extends State<LandingScreen> {
   }
 }
 
-// ─── Reveal-on-scroll wrapper ─────────────────────────────────────────────────
+// --- Reveal-on-scroll wrapper -------------------------------------------------
 class _RevealOnScroll extends StatefulWidget {
   final Widget child;
   const _RevealOnScroll({required this.child});
@@ -198,7 +200,7 @@ class _RevealOnScrollState extends State<_RevealOnScroll>
   }
 }
 
-// ─── Navigation bar ───────────────────────────────────────────────────────────
+// --- Navigation bar -----------------------------------------------------------
 class _NavBar extends StatelessWidget {
   final bool solid;
   final bool isMobile;
@@ -287,7 +289,7 @@ class _NavLinkState extends State<_NavLink> {
   }
 }
 
-// ─── Animated logo ────────────────────────────────────────────────────────────
+// --- Animated logo ------------------------------------------------------------
 class _AnimatedLogo extends StatefulWidget {
   final double size;
   const _AnimatedLogo({required this.size});
@@ -346,7 +348,7 @@ class _AnimatedLogoState extends State<_AnimatedLogo> with SingleTickerProviderS
   }
 }
 
-// ─── Hero section ─────────────────────────────────────────────────────────────
+// --- Hero section -------------------------------------------------------------
 class _HeroSection extends StatelessWidget {
   final bool isMobile;
   const _HeroSection({required this.isMobile});
@@ -407,7 +409,7 @@ class _HeroSection extends StatelessWidget {
             child: Text(
               'Independent hotels and restaurants waste hours every day '
               'juggling check-ins on WhatsApp, menus on paper, and finances in Excel. '
-              'HotRest replaces all of it — one beautiful dashboard for every department.',
+              'HotRest replaces all of it � one beautiful dashboard for every department.',
               textAlign: TextAlign.center,
               style: TextStyle(color: _C.subtext, fontSize: isMobile ? 15 : 17, height: 1.65),
             ),
@@ -451,7 +453,7 @@ class _HeroSection extends StatelessWidget {
             children: [
               Icon(Icons.lock_outline_rounded, size: 13, color: _C.muted),
               SizedBox(width: 5),
-              Text('No credit card required · Free forever on Starter plan',
+              Text('No credit card required � Free forever on Starter plan',
                   style: TextStyle(color: _C.muted, fontSize: 12.5)),
             ],
           ),
@@ -463,7 +465,7 @@ class _HeroSection extends StatelessWidget {
   }
 }
 
-// ─── Stats strip (animated count-up) ─────────────────────────────────────────
+// --- Stats strip (animated count-up) -----------------------------------------
 class _StatsStrip extends StatefulWidget {
   final bool isMobile;
   const _StatsStrip({required this.isMobile});
@@ -483,7 +485,7 @@ class _StatsStripState extends State<_StatsStrip> with SingleTickerProviderState
     (target: 500.0, decimals: 0, suffix: '+',  label: 'Properties'),
     (target: 50.0,  decimals: 0, suffix: 'K+', label: 'Bookings Managed'),
     (target: 99.9,  decimals: 1, suffix: '%',  label: 'Uptime SLA'),
-    (target: 4.9,   decimals: 1, suffix: '★', label: 'Average Rating'),
+    (target: 4.9,   decimals: 1, suffix: '?', label: 'Average Rating'),
   ];
 
   @override
@@ -587,7 +589,7 @@ class _AnimatedStatItem extends StatelessWidget {
   }
 }
 
-// ─── How It Works ─────────────────────────────────────────────────────────────
+// --- How It Works -------------------------------------------------------------
 class _HowItWorksSection extends StatelessWidget {
   final bool isMobile;
   const _HowItWorksSection({required this.isMobile});
@@ -624,7 +626,7 @@ class _HowItWorksSection extends StatelessWidget {
           const SizedBox(height: 56),
           isMobile
               ? Column(children: [
-                  _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff — all in one onboarding flow.'),
+                  _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff � all in one onboarding flow.'),
                   const SizedBox(height: 32),
                   _StepCard(number: '02', icon: Icons.dashboard_rounded,   color: _C.gold,           title: 'Manage Everything',       desc: 'Check guests in, process restaurant orders, track staff shifts, and monitor occupancy from one unified dashboard.'),
                   const SizedBox(height: 32),
@@ -633,7 +635,7 @@ class _HowItWorksSection extends StatelessWidget {
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff — all in one onboarding flow.')),
+                    Expanded(child: _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff � all in one onboarding flow.')),
                     Padding(
                       padding: const EdgeInsets.only(top: 52),
                       child: Icon(Icons.arrow_forward_rounded, color: _C.border, size: 28),
@@ -695,7 +697,7 @@ class _StepCard extends StatelessWidget {
   }
 }
 
-// ─── Animated dashboard mockup ────────────────────────────────────────────────
+// --- Animated dashboard mockup ------------------------------------------------
 class _DashboardMockup extends StatefulWidget {
   final bool isMobile;
   const _DashboardMockup({required this.isMobile});
@@ -708,9 +710,9 @@ class _DashboardMockupState extends State<_DashboardMockup> {
   Timer? _timer;
 
   static const _datasets = [
-    (occ: '87%', occTrend: '+4%',  rev: '\$4,280', revTrend: '+12%', orders: '12', ordersTrend: '↑ Busy',   checkins: '8',  checkinsTrend: '3 pending'),
-    (occ: '91%', occTrend: '+7%',  rev: '\$5,140', revTrend: '+20%', orders: '17', ordersTrend: '↑ Peak',   checkins: '11', checkinsTrend: '5 pending'),
-    (occ: '79%', occTrend: '-2%',  rev: '\$3,960', revTrend: '+3%',  orders: '9',  ordersTrend: '→ Steady', checkins: '6',  checkinsTrend: '2 pending'),
+    (occ: '87%', occTrend: '+4%',  rev: '\$4,280', revTrend: '+12%', orders: '12', ordersTrend: '? Busy',   checkins: '8',  checkinsTrend: '3 pending'),
+    (occ: '91%', occTrend: '+7%',  rev: '\$5,140', revTrend: '+20%', orders: '17', ordersTrend: '? Peak',   checkins: '11', checkinsTrend: '5 pending'),
+    (occ: '79%', occTrend: '-2%',  rev: '\$3,960', revTrend: '+3%',  orders: '9',  ordersTrend: '? Steady', checkins: '6',  checkinsTrend: '2 pending'),
   ];
 
   @override
@@ -775,7 +777,7 @@ class _DashboardMockupState extends State<_DashboardMockup> {
                   color: const Color(0xFF22C55E).withAlpha(20),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Text('● Live',
+                child: const Text('? Live',
                     style: TextStyle(color: Color(0xFF22C55E), fontSize: 10, fontWeight: FontWeight.w700)),
               ),
             ]),
@@ -787,7 +789,7 @@ class _DashboardMockupState extends State<_DashboardMockup> {
               children: [
                 Row(
                   children: [
-                    const Text('Good morning, Alex 👋',
+                    const Text('Good morning, Alex ??',
                         style: TextStyle(color: _C.text, fontSize: 13, fontWeight: FontWeight.w700)),
                     const Spacer(),
                     Container(
@@ -966,7 +968,7 @@ class _MockRoomGrid extends StatelessWidget {
   }
 }
 
-// ─── Features section ─────────────────────────────────────────────────────────
+// --- Features section ---------------------------------------------------------
 class _FeaturesSection extends StatelessWidget {
   final bool isMobile;
   const _FeaturesSection({required this.isMobile});
@@ -977,7 +979,7 @@ class _FeaturesSection extends StatelessWidget {
     (icon: Icons.point_of_sale_rounded, color: Color(0xFFF97316), title: 'Restaurant POS',
       bullets: ['Table-side & counter ordering', 'Live kitchen display system (KDS)', 'Menu & category management', 'Split bills & multiple payment modes', 'Real-time sales analytics']),
     (icon: Icons.qr_code_2_rounded,   color: Color(0xFF22C55E), title: 'Guest Portal',
-      bullets: ['QR-based self check-in & check-out', 'Room service ordering via phone', 'Digital menus — no app download', 'Booking lookup & stay details', 'Direct messaging with front desk']),
+      bullets: ['QR-based self check-in & check-out', 'Room service ordering via phone', 'Digital menus � no app download', 'Booking lookup & stay details', 'Direct messaging with front desk']),
     (icon: Icons.palette_rounded,     color: Color(0xFFD4A853), title: 'White-Label Ready',
       bullets: ['Custom brand colors & logo', 'Property name on all guest screens', 'Branded QR codes & menus', 'No HotRest branding visible to guests', 'Multi-property brand profiles']),
     (icon: Icons.people_alt_rounded,  color: Color(0xFF8B5CF6), title: 'Staff & Shifts',
@@ -1010,7 +1012,7 @@ class _FeaturesSection extends StatelessWidget {
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 540),
             child: const Text(
-              'Purpose-built for hotels and restaurants — not a bloated ERP. '
+              'Purpose-built for hotels and restaurants � not a bloated ERP. '
               'Every tool you need, none you don\'t.',
               textAlign: TextAlign.center,
               style: TextStyle(color: _C.subtext, fontSize: 15.5, height: 1.55),
@@ -1109,14 +1111,14 @@ class _FeatureCardState extends State<_FeatureCard> {
   }
 }
 
-// ─── Testimonials section ─────────────────────────────────────────────────────
+// --- Testimonials section -----------------------------------------------------
 class _TestimonialsSection extends StatelessWidget {
   final bool isMobile;
   const _TestimonialsSection({required this.isMobile});
 
   static const _testimonials = [
     (
-      quote: 'HotRest cut our front-desk workload in half. Check-in used to take 5 minutes per guest — now guests self-check in via QR. The staff scheduling alone is worth every cent.',
+      quote: 'HotRest cut our front-desk workload in half. Check-in used to take 5 minutes per guest � now guests self-check in via QR. The staff scheduling alone is worth every cent.',
       name: 'Sarah Mitchell', role: 'General Manager', hotel: 'The Riverview Boutique Hotel',
       initials: 'SM', color: Color(0xFF3B82F6),
     ),
@@ -1126,7 +1128,7 @@ class _TestimonialsSection extends StatelessWidget {
       initials: 'JO', color: Color(0xFFD4A853),
     ),
     (
-      quote: 'Switching from our old PMS was painless. The onboarding took less than 20 minutes, and the white-label guest portal means our branding is front and center — not some software company\'s logo.',
+      quote: 'Switching from our old PMS was painless. The onboarding took less than 20 minutes, and the white-label guest portal means our branding is front and center � not some software company\'s logo.',
       name: 'Priya Ramaswamy', role: 'Owner', hotel: 'Serenity Suites & Restaurant',
       initials: 'PR', color: Color(0xFF22C55E),
     ),
@@ -1253,7 +1255,7 @@ class _TestimonialCard extends StatelessWidget {
                   children: [
                     Text(name,
                         style: const TextStyle(color: _C.text, fontWeight: FontWeight.w700, fontSize: 13)),
-                    Text('$role · $hotel',
+                    Text('$role � $hotel',
                         style: const TextStyle(color: _C.subtext, fontSize: 11.5),
                         overflow: TextOverflow.ellipsis),
                   ],
@@ -1267,22 +1269,22 @@ class _TestimonialCard extends StatelessWidget {
   }
 }
 
-// ─── Pricing section (dynamic from DB + billing toggle) ───────────────────────
-class _PricingSection extends StatefulWidget {
+// --- Pricing section (dynamic from DB + billing toggle) -----------------------
+class _PricingSection extends ConsumerStatefulWidget {
   final bool isMobile;
   const _PricingSection({required this.isMobile});
   @override
-  State<_PricingSection> createState() => _PricingSectionState();
+  ConsumerState<_PricingSection> createState() => _PricingSectionState();
 }
 
-class _PricingSectionState extends State<_PricingSection> {
+class _PricingSectionState extends ConsumerState<_PricingSection> {
   late Future<List<PlanModel>> _future;
   bool _isAnnual = false;
 
   @override
   void initState() {
     super.initState();
-    _future = PlanService().getActivePlans();
+    _future = ref.read(planServiceProvider).getActivePlans();
   }
 
   @override
@@ -1331,7 +1333,7 @@ class _PricingSectionState extends State<_PricingSection> {
               children: [
                 Icon(Icons.local_fire_department_rounded, color: Color(0xFFEF4444), size: 14),
                 SizedBox(width: 7),
-                Text('Early-Access Pricing — Rates locked in for life when you sign up now',
+                Text('Early-Access Pricing � Rates locked in for life when you sign up now',
                     style: TextStyle(color: Color(0xFFEF4444), fontSize: 12, fontWeight: FontWeight.w700)),
               ],
             ),
@@ -1550,7 +1552,11 @@ class _PricingCard extends StatelessWidget {
             height: 48,
             child: highlighted
                 ? ElevatedButton(
-                    onPressed: () => context.go('/signup'),
+                    onPressed: () => context.go(
+                      effectiveMonthly > 0
+                          ? '/signup?plan=${plan.slug}'
+                          : '/signup',
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _C.gold,
                       foregroundColor: _C.bg,
@@ -1565,7 +1571,11 @@ class _PricingCard extends StatelessWidget {
                       if (isEnterprise) {
                         showDialog(context: context, builder: (_) => const _EnterpriseContactDialog());
                       } else {
-                        context.go('/signup');
+                        context.go(
+                          effectiveMonthly > 0
+                              ? '/signup?plan=${plan.slug}'
+                              : '/signup',
+                        );
                       }
                     },
                     style: OutlinedButton.styleFrom(
@@ -1583,7 +1593,7 @@ class _PricingCard extends StatelessWidget {
   }
 }
 
-// ─── FAQ section ──────────────────────────────────────────────────────────────
+// --- FAQ section --------------------------------------------------------------
 class _FaqSection extends StatelessWidget {
   final bool isMobile;
   const _FaqSection({required this.isMobile});
@@ -1591,7 +1601,7 @@ class _FaqSection extends StatelessWidget {
   static const _faqs = [
     (
       q: 'Is there a free plan?',
-      a: 'Yes! Our Starter plan is free forever with up to 1 property, 10 rooms, 5 staff accounts, and 5 restaurant tables. No credit card required — just sign up and start managing.',
+      a: 'Yes! Our Starter plan is free forever with up to 1 property, 10 rooms, 5 staff accounts, and 5 restaurant tables. No credit card required � just sign up and start managing.',
     ),
     (
       q: 'Can I manage multiple properties?',
@@ -1599,7 +1609,7 @@ class _FaqSection extends StatelessWidget {
     ),
     (
       q: 'Do guests need to download an app?',
-      a: 'No. The guest portal works entirely via QR code in any mobile browser. Guests can check in, browse the restaurant menu, order room service, and check out — no download required.',
+      a: 'No. The guest portal works entirely via QR code in any mobile browser. Guests can check in, browse the restaurant menu, order room service, and check out � no download required.',
     ),
     (
       q: 'How secure is guest and payment data?',
@@ -1607,7 +1617,7 @@ class _FaqSection extends StatelessWidget {
     ),
     (
       q: 'Can I white-label the guest portal?',
-      a: 'Yes, on Pro and Enterprise plans. You can set your own logo, brand colours, and property name. Guests see your brand — not ours.',
+      a: 'Yes, on Pro and Enterprise plans. You can set your own logo, brand colours, and property name. Guests see your brand � not ours.',
     ),
     (
       q: 'Can I cancel or downgrade anytime?',
@@ -1711,7 +1721,7 @@ class _FaqTileState extends State<_FaqTile> {
   }
 }
 
-// ─── CTA section ──────────────────────────────────────────────────────────────
+// --- CTA section --------------------------------------------------------------
 class _CtaSection extends StatelessWidget {
   final bool isMobile;
   const _CtaSection({required this.isMobile});
@@ -1764,7 +1774,7 @@ class _CtaSection extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Join hundreds of hospitality teams already running smarter with HotRest.\nNo credit card required — start in minutes.',
+                'Join hundreds of hospitality teams already running smarter with HotRest.\nNo credit card required � start in minutes.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white.withAlpha(160), fontSize: 15, height: 1.6),
               ),
@@ -1824,7 +1834,7 @@ class _TrustChip extends StatelessWidget {
   }
 }
 
-// ─── Footer ───────────────────────────────────────────────────────────────────
+// --- Footer -------------------------------------------------------------------
 class _Footer extends StatelessWidget {
   final bool isMobile;
   const _Footer({required this.isMobile});
@@ -1917,7 +1927,7 @@ class _Footer extends StatelessWidget {
   );
 
   Widget _copyright() => Text(
-    '© 2025 HotRest. All rights reserved.',
+    '� 2025 HotRest. All rights reserved.',
     style: TextStyle(color: Colors.white.withAlpha(80), fontSize: 12),
   );
 
@@ -1973,7 +1983,7 @@ class _FooterItem {
   const _FooterItem(this.label, this.onTap);
 }
 
-// ─── Shared helpers ───────────────────────────────────────────────────────────
+// --- Shared helpers -----------------------------------------------------------
 class _SectionLabel extends StatelessWidget {
   final String label;
   const _SectionLabel({required this.label});
@@ -2047,7 +2057,7 @@ class _GoldButtonState extends State<_GoldButton> {
   }
 }
 
-// ─── Demo Dialog ──────────────────────────────────────────────────────────────
+// --- Demo Dialog --------------------------------------------------------------
 class _DemoDialog extends StatefulWidget {
   const _DemoDialog();
   @override
@@ -2061,21 +2071,21 @@ class _DemoDialogState extends State<_DemoDialog> {
 
   static const _highlights = [
     [
-      (icon: Icons.how_to_reg_rounded,   color: Color(0xFF3B82F6), title: 'One-click check-in',        desc: 'Front desk checks in a guest in under 10 seconds — folio auto-generated, room assigned, key ready.'),
+      (icon: Icons.how_to_reg_rounded,   color: Color(0xFF3B82F6), title: 'One-click check-in',        desc: 'Front desk checks in a guest in under 10 seconds � folio auto-generated, room assigned, key ready.'),
       (icon: Icons.king_bed_rounded,      color: Color(0xFF22C55E), title: 'Live room availability',    desc: 'Color-coded room grid shows occupied, available, and maintenance rooms in real time.'),
-      (icon: Icons.receipt_long_rounded,  color: Color(0xFFD4A853), title: 'Instant folio billing',     desc: 'Auto-calculates room charges, extras and taxes — export to PDF with one click.'),
-      (icon: Icons.people_alt_rounded,    color: Color(0xFF8B5CF6), title: 'Staff shift management',    desc: 'Assign and track shifts, clock-ins and attendance — no third-party HR tool needed.'),
+      (icon: Icons.receipt_long_rounded,  color: Color(0xFFD4A853), title: 'Instant folio billing',     desc: 'Auto-calculates room charges, extras and taxes � export to PDF with one click.'),
+      (icon: Icons.people_alt_rounded,    color: Color(0xFF8B5CF6), title: 'Staff shift management',    desc: 'Assign and track shifts, clock-ins and attendance � no third-party HR tool needed.'),
     ],
     [
-      (icon: Icons.point_of_sale_rounded, color: Color(0xFFF97316), title: 'Table-side ordering',       desc: 'Waiters take orders on any device — sent instantly to the kitchen display, no paper tickets.'),
+      (icon: Icons.point_of_sale_rounded, color: Color(0xFFF97316), title: 'Table-side ordering',       desc: 'Waiters take orders on any device � sent instantly to the kitchen display, no paper tickets.'),
       (icon: Icons.kitchen_rounded,       color: Color(0xFFEF4444), title: 'Kitchen display system',    desc: 'KDS shows orders in real time, with timers and priority flags so chefs never miss a ticket.'),
-      (icon: Icons.splitscreen_rounded,   color: Color(0xFF22C55E), title: 'Split bills & payments',    desc: 'Split any bill by item or equally across guests — supports cash, card and mixed payments.'),
+      (icon: Icons.splitscreen_rounded,   color: Color(0xFF22C55E), title: 'Split bills & payments',    desc: 'Split any bill by item or equally across guests � supports cash, card and mixed payments.'),
       (icon: Icons.analytics_rounded,     color: Color(0xFF06B6D4), title: 'Sales analytics',           desc: 'See your top-selling dishes, peak hours, and daily revenue at a glance.'),
     ],
     [
-      (icon: Icons.qr_code_2_rounded,    color: Color(0xFF22C55E), title: 'QR self check-in',          desc: 'Guests scan a QR at reception, fill in details on their phone and check in — no queue, no paperwork.'),
-      (icon: Icons.room_service_rounded,  color: Color(0xFFD4A853), title: 'Room service on phone',     desc: 'Guests order food from their room by scanning a QR — order goes straight to the kitchen.'),
-      (icon: Icons.restaurant_menu_rounded, color: Color(0xFF3B82F6), title: 'Digital table menu',      desc: 'Diners scan a table QR, browse the menu and order — no app download required.'),
+      (icon: Icons.qr_code_2_rounded,    color: Color(0xFF22C55E), title: 'QR self check-in',          desc: 'Guests scan a QR at reception, fill in details on their phone and check in � no queue, no paperwork.'),
+      (icon: Icons.room_service_rounded,  color: Color(0xFFD4A853), title: 'Room service on phone',     desc: 'Guests order food from their room by scanning a QR � order goes straight to the kitchen.'),
+      (icon: Icons.restaurant_menu_rounded, color: Color(0xFF3B82F6), title: 'Digital table menu',      desc: 'Diners scan a table QR, browse the menu and order � no app download required.'),
       (icon: Icons.no_accounts_rounded,   color: Color(0xFF8B5CF6), title: 'No app needed',             desc: 'Everything runs in the mobile browser. Guests do not install anything.'),
     ],
   ];
@@ -2103,7 +2113,7 @@ class _DemoDialogState extends State<_DemoDialog> {
                         Text('See HotRest in Action',
                             style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _C.text)),
                         SizedBox(height: 4),
-                        Text('What you get — out of the box, day one.',
+                        Text('What you get � out of the box, day one.',
                             style: TextStyle(color: _C.subtext, fontSize: 13)),
                       ],
                     ),
@@ -2203,7 +2213,7 @@ class _DemoDialogState extends State<_DemoDialog> {
                     elevation: 0,
                   ),
                   icon: const Icon(Icons.rocket_launch_rounded, size: 16),
-                  label: const Text('Try It Free — No Credit Card',
+                  label: const Text('Try It Free � No Credit Card',
                       style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 ),
               ),
@@ -2215,14 +2225,14 @@ class _DemoDialogState extends State<_DemoDialog> {
   }
 }
 
-// ─── Enterprise Contact Dialog ────────────────────────────────────────────────
-class _EnterpriseContactDialog extends StatefulWidget {
+// --- Enterprise Contact Dialog ------------------------------------------------
+class _EnterpriseContactDialog extends ConsumerStatefulWidget {
   const _EnterpriseContactDialog();
   @override
-  State<_EnterpriseContactDialog> createState() => _EnterpriseContactDialogState();
+  ConsumerState<_EnterpriseContactDialog> createState() => _EnterpriseContactDialogState();
 }
 
-class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
+class _EnterpriseContactDialogState extends ConsumerState<_EnterpriseContactDialog> {
   final _formKey   = GlobalKey<FormState>();
   final _name      = TextEditingController();
   final _company   = TextEditingController();
@@ -2230,7 +2240,7 @@ class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
   final _phone     = TextEditingController();
   final _message   = TextEditingController();
   final _propCount = TextEditingController();
-  final _service   = LeadService();
+  LeadService get _service => ref.read(leadServiceProvider);
   bool _submitting = false;
   bool _submitted  = false;
 
@@ -2292,7 +2302,7 @@ class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _C.text)),
       const SizedBox(height: 10),
       const Text(
-        'Thank you for reaching out. Our team will contact you within 1–2 business days to discuss your requirements.',
+        'Thank you for reaching out. Our team will contact you within 1�2 business days to discuss your requirements.',
         textAlign: TextAlign.center,
         style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.5),
       ),
@@ -2407,7 +2417,7 @@ class _EnterpriseContactDialogState extends State<_EnterpriseContactDialog> {
   }
 }
 
-// ─── Pain section (Before / After) ───────────────────────────────────────────
+// --- Pain section (Before / After) -------------------------------------------
 class _PainSection extends StatelessWidget {
   final bool isMobile;
   const _PainSection({required this.isMobile});
@@ -2424,7 +2434,7 @@ class _PainSection extends StatelessWidget {
   static const _after = [
     (icon: Icons.dashboard_rounded,          text: 'One dashboard for front desk, kitchen & finance'),
     (icon: Icons.cloud_sync_rounded,         text: 'Real-time sync across all departments'),
-    (icon: Icons.kitchen_rounded,            text: 'Digital kitchen display — zero lost tickets'),
+    (icon: Icons.kitchen_rounded,            text: 'Digital kitchen display � zero lost tickets'),
     (icon: Icons.task_alt_rounded,           text: 'Every staff member knows their tasks instantly'),
     (icon: Icons.flash_on_rounded,           text: 'Save 4+ hours of admin work every single day'),
     (icon: Icons.qr_code_2_rounded,          text: 'Guests self-check-in in under 30 seconds'),
@@ -2462,7 +2472,7 @@ class _PainSection extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 540),
             child: const Text(
               "Sound familiar? You're not alone. Most independent hotels and "
-              'restaurants operate the same way — until they find HotRest.',
+              'restaurants operate the same way � until they find HotRest.',
               textAlign: TextAlign.center,
               style: TextStyle(color: _C.subtext, fontSize: 15.5, height: 1.55),
             ),
@@ -2562,10 +2572,19 @@ class _PainPanel extends StatelessWidget {
   }
 }
 
-// ─── Comparison section ───────────────────────────────────────────────────────
-class _ComparisonSection extends StatelessWidget {
+// --- Comparison section -------------------------------------------------------
+class _ComparisonSection extends ConsumerStatefulWidget {
   final bool isMobile;
   const _ComparisonSection({required this.isMobile});
+
+  @override
+  ConsumerState<_ComparisonSection> createState() => _ComparisonSectionState();
+}
+
+class _ComparisonSectionState extends ConsumerState<_ComparisonSection> {
+  bool get isMobile => widget.isMobile;
+
+  String _startingPrice = 'Free / from LKR 3,450';
 
   static const _features = [
     'Starting price',
@@ -2579,9 +2598,28 @@ class _ComparisonSection extends StatelessWidget {
     'Free plan available',
   ];
 
-  static const _hotrest  = ['Free / LKR 3,500', '< 20 min', true, true, true, true, true, true, true];
-  static const _trad     = ['LKR 20,000+/mo',   'Days–Weeks', false, false, false, false, true, false, false];
-  static const _manual   = ['Ongoing hidden costs', 'Never done', false, false, false, false, false, false, true];
+  List<dynamic> get _hotrest => [_startingPrice, '< 20 min', true, true, true, true, true, true, true];
+  static const _trad   = ['LKR 20,000+/mo',        'Days–Weeks', false, false, false, false, true, false, false];
+  static const _manual = ['Ongoing hidden costs', 'Never done',   false, false, false, false, false, false, true];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrice();
+  }
+
+  Future<void> _loadPrice() async {
+    try {
+      final plans = await ref.read(planServiceProvider).getActivePlans();
+      final starter = plans.where((p) => p.slug == 'starter').firstOrNull;
+      if (starter != null && mounted) {
+        final price = starter.priceMonthly.toInt();
+        final formatted = price.toString().replaceAllMapped(
+            RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+        setState(() => _startingPrice = 'Free / LKR $formatted');
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2754,7 +2792,7 @@ class _ComparisonSection extends StatelessWidget {
   }
 }
 
-// ─── Floating WhatsApp button ─────────────────────────────────────────────────
+// --- Floating WhatsApp button -------------------------------------------------
 class _WhatsAppFab extends StatefulWidget {
   const _WhatsAppFab();
   @override

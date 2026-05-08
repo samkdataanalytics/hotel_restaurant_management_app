@@ -1,5 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/staff_permission.dart';
+import '../domain/entities/staff_permission.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 

@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../services/plan_service.dart';
+import '../../providers/service_providers.dart';
 
-class SuperadminPlansScreen extends StatefulWidget {
+class SuperadminPlansScreen extends ConsumerStatefulWidget {
   const SuperadminPlansScreen({super.key});
 
   @override
-  State<SuperadminPlansScreen> createState() => _SuperadminPlansScreenState();
+  ConsumerState<SuperadminPlansScreen> createState() => _SuperadminPlansScreenState();
 }
 
-class _SuperadminPlansScreenState extends State<SuperadminPlansScreen> {
+class _SuperadminPlansScreenState extends ConsumerState<SuperadminPlansScreen> {
   late Future<List<PlanModel>> _future;
-  final _service = PlanService();
+  PlanService get _service => ref.read(planServiceProvider);
 
   @override
   void initState() {

@@ -1,28 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
 import '../providers/hotel_session.dart';
 import '../app_theme.dart';
-import '../models/expense.dart';
-import '../models/room.dart';
+import '../domain/entities/expense.dart';
+import '../domain/entities/room.dart';
 import '../services/booking_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/service_providers.dart';
 import 'widgets/responsive_dialog.dart';
 
-class RoomExpensesDialog extends StatefulWidget {
+class RoomExpensesDialog extends ConsumerStatefulWidget {
   final Room room;
 
   const RoomExpensesDialog({super.key, required this.room});
 
   @override
-  State<RoomExpensesDialog> createState() => _RoomExpensesDialogState();
+  ConsumerState<RoomExpensesDialog> createState() => _RoomExpensesDialogState();
 }
 
-class _RoomExpensesDialogState extends State<RoomExpensesDialog> {
-  final _bookingService = BookingService();
+class _RoomExpensesDialogState extends ConsumerState<RoomExpensesDialog> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   final _dateFormat = DateFormat('MMM dd, yyyy');
   NumberFormat get _currencyFormat => NumberFormat.currency(
-      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
   final _uuid = const Uuid();
 

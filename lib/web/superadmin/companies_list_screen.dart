@@ -329,11 +329,12 @@ class _CompaniesListScreenState extends State<CompaniesListScreen> {
     );
   }
 
-  void _openDetail(BuildContext context, Organization org) {
-    showDialog(
+  void _openDetail(BuildContext context, Organization org) async {
+    final deleted = await showDialog<bool>(
       context: context,
       builder: (_) => CompanyDetailScreen(org: org),
     );
+    if (deleted == true) _refresh();
   }
 }
 

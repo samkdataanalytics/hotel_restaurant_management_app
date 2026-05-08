@@ -9,9 +9,10 @@ import 'widgets/skeleton.dart';
 import 'widgets/responsive_dialog.dart';
 import '../providers/hotel_session.dart';
 import '../providers/app_auth_provider.dart';
-import '../models/room.dart';
-import '../models/staff_permission.dart';
-import '../services/booking_service.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/staff_permission.dart';
+import '../domain/repositories/room_repository.dart';
+import '../di/injection_container.dart';
 import '../services/organization_service.dart';
 import 'room_expenses_dialog.dart';
 import 'widgets/upgrade_plan_dialog.dart';
@@ -24,7 +25,7 @@ class RoomsScreen extends ConsumerStatefulWidget {
 }
 
 class _RoomsScreenState extends ConsumerState<RoomsScreen> {
-  final _bookingService = BookingService();
+  final _roomRepo = sl<RoomRepository>();
   String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
   List<Room> _rooms = [];
   bool _isLoading = true;
@@ -38,7 +39,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
 
   Future<void> _loadRooms() async {
     try {
-      final rooms = await _bookingService.getAllRooms();
+      final rooms = await _roomRepo.getAllRooms();
       if (!mounted) return;
       setState(() {
         _rooms = rooms;
@@ -130,7 +131,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
         clearMaintenance: true,
       );
       try {
-        await _bookingService.updateRoom(updated);
+        await _roomRepo.updateRoom(updated);
         if (!mounted) return;
         setState(() {
           final index = _rooms.indexWhere((r) => r.id == room.id);
@@ -145,7 +146,13 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
     }
 
     try {
-      final updated = await _bookingService.toggleRoomStatus(room);
+      final newStatus = room.status == RoomStatus.available
+          ? RoomStatus.maintenance
+          : room.status == RoomStatus.maintenance
+              ? RoomStatus.available
+              : RoomStatus.occupied;
+      final updated = room.copyWith(status: newStatus);
+      await _roomRepo.updateRoom(updated);
       if (!mounted) return;
       setState(() {
         final index = _rooms.indexWhere((r) => r.id == room.id);
@@ -181,7 +188,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
     );
     if (result != null) {
       try {
-        await _bookingService.addRoom(result);
+        await _roomRepo.addRoom(result);
         await _loadRooms();
       } catch (e) {
         if (!mounted) return;
@@ -202,7 +209,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
     );
     if (result != null) {
       try {
-        await _bookingService.updateRoom(result);
+        await _roomRepo.updateRoom(result);
         await _loadRooms();
       } catch (e) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -368,7 +375,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
     );
 
     if (confirmed == true) {
-      await _bookingService.deleteRoom(room.id);
+      await _roomRepo.deleteRoom(room.id);
       await _loadRooms();
     }
   }

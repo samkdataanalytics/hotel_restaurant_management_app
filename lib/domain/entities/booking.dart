@@ -2,6 +2,21 @@ enum BookingStatus { pending, checkedIn, checkedOut, cancelled }
 
 enum BookingSource { bookingCom, airbnb, expedia, direct, other }
 
+/// Converts a list of channel key strings (as stored in hotels.booking_channels)
+/// to the corresponding [BookingSource] enum values.
+/// Unknown keys are mapped to [BookingSource.other].
+List<BookingSource> channelsToSources(List<String> channels) {
+  return channels.map((c) {
+    switch (c) {
+      case 'bookingCom': return BookingSource.bookingCom;
+      case 'airbnb':     return BookingSource.airbnb;
+      case 'expedia':    return BookingSource.expedia;
+      case 'direct':     return BookingSource.direct;
+      default:           return BookingSource.other;
+    }
+  }).toSet().toList(); // toSet removes duplicates if 'other' appears multiple times
+}
+
 class Booking {
   final String id;
   final String bookingRef;

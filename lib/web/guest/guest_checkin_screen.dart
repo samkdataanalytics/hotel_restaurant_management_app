@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../models/booking.dart';
-import '../../models/guest.dart';
-import '../../models/room.dart';
+import '../../domain/entities/booking.dart';
+import '../../domain/entities/guest.dart';
+import '../../domain/entities/room.dart';
 import '../../services/booking_service.dart';
-import '../../services/guest_menu_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/service_providers.dart';
 import '../../providers/hotel_session.dart' show hexToColor;
 
 // ─── Colour palette ────────────────────────────────────────────────────────────
@@ -24,7 +25,7 @@ class _C {
 // ─── Steps ────────────────────────────────────────────────────────────────────
 enum _Step { summary, personal, preferences, agreement }
 
-class GuestCheckinScreen extends StatefulWidget {
+class GuestCheckinScreen extends ConsumerStatefulWidget {
   /// Booking reference passed via ?ref= query param.
   /// If empty, the screen shows a manual lookup field.
   final String bookingRef;
@@ -32,11 +33,11 @@ class GuestCheckinScreen extends StatefulWidget {
   const GuestCheckinScreen({super.key, required this.bookingRef});
 
   @override
-  State<GuestCheckinScreen> createState() => _GuestCheckinScreenState();
+  ConsumerState<GuestCheckinScreen> createState() => _GuestCheckinScreenState();
 }
 
-class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
-  final _bookingService = BookingService();
+class _GuestCheckinScreenState extends ConsumerState<GuestCheckinScreen> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   final _dateFmt = DateFormat('EEE, MMM d yyyy');
   final _refCtrl = TextEditingController();
 
@@ -103,13 +104,13 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
   }
 
   // ── Booking lookup ─────────────────────────────────────────────────────────
-  Future<void> _lookupBooking(String ref) async {
+  Future<void> _lookupBooking(String bookingRef) async {
     setState(() { _loading = true; _lookupError = null; });
-    final data = await _bookingService.lookupBooking(ref.trim().toUpperCase());
+    final data = await _bookingService.lookupBooking(bookingRef.trim().toUpperCase());
     if (!mounted) return;
 
     if (data == null) {
-      setState(() { _lookupError = 'No booking found for "$ref". Please check and try again.'; _loading = false; });
+      setState(() { _lookupError = 'No booking found for "$bookingRef". Please check and try again.'; _loading = false; });
       return;
     }
 
@@ -121,7 +122,7 @@ class _GuestCheckinScreenState extends State<GuestCheckinScreen> {
     // Load brand colour + logo (non-blocking — fall back to defaults on error)
     if (hotelId.isNotEmpty) {
       try {
-        final settings = await GuestMenuService().getSettings(hotelId);
+        final settings = await ref.read(guestMenuServiceProvider).getSettings(hotelId);
         if (mounted) {
           setState(() {
           _accent  = hexToColor(settings.primaryColorHex);

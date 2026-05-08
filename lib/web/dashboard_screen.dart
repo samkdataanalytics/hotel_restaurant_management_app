@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart' as pkg_provider;
+import 'package:web/web.dart' as webpkg;
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
-import '../models/check_in.dart';
-import '../models/guest.dart';
-import '../models/room.dart';
-import '../models/restaurant_order.dart';
+import '../domain/entities/check_in.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/restaurant_order.dart';
 import '../providers/app_auth_provider.dart';
 import '../providers/hotel_session.dart';
-import '../services/booking_service.dart';
-import '../services/restaurant_service.dart';
+import '../di/injection_container.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
+import '../domain/repositories/check_in_repository.dart';
+import '../domain/usecases/get_dashboard_stats.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -21,8 +26,10 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  final _bookingService = BookingService();
-  final _restaurantService = RestaurantService();
+  final _orderRepo = sl<OrderRepository>();
+  final _tableRepo = sl<RestaurantTableRepository>();
+  final _checkInRepo = sl<CheckInRepository>();
+  final _getDashboardStats = sl<GetDashboardStats>();
   final _timeFormat = DateFormat('hh:mm a');
   final _dateFormat = DateFormat('MMM dd, yyyy');
   NumberFormat get _currency => NumberFormat.currency(
@@ -45,12 +52,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void initState() {
     super.initState();
     _loadData();
+    _maybeReloadAfterPayment();
+  }
+
+  // When PayHere redirects back with ?upgraded=1, reload auth state so the
+  // updated plan is reflected without requiring a manual refresh.
+  void _maybeReloadAfterPayment() {
+    final search = webpkg.window.location.search;
+    if (!search.contains('upgraded=1')) return;
+    // Give the webhook ~3 s to finish before reloading auth state.
+    Future.delayed(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      ref.read(authProvider.notifier).reload();
+    });
   }
 
   Future<void> _loadData() async {
     try {
-      final stats = await _bookingService.getDashboardStats();
-      final checkIns = await _bookingService.getEnrichedCheckIns();
+      final stats = await _getDashboardStats();
+      final checkIns = await _checkInRepo.getEnrichedCheckIns();
 
       // Load restaurant stats only if property has both hotel and restaurant
       final property = ref.read(activePropertyProvider);
@@ -75,8 +95,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   Future<void> _loadRestaurantStats() async {
     try {
-      final orders = await _restaurantService.getOrders();
-      final tables = await _restaurantService.getTables();
+      final orders = await _orderRepo.getOrders();
+      final tables = await _tableRepo.getTables();
       final now = DateTime.now();
 
       final todayOrders = orders.where((o) =>
@@ -188,6 +208,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 32),
+
+            // Enterprise subscription payment banner
+            _SubscriptionPayBanner(ref: ref),
 
             // Stats cards
             LayoutBuilder(
@@ -537,6 +560,68 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─── Enterprise subscription payment banner ───────────────────────────────────
+
+class _SubscriptionPayBanner extends StatelessWidget {
+  final WidgetRef ref;
+  const _SubscriptionPayBanner({required this.ref});
+
+  @override
+  Widget build(BuildContext context) {
+    final org = ref.watch(authProvider).valueOrNull?.organization;
+    if (org == null || !org.hasCustomSubscription) return const SizedBox.shrink();
+
+    final amount     = org.effectiveCustomPrice!;
+    final cycle      = org.billingCycle ?? 'monthly';
+    final cycleLabel = cycle == 'annually' ? 'annually' : 'monthly';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF7C3AED), Color(0xFF8B5CF6)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF8B5CF6).withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(children: [
+        const Icon(Icons.verified_user_rounded, color: Colors.white, size: 28),
+        const SizedBox(width: 14),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Enterprise Subscription',
+              style: TextStyle(color: Colors.white, fontSize: 14,
+                  fontWeight: FontWeight.w700)),
+          Text(
+            'LKR ${amount.toStringAsFixed(2)} / $cycleLabel · tap to pay via PayHere',
+            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ])),
+        ElevatedButton(
+          onPressed: () => context.go('/app/pay-subscription'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF7C3AED),
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          child: const Text('Pay Now',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+        ),
+      ]),
     );
   }
 }
