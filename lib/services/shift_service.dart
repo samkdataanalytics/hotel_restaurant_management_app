@@ -1,5 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/staff_shift.dart';
+import '../domain/entities/staff_shift.dart';
 
 class ShiftService {
   final _db = Supabase.instance.client;

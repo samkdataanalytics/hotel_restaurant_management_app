@@ -8,14 +8,14 @@ import '../app_theme.dart';
 import 'widgets/skeleton.dart';
 import 'widgets/responsive_dialog.dart';
 import '../providers/hotel_session.dart';
-import '../models/menu_item.dart';
-import '../models/ingredient.dart';
-import '../models/ingredient_price.dart';
-import '../models/menu_item_cost_record.dart';
-import '../models/restaurant_table.dart';
-import '../models/restaurant_order.dart';
-import '../models/inventory_item.dart';
-import '../models/staff_permission.dart';
+import '../domain/entities/menu_item.dart';
+import '../domain/entities/ingredient.dart';
+import '../domain/entities/ingredient_price.dart';
+import '../domain/entities/menu_item_cost_record.dart';
+import '../domain/entities/restaurant_table.dart';
+import '../domain/entities/restaurant_order.dart';
+import '../domain/entities/inventory_item.dart';
+import '../domain/entities/staff_permission.dart';
 import '../providers/app_auth_provider.dart';
 import '../services/organization_service.dart';
 import 'widgets/upgrade_plan_dialog.dart';
@@ -24,6 +24,11 @@ import '../services/menu_pdf_service.dart';
 import '../services/menu_doc_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter/services.dart';
+import '../domain/repositories/menu_item_repository.dart';
+import '../domain/repositories/ingredient_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
+import '../domain/repositories/order_repository.dart';
+import '../di/injection_container.dart';
 
 // ─── Color palette for restaurant sections — sourced from AppTheme ───────────
 class _RC {
@@ -50,7 +55,6 @@ class RestaurantManagementScreen extends StatefulWidget {
 class _RestaurantManagementScreenState extends State<RestaurantManagementScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final _service = RestaurantService();
 
   @override
   void initState() {
@@ -77,11 +81,11 @@ class _RestaurantManagementScreenState extends State<RestaurantManagementScreen>
             child: TabBarView(
               controller: _tabController,
               children: [
-                _MenuTab(service: _service),
-                _IngredientsTab(service: _service),
-                _TablesTab(service: _service),
-                _InventoryTab(service: _service),
-                _SettingsTab(service: _service),
+                _MenuTab(),
+                _IngredientsTab(),
+                _TablesTab(),
+                _InventoryTab(),
+                _SettingsTab(),
               ],
             ),
           ),
@@ -152,8 +156,7 @@ class _RestaurantManagementScreenState extends State<RestaurantManagementScreen>
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _MenuTab extends ConsumerStatefulWidget {
-  final RestaurantService service;
-  const _MenuTab({required this.service});
+  const _MenuTab();
   @override
   ConsumerState<_MenuTab> createState() => _MenuTabState();
 }
@@ -164,6 +167,8 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
   Map<String, double> _currentCosts = {};
   bool _loading = true;
   bool _generatingPdf = false;
+  final _menuItemRepo = sl<MenuItemRepository>();
+  final _ingredientRepo = sl<IngredientRepository>();
   final _menuPdfService = MenuPdfService();
   final _menuDocService = MenuDocService();
   NumberFormat get _currency => NumberFormat.currency(
@@ -178,11 +183,11 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
 
   Future<void> _load() async {
     try {
-      final items = await widget.service.getMenuItems();
-      final ingredients = await widget.service.getIngredients();
+      final items = await _menuItemRepo.getMenuItems();
+      final ingredients = await _ingredientRepo.getIngredients();
       final costs = <String, double>{};
       for (final item in items) {
-        final c = await widget.service.getComputedCostForItem(item);
+        final c = await _menuItemRepo.getComputedCostForItem(item);
         if (c != null) costs[item.id] = c;
       }
       if (!mounted) return;
@@ -205,7 +210,6 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => _MenuItemDialog(
-        service: widget.service,
         item: item,
         ingredients: _ingredients,
         baseCost: item != null ? _currentCosts[item.id] : null,
@@ -232,13 +236,13 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
       ),
     );
     if (ok == true) {
-      await widget.service.deleteMenuItem(item.id);
+      await _menuItemRepo.deleteMenuItem(item.id);
       _load();
     }
   }
 
   void _showCostHistory(MenuItem item) async {
-    final records = await widget.service.getCostRecordsForItem(item.id);
+    final records = await _menuItemRepo.getCostRecordsForItem(item.id);
     if (!mounted) return;
     showDialog(
       context: context,
@@ -622,7 +626,7 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
             value: item.isAvailable,
             activeThumbColor: _RC.available,
             onChanged: (val) async {
-              await widget.service.saveMenuItem(item.copyWith(isAvailable: val));
+              await _menuItemRepo.saveMenuItem(item.copyWith(isAvailable: val));
               _load();
             },
           ),
@@ -673,11 +677,10 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
 // ─── Menu Item Add/Edit Dialog ────────────────────────────────────────────────
 
 class _MenuItemDialog extends StatefulWidget {
-  final RestaurantService service;
   final MenuItem? item;
   final List<Ingredient> ingredients;
   final double? baseCost;
-  const _MenuItemDialog({required this.service, this.item, required this.ingredients, this.baseCost});
+  const _MenuItemDialog({this.item, required this.ingredients, this.baseCost});
   @override
   State<_MenuItemDialog> createState() => _MenuItemDialogState();
 }
@@ -685,6 +688,7 @@ class _MenuItemDialog extends StatefulWidget {
 class _MenuItemDialogState extends State<_MenuItemDialog> {
   final _formKey = GlobalKey<FormState>();
   final _uuid = const Uuid();
+  final _menuItemRepo = sl<MenuItemRepository>();
   String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
   late TextEditingController _name, _description, _price, _emoji;
   late String _category;
@@ -729,7 +733,7 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
       ingredients: _recipeIngredients,
       modifiers: _itemModifiers,
     );
-    await widget.service.saveMenuItem(item);
+    await _menuItemRepo.saveMenuItem(item);
     if (!mounted) return;
     Navigator.pop(context, true);
   }
@@ -812,7 +816,7 @@ class _MenuItemDialogState extends State<_MenuItemDialog> {
                       Row(children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            initialValue: _category,
+                            value: _category,
                             decoration: _inputDeco('Category'),
                             items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                             onChanged: (v) => setState(() => _category = v!),
@@ -1437,13 +1441,13 @@ class _CostHistoryDialog extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _IngredientsTab extends ConsumerStatefulWidget {
-  final RestaurantService service;
-  const _IngredientsTab({required this.service});
+  const _IngredientsTab();
   @override
   ConsumerState<_IngredientsTab> createState() => _IngredientsTabState();
 }
 
 class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
+  final _ingredientRepo = sl<IngredientRepository>();
   List<Ingredient> _ingredients = [];
   Map<String, double?> _currentPrices = {};
   Ingredient? _selected;
@@ -1462,10 +1466,10 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
 
   Future<void> _load() async {
     try {
-      final ingredients = await widget.service.getIngredients();
+      final ingredients = await _ingredientRepo.getIngredients();
       final prices = <String, double?>{};
       for (final ing in ingredients) {
-        prices[ing.id] = await widget.service.getCurrentPriceForIngredient(ing.id);
+        prices[ing.id] = await _ingredientRepo.getCurrentPriceForIngredient(ing.id);
       }
       if (!mounted) return;
       setState(() {
@@ -1487,7 +1491,7 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
   }
 
   Future<void> _loadHistory(Ingredient ing) async {
-    final history = await widget.service.getPricesForIngredient(ing.id);
+    final history = await _ingredientRepo.getPricesForIngredient(ing.id);
     if (!mounted) return;
     setState(() => _selectedHistory = history);
   }
@@ -1503,7 +1507,7 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
   void _addIngredientDialog() async {
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => _IngredientDialog(service: widget.service),
+      builder: (_) => _IngredientDialog(),
     );
     if (result == true) _load();
   }
@@ -1511,7 +1515,7 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
   void _updatePriceDialog(Ingredient ing) async {
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => _UpdatePriceDialog(service: widget.service, ingredient: ing),
+      builder: (_) => _UpdatePriceDialog(ingredient: ing),
     );
     if (result == true) _load();
   }
@@ -1534,7 +1538,7 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
       ),
     );
     if (ok == true) {
-      await widget.service.deleteIngredient(ing.id);
+      await _ingredientRepo.deleteIngredient(ing.id);
       if (_selected?.id == ing.id) setState(() { _selected = null; _selectedHistory = []; });
       _load();
     }
@@ -1847,9 +1851,8 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
 // ─── Add Ingredient Dialog ────────────────────────────────────────────────────
 
 class _IngredientDialog extends StatefulWidget {
-  final RestaurantService service;
   final Ingredient? ingredient;
-  const _IngredientDialog({super.key, required this.service, this.ingredient});
+  const _IngredientDialog({super.key, this.ingredient});
   @override
   State<_IngredientDialog> createState() => _IngredientDialogState();
 }
@@ -1857,6 +1860,7 @@ class _IngredientDialog extends StatefulWidget {
 class _IngredientDialogState extends State<_IngredientDialog> {
   final _uuid = const Uuid();
   final _formKey = GlobalKey<FormState>();
+  final _ingredientRepo = sl<IngredientRepository>();
   late TextEditingController _name;
   late String _unit;
   bool _saving = false;
@@ -1882,7 +1886,7 @@ class _IngredientDialogState extends State<_IngredientDialog> {
         name: _name.text.trim(),
         unit: _unit,
       );
-      await widget.service.saveIngredient(ing);
+      await _ingredientRepo.saveIngredient(ing);
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
@@ -1928,7 +1932,7 @@ class _IngredientDialogState extends State<_IngredientDialog> {
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
-                  initialValue: _unit,
+                  value: _unit,
                   decoration: InputDecoration(
                     labelText: 'Unit of Measurement',
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -1963,9 +1967,8 @@ class _IngredientDialogState extends State<_IngredientDialog> {
 // ─── Update Price Dialog ──────────────────────────────────────────────────────
 
 class _UpdatePriceDialog extends StatefulWidget {
-  final RestaurantService service;
   final Ingredient ingredient;
-  const _UpdatePriceDialog({required this.service, required this.ingredient});
+  const _UpdatePriceDialog({required this.ingredient});
   @override
   State<_UpdatePriceDialog> createState() => _UpdatePriceDialogState();
 }
@@ -1973,6 +1976,7 @@ class _UpdatePriceDialog extends StatefulWidget {
 class _UpdatePriceDialogState extends State<_UpdatePriceDialog> {
   final _uuid = const Uuid();
   final _formKey = GlobalKey<FormState>();
+  final _ingredientRepo = sl<IngredientRepository>();
   final _priceCtrl = TextEditingController();
   final _noteCtrl = TextEditingController();
   bool _saving = false;
@@ -1991,7 +1995,7 @@ class _UpdatePriceDialogState extends State<_UpdatePriceDialog> {
       date: DateTime.now(),
       note: _noteCtrl.text.trim().isEmpty ? null : _noteCtrl.text.trim(),
     );
-    await widget.service.addIngredientPrice(record);
+    await _ingredientRepo.addIngredientPrice(record);
     if (!mounted) return;
     Navigator.pop(context, true);
   }
@@ -2094,13 +2098,14 @@ class _UpdatePriceDialogState extends State<_UpdatePriceDialog> {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _TablesTab extends ConsumerStatefulWidget {
-  final RestaurantService service;
-  const _TablesTab({required this.service});
+  const _TablesTab();
   @override
   ConsumerState<_TablesTab> createState() => _TablesTabState();
 }
 
 class _TablesTabState extends ConsumerState<_TablesTab> {
+  final _tableRepo = sl<RestaurantTableRepository>();
+  final _orderRepo = sl<OrderRepository>();
   List<RestaurantTable> _tables = [];
   Map<String, List<RestaurantOrder>> _activeOrders = {};
   bool _loading = true;
@@ -2126,10 +2131,10 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
 
   Future<void> _load({bool silent = false}) async {
     if (!silent) setState(() => _loading = true);
-    final tables = await widget.service.getTables();
+    final tables = await _tableRepo.getTables();
     final orders = <String, List<RestaurantOrder>>{};
     for (final t in tables) {
-      final list = await widget.service.getOpenOrdersForTable(t.id);
+      final list = await _orderRepo.getOpenOrdersForTable(t.id);
       if (list.isNotEmpty) {
         orders[t.id] = list;
       }
@@ -2157,7 +2162,7 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
     if (!mounted) return;
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => _AddTableDialog(service: widget.service, existingCount: _tables.length),
+      builder: (_) => _AddTableDialog(existingCount: _tables.length),
     );
     if (result == true) _load();
   }
@@ -2191,7 +2196,7 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
       ),
     );
     if (ok == true) {
-      await widget.service.deleteTable(table.id);
+      await _tableRepo.deleteTable(table.id);
       _load();
     }
   }
@@ -2253,8 +2258,8 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
                     data: menuUrl,
                     version: QrVersions.auto,
                     size: 220,
-                    eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
-                    dataModuleStyle: const QrDataModuleStyle(
+                    eyeStyle: QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                    dataModuleStyle: QrDataModuleStyle(
                         dataModuleShape: QrDataModuleShape.square, color: Colors.black),
                   ),
                 ),
@@ -2562,9 +2567,8 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
 // ─── Add Table Dialog ─────────────────────────────────────────────────────────
 
 class _AddTableDialog extends StatefulWidget {
-  final RestaurantService service;
   final int existingCount;
-  const _AddTableDialog({required this.service, required this.existingCount});
+  const _AddTableDialog({required this.existingCount});
   @override
   State<_AddTableDialog> createState() => _AddTableDialogState();
 }
@@ -2572,6 +2576,7 @@ class _AddTableDialog extends StatefulWidget {
 class _AddTableDialogState extends State<_AddTableDialog> {
   final _uuid = const Uuid();
   final _formKey = GlobalKey<FormState>();
+  final _tableRepo = sl<RestaurantTableRepository>();
   late TextEditingController _tableNumber;
   int _capacity = 2;
   bool _saving = false;
@@ -2594,7 +2599,7 @@ class _AddTableDialogState extends State<_AddTableDialog> {
         tableNumber: _tableNumber.text.trim(),
         capacity: _capacity,
       );
-      await widget.service.saveTable(table);
+      await _tableRepo.saveTable(table);
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
@@ -2931,25 +2936,37 @@ class _TableOrderDialog extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _InventoryTab extends ConsumerStatefulWidget {
-  final RestaurantService service;
-  const _InventoryTab({required this.service});
+  const _InventoryTab();
   @override
   ConsumerState<_InventoryTab> createState() => _InventoryTabState();
 }
 
 class _InventoryTabState extends ConsumerState<_InventoryTab> {
+  final _ingredientRepo = sl<IngredientRepository>();
   List<Ingredient> _ingredients = [];
   List<InventoryItem> _inventory = [];
   bool _loading = true;
 
   @override
-  void initState() { super.initState(); _load(); }
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   Future<void> _load() async {
-    final ingredients = await widget.service.getIngredients();
-    final inventory   = await widget.service.getInventory();
-    if (!mounted) return;
-    setState(() { _ingredients = ingredients; _inventory = inventory; _loading = false; });
+    try {
+      final ingredients = await _ingredientRepo.getIngredients();
+      final inventory   = await _ingredientRepo.getInventory();
+      if (!mounted) return;
+      setState(() {
+        _ingredients = ingredients;
+        _inventory = inventory;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
   }
 
   InventoryItem? _invFor(String id) {
@@ -2962,7 +2979,7 @@ class _InventoryTabState extends ConsumerState<_InventoryTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => _StockAdjustDialog(
-        service: widget.service, ingredient: ing,
+        ingredient: ing,
         current: inv?.currentStock ?? 0, minLevel: inv?.minStockLevel ?? 0,
       ),
     );
@@ -3111,12 +3128,11 @@ class _TH extends StatelessWidget {
 // ─── Stock Adjust Dialog ──────────────────────────────────────────────────────
 
 class _StockAdjustDialog extends StatefulWidget {
-  final RestaurantService service;
   final Ingredient ingredient;
   final double current;
   final double minLevel;
   const _StockAdjustDialog({
-    required this.service, required this.ingredient,
+    required this.ingredient,
     required this.current, required this.minLevel,
   });
   @override
@@ -3124,6 +3140,7 @@ class _StockAdjustDialog extends StatefulWidget {
 }
 
 class _StockAdjustDialogState extends State<_StockAdjustDialog> {
+  final _ingredientRepo = sl<IngredientRepository>();
   late TextEditingController _amtCtrl;
   late TextEditingController _minCtrl;
   bool _isAdding = true;
@@ -3144,9 +3161,9 @@ class _StockAdjustDialogState extends State<_StockAdjustDialog> {
     final min    = double.tryParse(_minCtrl.text) ?? widget.minLevel;
     if (amount == null || amount < 0) return;
     setState(() => _saving = true);
-    await widget.service.adjustStock(widget.ingredient.id, _isAdding ? amount : -amount);
-    final inv = await widget.service.getInventoryForIngredient(widget.ingredient.id);
-    if (inv != null) await widget.service.updateInventoryItem(inv.copyWith(minStockLevel: min));
+    await _ingredientRepo.applyInventoryDelta({widget.ingredient.id: amount}, subtract: !_isAdding);
+    final inv = await _ingredientRepo.getInventoryForIngredient(widget.ingredient.id);
+    if (inv != null) await _ingredientRepo.updateInventoryItem(inv.copyWith(minStockLevel: min));
     if (!mounted) return;
     Navigator.pop(context, true);
   }
@@ -3250,14 +3267,14 @@ class _StockAdjustDialogState extends State<_StockAdjustDialog> {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _SettingsTab extends StatefulWidget {
-  final RestaurantService service;
-  const _SettingsTab({required this.service});
+  const _SettingsTab();
 
   @override
   State<_SettingsTab> createState() => _SettingsTabState();
 }
 
 class _SettingsTabState extends State<_SettingsTab> {
+  final _service = sl<RestaurantService>();
   final _taxController           = TextEditingController();
   final _serviceChargeController = TextEditingController();
   bool _isLoading = true;
@@ -3277,7 +3294,7 @@ class _SettingsTabState extends State<_SettingsTab> {
   }
 
   Future<void> _load() async {
-    final s = await widget.service.getChargeSettings();
+    final s = await _service.getChargeSettings();
     if (!mounted) return;
     setState(() {
       _taxController.text           = (s.taxRate * 100).toStringAsFixed(2);
@@ -3297,7 +3314,7 @@ class _SettingsTabState extends State<_SettingsTab> {
     }
     setState(() => _isSaving = true);
     try {
-      await widget.service.saveChargeSettings(
+      await _service.saveChargeSettings(
         taxRate:           tax / 100,
         serviceChargeRate: sc / 100,
       );

@@ -37,16 +37,12 @@ class _OnboardingProfileScreenState extends ConsumerState<OnboardingProfileScree
         );
       }
 
-      // 2. Save profile
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId != null) {
-        await Supabase.instance.client.from('profiles').upsert({
-          'id':        userId,
-          'full_name': profileData['fullName'] ?? '',
-          'job_title': profileData['jobTitle'] ?? '',
-          'phone':     profileData['phone']    ?? '',
-        });
-      }
+      // 2. Save profile via SECURITY DEFINER RPC to avoid RLS upsert conflicts
+      await Supabase.instance.client.rpc('upsert_my_profile', params: {
+        'p_full_name': profileData['fullName'] ?? '',
+        'p_job_title': profileData['jobTitle'] ?? '',
+        'p_phone':     profileData['phone']    ?? '',
+      });
 
       // 3. Refresh auth state
       await ref.read(authProvider.notifier).refreshAfterOnboarding();

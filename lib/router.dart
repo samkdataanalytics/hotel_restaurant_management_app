@@ -23,6 +23,8 @@ import 'web/kitchen_screen.dart';
 import 'web/restaurant_management_screen.dart';
 import 'web/orders_screen.dart';
 import 'web/restaurant_analytics_screen.dart';
+import 'web/upgrade_screen.dart';
+import 'web/pay_subscription_screen.dart';
 import 'web/cancellations_refunds_screen.dart';
 import 'web/users_management_screen.dart';
 import 'web/staff_schedule_screen.dart';
@@ -134,7 +136,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.signup,
-        builder: (_, __) => const SignupScreen(),
+        builder: (_, state) => SignupScreen(
+          plan: state.uri.queryParameters['plan'],
+        ),
       ),
       GoRoute(
         path: AppRoutes.superadmin,
@@ -171,7 +175,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: '/app/team',          builder: (_, __) => const UsersManagementScreen()),
           GoRoute(path: '/app/shifts',        builder: (_, __) => const StaffScheduleScreen()),
           GoRoute(path: '/app/account',       builder: (_, __) => const AccountSettingsScreen()),
-          GoRoute(path: '/app/help',            builder: (_, __) => const HelpScreen()),
+          GoRoute(path: '/app/help',          builder: (_, __) => const HelpScreen()),
+          GoRoute(path: '/app/upgrade',       builder: (_, state) => UpgradeScreen(
+            plan: state.uri.queryParameters['plan'],
+          )),
+          GoRoute(path: '/app/pay-subscription', builder: (_, __) => const PaySubscriptionScreen()),
         ],
       ),
       // Staff invite deep link

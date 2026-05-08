@@ -1,9 +1,9 @@
 import '../../domain/entities/check_in.dart';
 import '../../domain/repositories/check_in_repository.dart';
-import '../datasources/local_data_source.dart';
+import '../datasources/supabase_data_source.dart';
 
 class CheckInRepositoryImpl implements CheckInRepository {
-  final LocalDataSource _dataSource;
+  final SupabaseDataSource _dataSource;
 
   CheckInRepositoryImpl(this._dataSource);
 
@@ -18,4 +18,7 @@ class CheckInRepositoryImpl implements CheckInRepository {
 
   @override
   Future<List<CheckIn>> getTodayCheckIns() => _dataSource.getTodayCheckIns();
+
+  @override
+  Future<List<Map<String, dynamic>>> getEnrichedCheckIns() => _dataSource.getEnrichedCheckIns();
 }

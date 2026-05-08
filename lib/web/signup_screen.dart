@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider;
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_theme.dart';
 import '../providers/app_auth_provider.dart';
 import '../router.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
-  const SignupScreen({super.key});
+  final String? plan; // slug forwarded from landing page, e.g. "starter"
+  const SignupScreen({super.key, this.plan});
 
   @override
   ConsumerState<SignupScreen> createState() => _SignupScreenState();
@@ -106,10 +108,15 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
       }
 
       // If session is returned immediately (email confirmation disabled),
-      // load the auth context and let GoRouter redirect.
+      // load the auth context then navigate — respect plan intent if present.
       if (res.session != null) {
+        final plan = widget.plan;
+        if (plan != null && plan.isNotEmpty) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('pending_plan', plan);
+        }
         await ref.read(authProvider.notifier).reload();
-        // GoRouter redirect will take over
+        // GoRouter redirect takes over → onboarding (new user has no org/properties)
         return;
       }
 

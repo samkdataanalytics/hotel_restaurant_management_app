@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../models/staff_shift.dart';
-import '../models/staff_permission.dart';
+import '../domain/entities/staff_shift.dart';
+import '../domain/entities/staff_permission.dart';
 import '../services/shift_service.dart';
-import '../services/staff_service.dart';
+import '../providers/service_providers.dart';
 import '../providers/app_auth_provider.dart';
 import 'widgets/responsive_dialog.dart';
 
@@ -118,7 +118,7 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
     final hotelId = ref.read(activePropertyProvider)?.id;
     if (hotelId == null) return;
     try {
-      final list = await StaffService().getPropertyStaff(hotelId);
+      final list = await ref.read(staffServiceProvider).getPropertyStaff(hotelId);
       if (mounted) setState(() => _staff = list);
     } catch (_) {}
   }

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../app_theme.dart';
-import '../models/booking.dart';
-import '../models/check_in.dart';
-import '../models/guest.dart';
-import '../models/room.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/check_in.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
 
 class CheckinSuccessScreen extends StatefulWidget {
   const CheckinSuccessScreen({super.key});

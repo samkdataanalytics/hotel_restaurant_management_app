@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'di/injection_container.dart';
 import 'mobile/mobile_app.dart';
 import 'providers/hotel_session.dart';
 import 'router.dart';
@@ -22,6 +23,7 @@ void main() async {
     url: 'https://voiumrqxbsdayqmmgpew.supabase.co',
     anonKey: 'REMOVED_ANON_KEY',
   );
+  await initDependencies();
 
   // Legacy HotelSession (still used by existing hotel screens)
   // restoreSession() is intentionally skipped here — AppShell._initialize()

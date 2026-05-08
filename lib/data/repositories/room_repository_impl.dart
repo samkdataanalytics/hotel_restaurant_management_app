@@ -1,9 +1,9 @@
 import '../../domain/entities/room.dart';
 import '../../domain/repositories/room_repository.dart';
-import '../datasources/local_data_source.dart';
+import '../datasources/supabase_data_source.dart';
 
 class RoomRepositoryImpl implements RoomRepository {
-  final LocalDataSource _dataSource;
+  final SupabaseDataSource _dataSource;
 
   RoomRepositoryImpl(this._dataSource);
 

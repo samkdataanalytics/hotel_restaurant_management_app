@@ -18,7 +18,8 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
   late Future<List<OrgMember>> _membersFuture;
 
   late String _currentStatus;
-  bool _isUpdating = false;
+  bool _isUpdating  = false;
+  bool _isDeleting  = false;
 
   @override
   void initState() {
@@ -99,6 +100,111 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to update status: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    }
+  }
+
+  // ─── Delete action ─────────────────────────────────────────────────────────
+
+  Future<void> _deleteCompany() async {
+    final confirmCtrl = TextEditingController();
+    final orgName     = widget.org.name;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(children: [
+            Icon(Icons.warning_rounded, color: AppTheme.danger, size: 22),
+            const SizedBox(width: 10),
+            const Text('Delete Company Permanently?'),
+          ]),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.danger.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.danger.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('This will permanently delete:',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.danger)),
+                      const SizedBox(height: 6),
+                      const Text('• All properties (hotels)\n• All rooms, bookings, check-ins\n• All restaurant data (orders, menus, tables)\n• All staff accounts & schedules\n• All expenses, guests & financial records\n• The organisation and all its members',
+                          style: TextStyle(fontSize: 12, height: 1.6)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('Type  "$orgName"  to confirm:',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: confirmCtrl,
+                  onChanged: (_) => setS(() {}),
+                  decoration: InputDecoration(
+                    hintText: orgName,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.danger,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: confirmCtrl.text.trim() == orgName
+                  ? () => Navigator.of(ctx).pop(true)
+                  : null,
+              icon: const Icon(Icons.delete_forever_rounded, size: 16),
+              label: const Text('Delete Permanently'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    confirmCtrl.dispose();
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeleting = true);
+    try {
+      await OrganizationService().deleteOrganization(widget.org.id);
+      if (!mounted) return;
+      Navigator.of(context).pop(true); // close dialog, signal list to refresh
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"${widget.org.name}" and all its data have been deleted.'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isDeleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Delete failed: $e'),
           backgroundColor: AppTheme.danger,
         ),
       );
@@ -315,6 +421,22 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
             style: TextStyle(fontSize: 11, color: AppTheme.adminTextMuted),
           ),
           const Spacer(),
+          // Delete — separated on the left of the action cluster
+          OutlinedButton.icon(
+            onPressed: (_isDeleting || _isUpdating) ? null : _deleteCompany,
+            icon: _isDeleting
+                ? const SizedBox(
+                    width: 14, height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.delete_forever_rounded, size: 15),
+            label: const Text('Delete'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.danger,
+              side: BorderSide(color: AppTheme.danger),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+          const SizedBox(width: 12),
           OutlinedButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Close'),

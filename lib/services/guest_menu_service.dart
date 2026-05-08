@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../models/menu_item.dart';
-import '../models/restaurant_table.dart';
+import '../domain/entities/menu_item.dart';
+import '../domain/entities/restaurant_table.dart';
 import 'notification_service.dart';
 
 class GuestMenuService {

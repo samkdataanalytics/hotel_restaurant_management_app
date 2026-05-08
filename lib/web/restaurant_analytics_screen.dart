@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
+import 'package:provider/provider.dart' as pkg_provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app_theme.dart';
 import '../providers/hotel_session.dart';
-import '../models/restaurant_order.dart';
+import '../providers/service_providers.dart';
+import '../domain/entities/restaurant_order.dart';
 import '../services/restaurant_service.dart';
+import '../di/injection_container.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/menu_item_repository.dart';
 
 const _kOrange = AppTheme.restaurantAccent;
 const _kOrangeBg = AppTheme.restaurantAccentBg;
@@ -45,21 +50,23 @@ extension _TimeScaleX on _TimeScale {
   };
 }
 
-class RestaurantAnalyticsScreen extends StatefulWidget {
+class RestaurantAnalyticsScreen extends ConsumerStatefulWidget {
   const RestaurantAnalyticsScreen({super.key});
 
   @override
-  State<RestaurantAnalyticsScreen> createState() =>
+  ConsumerState<RestaurantAnalyticsScreen> createState() =>
       _RestaurantAnalyticsScreenState();
 }
 
 class _RestaurantAnalyticsScreenState
-    extends State<RestaurantAnalyticsScreen> {
-  final _service = RestaurantService();
+    extends ConsumerState<RestaurantAnalyticsScreen> {
+  RestaurantService get _service => ref.read(restaurantServiceProvider);
+  final _orderRepo = sl<OrderRepository>();
+  final _menuItemRepo = sl<MenuItemRepository>();
   NumberFormat get _currency => NumberFormat.currency(
-      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
-  String get _sym => Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   bool _isLoading = true;
   int  _selectedTab = 0; // 0 = Overview, 1 = Service Charge
@@ -138,7 +145,7 @@ class _RestaurantAnalyticsScreenState
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      _allOrders = await _service.getOrders();
+      _allOrders = await _orderRepo.getOrders();
       final allOrders = _allOrders;
       final now = DateTime.now();
 
@@ -299,7 +306,7 @@ class _RestaurantAnalyticsScreenState
 
       // Food cost — not period-dependent, load once
       if (_foodCostData.isEmpty) {
-        final menuItems = await _service.getMenuItems();
+        final menuItems = await _menuItemRepo.getMenuItems();
         final foodCostList = <Map<String, dynamic>>[];
         for (final item in menuItems) {
           if (item.ingredients.isEmpty) continue;
@@ -551,7 +558,7 @@ class _RestaurantAnalyticsScreenState
   // ─── Service charge compute & date pick ──────────────
 
   void _computeScData() {
-    final session  = Provider.of<HotelSession>(context, listen: false);
+    final session  = pkg_provider.Provider.of<HotelSession>(context, listen: false);
     _scRate        = session.settings?.serviceChargeRate ?? 0.0;
 
     double orderSC(RestaurantOrder o) =>

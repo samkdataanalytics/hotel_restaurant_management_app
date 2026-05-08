@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../app_theme.dart';
 import '../../services/lead_service.dart';
 import '../../services/organization_service.dart';
@@ -519,6 +520,7 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
   bool _saving = false;
   String? _error;
   bool _done = false;
+  bool _invited = false; // true when we sent an invite instead of provisioning directly
 
   static const _purple = Color(0xFF8B5CF6);
 
@@ -550,20 +552,77 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
   Future<void> _provision() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _saving = true; _error = null; });
+
+    final email         = _emailCtrl.text.trim();
+    final maxProperties = int.parse(_propertiesCtrl.text.trim());
+    final maxUsers      = int.parse(_usersCtrl.text.trim());
+    final maxRooms      = int.parse(_roomsCtrl.text.trim());
+    final maxTables     = int.parse(_tablesCtrl.text.trim());
+    final priceMonthly  = _monthlyCtrl.text.isNotEmpty
+        ? double.tryParse(_monthlyCtrl.text.trim()) : null;
+    final priceAnnually = _annuallyCtrl.text.isNotEmpty
+        ? double.tryParse(_annuallyCtrl.text.trim()) : null;
+
     try {
       await _orgService.provisionCustomAccess(
-        email:          _emailCtrl.text.trim(),
-        maxProperties:  int.parse(_propertiesCtrl.text.trim()),
-        maxUsers:       int.parse(_usersCtrl.text.trim()),
-        maxRooms:       int.parse(_roomsCtrl.text.trim()),
-        maxTables:      int.parse(_tablesCtrl.text.trim()),
-        priceMonthly:   _monthlyCtrl.text.isNotEmpty
-                            ? double.tryParse(_monthlyCtrl.text.trim()) : null,
-        priceAnnually:  _annuallyCtrl.text.isNotEmpty
-                            ? double.tryParse(_annuallyCtrl.text.trim()) : null,
-        billingCycle:   _billingCycle,
+        email:         email,
+        maxProperties: maxProperties,
+        maxUsers:      maxUsers,
+        maxRooms:      maxRooms,
+        maxTables:     maxTables,
+        priceMonthly:  priceMonthly,
+        priceAnnually: priceAnnually,
+        billingCycle:  _billingCycle,
       );
       if (mounted) setState(() { _done = true; _saving = false; });
+    } catch (e) {
+      // Customer hasn't created an account yet — send them an invitation email
+      // and store the provision config for auto-apply after onboarding.
+      if (e.toString().contains('No account found')) {
+        await _sendInvite(
+          email:         email,
+          maxProperties: maxProperties,
+          maxUsers:      maxUsers,
+          maxRooms:      maxRooms,
+          maxTables:     maxTables,
+          priceMonthly:  priceMonthly,
+          priceAnnually: priceAnnually,
+        );
+      } else {
+        if (mounted) setState(() { _error = e.toString(); _saving = false; });
+      }
+    }
+  }
+
+  Future<void> _sendInvite({
+    required String email,
+    required int maxProperties,
+    required int maxUsers,
+    required int maxRooms,
+    required int maxTables,
+    double? priceMonthly,
+    double? priceAnnually,
+  }) async {
+    try {
+      final resp = await Supabase.instance.client.functions.invoke(
+        'invite-enterprise-user',
+        body: {
+          'email':         email,
+          'maxProperties': maxProperties,
+          'maxUsers':      maxUsers,
+          'maxRooms':      maxRooms,
+          'maxTables':     maxTables,
+          'priceMonthly':  priceMonthly,
+          'priceAnnually': priceAnnually,
+          'billingCycle':  _billingCycle,
+        },
+      );
+
+      if (resp.data is Map && (resp.data as Map).containsKey('error')) {
+        throw Exception((resp.data as Map)['error']);
+      }
+
+      if (mounted) setState(() { _invited = true; _saving = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _saving = false; });
     }
@@ -578,7 +637,7 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
         constraints: const BoxConstraints(maxWidth: 520),
         child: Padding(
           padding: const EdgeInsets.all(28),
-          child: _done ? _buildSuccess() : _buildForm(),
+          child: _done ? _buildSuccess() : _invited ? _buildInvited() : _buildForm(),
         ),
       ),
     );
@@ -615,6 +674,50 @@ class _ProvisionAccessDialogState extends State<_ProvisionAccessDialog> {
           width: double.infinity,
           child: ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _purple,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Done'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInvited() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 8),
+        Container(
+          width: 64, height: 64,
+          decoration: BoxDecoration(
+            color: _purple.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.mark_email_read_rounded,
+              color: _purple, size: 36),
+        ),
+        const SizedBox(height: 16),
+        const Text('Invitation Sent!',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
+                color: Color(0xFF1E293B))),
+        const SizedBox(height: 8),
+        Text(
+          'An invitation email has been sent to ${_emailCtrl.text}.\n'
+          'Their enterprise plan will be activated automatically when they sign up.',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.5),
+        ),
+        const SizedBox(height: 28),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(false),
             style: ElevatedButton.styleFrom(
               backgroundColor: _purple,
               foregroundColor: Colors.white,

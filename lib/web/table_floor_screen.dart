@@ -6,17 +6,25 @@ import 'package:provider/provider.dart' as pkg_provider;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../providers/hotel_session.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
-import '../models/room.dart';
-import '../models/menu_item.dart';
-import '../models/restaurant_order.dart';
-import '../models/restaurant_table.dart';
+import '../providers/app_auth_provider.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/menu_item.dart';
+import '../domain/entities/restaurant_order.dart';
+import '../domain/entities/restaurant_table.dart';
 import '../services/booking_service.dart';
+import '../providers/service_providers.dart';
 import '../app_theme.dart';
-import '../models/staff_permission.dart';
+import '../domain/entities/staff_permission.dart';
 import '../services/restaurant_service.dart';
 import 'restaurant_invoice_dialog.dart';
+import '../domain/repositories/menu_item_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/check_in_repository.dart';
+import '../domain/repositories/booking_repository.dart';
+import '../di/injection_container.dart';
 import 'widgets/split_payment_inputs.dart';
 import 'widgets/responsive_dialog.dart';
 
@@ -52,14 +60,16 @@ class _PaymentResult {
 class _PaymentDialog extends StatefulWidget {
   final List<RestaurantOrder> orders;
   final RestaurantTable table;
-  final BookingService bookingService;
+  final CheckInRepository checkInRepo;
   final NumberFormat currency;
+  final bool isHotelProperty;
 
   const _PaymentDialog({
     required this.orders,
     required this.table,
-    required this.bookingService,
+    required this.checkInRepo,
     required this.currency,
+    this.isHotelProperty = true,
   });
 
   @override
@@ -100,7 +110,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
 
   Future<void> _loadCheckedInGuests() async {
     setState(() => _loadingGuests = true);
-    final enriched = await widget.bookingService.getEnrichedCheckIns();
+    final enriched = await widget.checkInRepo.getEnrichedCheckIns();
     if (!mounted) return;
     // Filter to only currently checked-in bookings
     final checkedIn = enriched.where((d) {
@@ -418,8 +428,9 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                   _methodTile(Icons.credit_card_rounded, 'Card', 'card',
                       Colors.blue.shade600),
                   const SizedBox(width: 10),
-                  _methodTile(Icons.hotel_rounded, 'Room Charge', 'room',
-                      _kOrange),
+                  if (widget.isHotelProperty)
+                    _methodTile(Icons.hotel_rounded, 'Room Charge', 'room',
+                        _kOrange),
                 ],
               ),
 
@@ -577,8 +588,12 @@ class TableFloorScreen extends ConsumerStatefulWidget {
 }
 
 class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
-  final _service = RestaurantService();
-  final _bookingService = BookingService();
+  RestaurantService get _service => ref.read(restaurantServiceProvider);
+  final _menuItemRepo = sl<MenuItemRepository>();
+  final _tableRepo = sl<RestaurantTableRepository>();
+  final _orderRepo = sl<OrderRepository>();
+  final _checkInRepo = sl<CheckInRepository>();
+  final _bookingRepo = sl<BookingRepository>();
   final _uuid = const Uuid();
   NumberFormat get _currency => NumberFormat.currency(
       symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
@@ -1082,8 +1097,9 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
       builder: (_) => _PaymentDialog(
         orders: openOrders,
         table: table,
-        bookingService: _bookingService,
+        checkInRepo: _checkInRepo,
         currency: _currency,
+        isHotelProperty: ref.read(activePropertyProvider)?.isHotel ?? false,
       ),
     );
     if (result == null || !mounted) return;

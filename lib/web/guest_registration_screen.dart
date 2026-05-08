@@ -1,23 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../app_theme.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
 import '../providers/hotel_session.dart' show hexToColor;
 import '../services/booking_service.dart';
-import '../services/guest_menu_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/service_providers.dart';
 
-class GuestRegistrationScreen extends StatefulWidget {
+class GuestRegistrationScreen extends ConsumerStatefulWidget {
   final String bookingRef;
 
   const GuestRegistrationScreen({super.key, required this.bookingRef});
 
   @override
-  State<GuestRegistrationScreen> createState() => _GuestRegistrationScreenState();
+  ConsumerState<GuestRegistrationScreen> createState() => _GuestRegistrationScreenState();
 }
 
-class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
-  final _bookingService = BookingService();
+class _GuestRegistrationScreenState extends ConsumerState<GuestRegistrationScreen> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   bool _isLoading = true;
   String? _error;
   Color _accent = AppTheme.adminPrimary; // overridden after booking lookup
@@ -86,8 +87,8 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
     if (hotelId != null) {
       try {
         final results = await Future.wait([
-          GuestMenuService().getSettings(hotelId),
-          GuestMenuService().getPropertyName(hotelId),
+          ref.read(guestMenuServiceProvider).getSettings(hotelId),
+          ref.read(guestMenuServiceProvider).getPropertyName(hotelId),
         ]);
         final s    = results[0] as ({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl});
         final name = results[1] as String;

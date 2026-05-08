@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import '../app_theme.dart';
 
 // ── Palette (matches landing page light theme) ─────────────────────────────────
 class _C {

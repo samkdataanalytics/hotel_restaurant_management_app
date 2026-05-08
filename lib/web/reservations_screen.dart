@@ -5,19 +5,22 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
 import 'widgets/skeleton.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
-import '../models/room.dart';
-import '../services/booking_service.dart';
-import '../services/restaurant_service.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
 import 'widgets/responsive_dialog.dart';
 import 'package:provider/provider.dart' as pkg_provider;
 import '../providers/hotel_session.dart';
 import '../services/invoice_service.dart';
+import '../domain/repositories/booking_repository.dart';
+import '../domain/repositories/room_repository.dart';
+import '../di/injection_container.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'guest_responses_dialog.dart';
-import '../models/staff_permission.dart';
-import '../providers/app_auth_provider.dart';
+import '../domain/entities/staff_permission.dart';
+import '../services/booking_service.dart';
+import '../services/restaurant_service.dart';
+import '../providers/service_providers.dart';
 
 class ReservationsScreen extends ConsumerStatefulWidget {
   const ReservationsScreen({super.key});
@@ -27,9 +30,11 @@ class ReservationsScreen extends ConsumerStatefulWidget {
 }
 
 class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
-  final _bookingService    = BookingService();
-  final _restaurantService = RestaurantService();
-  final _invoiceService    = InvoiceService();
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
+  RestaurantService get _restaurantService => ref.read(restaurantServiceProvider);
+  InvoiceService get _invoiceService => ref.read(invoiceServiceProvider);
+  final _bookingRepo       = sl<BookingRepository>();
+  final _roomRepo          = sl<RoomRepository>();
   final _dateFormat = DateFormat('MMM dd');
   final _fullDateFormat = DateFormat('MMM dd, yyyy');
   String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
@@ -50,6 +55,8 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     BookingSource.other,
   };
 
+  List<BookingSource> get _enabledSources => BookingSource.values;
+
   @override
   void initState() {
     super.initState();
@@ -61,8 +68,8 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
 
   Future<void> _loadData() async {
     try {
-      final bookings = await _bookingService.getEnrichedBookings();
-      final rooms = await _bookingService.getAllRooms();
+      final bookings = await _bookingRepo.getEnrichedBookings();
+      final rooms = await _roomRepo.getAllRooms();
       if (!mounted) return;
       setState(() {
         _enrichedBookings = bookings;
@@ -159,18 +166,13 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     });
   }
 
-  List<BookingSource> get _enabledSources {
-    final channels = ref.read(activePropertyProvider)?.bookingChannels ?? [];
-    if (channels.isEmpty) return BookingSource.values;
-    return channelsToSources(channels);
-  }
-
   Future<void> _showAddReservationDialog() async {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => _ReservationFormDialog(
         rooms: _rooms,
         bookingService: _bookingService,
+        bookingRepo: _bookingRepo,
         enrichedBookings: _enrichedBookings,
         enabledSources: _enabledSources,
       ),
@@ -184,6 +186,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
       builder: (context) => _ReservationFormDialog(
         rooms: _rooms,
         bookingService: _bookingService,
+        bookingRepo: _bookingRepo,
         existingData: data,
         enrichedBookings: _enrichedBookings,
         enabledSources: _enabledSources,
@@ -1268,16 +1271,18 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
 class _ReservationFormDialog extends StatefulWidget {
   final List<Room> rooms;
   final BookingService bookingService;
-  final Map<String, dynamic>? existingData;
+  final BookingRepository bookingRepo;
   final List<Map<String, dynamic>> enrichedBookings;
   final List<BookingSource> enabledSources;
+  final Map<String, dynamic>? existingData;
 
   const _ReservationFormDialog({
     required this.rooms,
     required this.bookingService,
-    this.existingData,
+    required this.bookingRepo,
     required this.enrichedBookings,
     required this.enabledSources,
+    this.existingData,
   });
 
   @override
@@ -1438,7 +1443,12 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     await widget.bookingService.updateGuest(guest);
 
     // Auto-generate ref for new bookings, keep existing for edits
-    final bookingRef = existingBooking?.bookingRef ?? await widget.bookingService.getNextBookingRef();
+    final String bookingRef;
+    if (_isEditing) {
+      bookingRef = existingBooking!.bookingRef;
+    } else {
+      bookingRef = await widget.bookingRepo.getNextBookingRef();
+    }
 
     final booking = Booking(
       id: existingBooking?.id ?? _uuid.v4(),

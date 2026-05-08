@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../app_theme.dart';
 import '../providers/app_auth_provider.dart';
 import '../router.dart';
-import '../services/staff_service.dart';
+import '../providers/service_providers.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -63,7 +63,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     // If the input has no '@' it's a username — look up the synthetic email
     String email = input;
     if (!input.contains('@')) {
-      final resolved = await StaffService().getEmailByUsername(input);
+      final resolved = await ref.read(staffServiceProvider).getEmailByUsername(input);
       if (resolved == null || resolved.isEmpty) {
         setState(() {
           _isLoading = false;

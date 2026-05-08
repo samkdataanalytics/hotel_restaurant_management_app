@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart' as pkg_provider;
-import '../models/restaurant_order.dart';
-import '../models/staff_permission.dart';
+import '../domain/entities/restaurant_order.dart';
+import '../domain/entities/staff_permission.dart';
 import '../providers/hotel_session.dart';
-import '../models/restaurant_table.dart';
+import '../domain/entities/restaurant_table.dart';
 import '../app_theme.dart';
 import '../services/restaurant_service.dart';
+import '../providers/service_providers.dart';
+import '../di/injection_container.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
 import 'restaurant_invoice_dialog.dart';
 
 const _kOrange = AppTheme.restaurantAccent;
@@ -23,7 +27,9 @@ class OrdersScreen extends ConsumerStatefulWidget {
 }
 
 class _OrdersScreenState extends ConsumerState<OrdersScreen> {
-  final _service = RestaurantService();
+  RestaurantService get _service => ref.read(restaurantServiceProvider);
+  final _orderRepo = sl<OrderRepository>();
+  final _tableRepo = sl<RestaurantTableRepository>();
   NumberFormat get _currency => NumberFormat.currency(
       symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 2);
@@ -52,8 +58,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      final orders = await _service.getOrders();
-      final tables = await _service.getTables();
+      final orders = await _orderRepo.getOrders();
+      final tables = await _tableRepo.getTables();
       if (!mounted) return;
       orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       setState(() {

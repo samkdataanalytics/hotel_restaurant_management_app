@@ -6,6 +6,7 @@ import '../app_theme.dart';
 import '../providers/app_auth_provider.dart';
 import '../router.dart';
 import '../services/staff_service.dart';
+import '../providers/service_providers.dart';
 
 class AcceptInviteScreen extends ConsumerStatefulWidget {
   final String token;
@@ -18,7 +19,7 @@ class AcceptInviteScreen extends ConsumerStatefulWidget {
 
 class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen>
     with SingleTickerProviderStateMixin {
-  final _staffService = StaffService();
+  StaffService get _staffService => ref.read(staffServiceProvider);
 
   // Invite preview
   Map<String, dynamic>? _preview;
