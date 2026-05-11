@@ -1,23 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../app_theme.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import '../providers/hotel_session.dart' show hexToColor;
 import '../services/booking_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/service_providers.dart';
 
-class GuestRegistrationScreen extends StatefulWidget {
+class GuestRegistrationScreen extends ConsumerStatefulWidget {
   final String bookingRef;
 
   const GuestRegistrationScreen({super.key, required this.bookingRef});
 
   @override
-  State<GuestRegistrationScreen> createState() => _GuestRegistrationScreenState();
+  ConsumerState<GuestRegistrationScreen> createState() => _GuestRegistrationScreenState();
 }
 
-class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
-  final _bookingService = BookingService();
+class _GuestRegistrationScreenState extends ConsumerState<GuestRegistrationScreen> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   bool _isLoading = true;
   String? _error;
+  Color _accent = AppTheme.adminPrimary; // overridden after booking lookup
+  String _propertyName = '';
 
   Booking? _booking;
   Guest? _guest;
@@ -77,9 +82,26 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
     _whatsAppCtrl.text = _guest!.whatsApp ?? _guest!.phone;
     _dateOfBirth = _guest!.dateOfBirth;
 
-    setState(() {
-      _isLoading = false;
-    });
+    // Load brand color + property name — non-blocking, fallback on error
+    final hotelId = data['hotelId'] as String?;
+    if (hotelId != null) {
+      try {
+        final results = await Future.wait([
+          ref.read(guestMenuServiceProvider).getSettings(hotelId),
+          ref.read(guestMenuServiceProvider).getPropertyName(hotelId),
+        ]);
+        final s    = results[0] as ({double taxRate, double serviceChargeRate, String primaryColorHex, String logoUrl});
+        final name = results[1] as String;
+        if (mounted) {
+          setState(() {
+          _accent       = hexToColor(s.primaryColorHex);
+          _propertyName = name;
+        });
+        }
+      } catch (_) {}
+    }
+
+    if (mounted) setState(() => _isLoading = false);
   }
 
   Future<void> _selectDateOfBirth() async {
@@ -92,7 +114,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
         return Theme(
           data: AppTheme.webTheme.copyWith(
             colorScheme: ColorScheme.light(
-              primary: AppTheme.adminPrimary,
+              primary: _accent,
               onPrimary: Colors.white,
             ),
           ),
@@ -110,7 +132,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
   Future<void> _submitForm() async {
     if (_fullNameCtrl.text.isEmpty || _passportCtrl.text.isEmpty || _emailCtrl.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please fill all required fields in Section 1.'), backgroundColor: AppTheme.danger),
+        SnackBar(content: const Text('Please fill all required fields in Section 1.'), backgroundColor: AppTheme.danger),
       );
       return;
     }
@@ -218,9 +240,9 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
             children: [
-              const Text(
-                'Welcome to Grand Luxe Hotel',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+              Text(
+                _propertyName.isNotEmpty ? 'Welcome to $_propertyName' : 'Guest Pre-Registration',
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
@@ -349,7 +371,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
                 child: ElevatedButton(
                   onPressed: _submitForm,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.adminPrimary,
+                    backgroundColor: _accent,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text('Submit Registration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
@@ -368,7 +390,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
       padding: const EdgeInsets.only(left: 8, bottom: 12),
       child: Text(
         title,
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.adminPrimary),
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _accent),
       ),
     );
   }
@@ -402,7 +424,7 @@ class _GuestRegistrationScreenState extends State<GuestRegistrationScreen> {
         Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           items: options.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
           onChanged: onChanged,
           decoration: InputDecoration(

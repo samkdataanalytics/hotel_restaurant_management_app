@@ -1,32 +1,47 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../models/restaurant_order.dart';
-import '../models/restaurant_table.dart';
+import 'package:provider/provider.dart' as pkg_provider;
+import '../domain/entities/restaurant_order.dart';
+import '../domain/entities/staff_permission.dart';
+import '../providers/hotel_session.dart';
+import '../domain/entities/restaurant_table.dart';
 import '../app_theme.dart';
 import '../services/restaurant_service.dart';
-import 'pos_screen.dart';
+import '../providers/service_providers.dart';
+import '../di/injection_container.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
+import 'restaurant_invoice_dialog.dart';
 
 const _kOrange = AppTheme.restaurantAccent;
 const _kOrangeBg = AppTheme.restaurantAccentBg;
 
 enum _DateFilter { today, week, all }
 
-class OrdersScreen extends StatefulWidget {
+class OrdersScreen extends ConsumerStatefulWidget {
   const OrdersScreen({super.key});
 
   @override
-  State<OrdersScreen> createState() => _OrdersScreenState();
+  ConsumerState<OrdersScreen> createState() => _OrdersScreenState();
 }
 
-class _OrdersScreenState extends State<OrdersScreen> {
-  final _service = RestaurantService();
-  final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+class _OrdersScreenState extends ConsumerState<OrdersScreen> {
+  RestaurantService get _service => ref.read(restaurantServiceProvider);
+  final _orderRepo = sl<OrderRepository>();
+  final _tableRepo = sl<RestaurantTableRepository>();
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
 
   List<RestaurantOrder> _orders = [];
   List<RestaurantTable> _tables = [];
   bool _isLoading = true;
   _DateFilter _dateFilter = _DateFilter.today;
   OrderStatus? _statusFilter;
+  
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -34,17 +49,31 @@ class _OrdersScreenState extends State<OrdersScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() => _isLoading = true);
-    final orders = await _service.getOrders();
-    final tables = await _service.getTables();
-    if (!mounted) return;
-    orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    setState(() {
-      _orders = orders;
-      _tables = tables;
-      _isLoading = false;
-    });
+    try {
+      final orders = await _orderRepo.getOrders();
+      final tables = await _tableRepo.getTables();
+      if (!mounted) return;
+      orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      setState(() {
+        _orders = orders;
+        _tables = tables;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load orders: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   List<RestaurantOrder> get _filtered {
@@ -52,14 +81,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return _orders.where((o) {
       bool dateOk = true;
       if (_dateFilter == _DateFilter.today) {
-        dateOk = o.createdAt.year == now.year &&
-            o.createdAt.month == now.month &&
-            o.createdAt.day == now.day;
+        dateOk = DateUtils.isSameDay(o.createdAt, now);
       } else if (_dateFilter == _DateFilter.week) {
         dateOk = now.difference(o.createdAt).inDays < 7;
       }
       final statusOk = _statusFilter == null || o.status == _statusFilter;
-      return dateOk && statusOk;
+      final searchOk = _searchQuery.isEmpty || 
+          o.orderNumber.toLowerCase().contains(_searchQuery.toLowerCase());
+      return dateOk && statusOk && searchOk;
     }).toList();
   }
 
@@ -138,7 +167,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) {
           final totalRefund = refundable.fold(0.0, (sum, item) {
-            return sum + item.menuItem.price * (refundQtys[item.id] ?? 0);
+            return sum + item.unitPrice * order.discountFactor * (refundQtys[item.id] ?? 0);
           });
           final anySelected = refundQtys.values.any((q) => q > 0);
 
@@ -153,7 +182,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ],
             ),
             content: SizedBox(
-              width: 440,
+              width: double.maxFinite,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,7 +196,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   ...refundable.map((item) {
                     final qty = refundQtys[item.id] ?? 0;
                     final max = item.activeQuantity;
-                    final lineRefund = item.menuItem.price * qty;
+                    final lineRefund = item.unitPrice * order.discountFactor * qty;
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: Row(
@@ -181,7 +210,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600)),
                                 Text(
-                                  '${_currency.format(item.menuItem.price)} each'
+                                  '${_currency.format(item.unitPrice * order.discountFactor)} each'
                                   ' · ${item.activeQuantity} available',
                                   style: TextStyle(
                                       fontSize: 11,
@@ -326,11 +355,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
     if (confirmed != true || !mounted) return;
 
     int processedCount = 0;
+    int failCount = 0;
     for (final item in refundable) {
       final qty = refundQtys[item.id] ?? 0;
       if (qty > 0) {
-        await _service.refundOrderItem(order.id, item.id, qty);
-        processedCount++;
+        try {
+          await _service.refundOrderItem(order.id, item.id, qty);
+          processedCount++;
+        } catch (_) {
+          failCount++;
+        }
       }
     }
 
@@ -338,8 +372,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$processedCount item line(s) refunded. (Inventory unchanged — food was served.)'),
-        backgroundColor: _kOrange,
+        content: Text(failCount > 0
+            ? '$processedCount item line(s) refunded. $failCount failed — please retry.'
+            : '$processedCount item line(s) refunded. (Inventory unchanged — food was served.)'),
+        backgroundColor: failCount > 0 ? Colors.red : _kOrange,
       ),
     );
     _load();
@@ -423,32 +459,54 @@ class _OrdersScreenState extends State<OrdersScreen> {
         children: [
           const Divider(height: 1),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              for (final f in _DateFilter.values)
-                ChoiceChip(
-                  label: Text(_dateLbl(f),
-                      style: TextStyle(
-                          color: _dateFilter == f ? Colors.white : Colors.black87,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600)),
-                  selected: _dateFilter == f,
-                  onSelected: (_) => setState(() => _dateFilter = f),
-                  selectedColor: _kOrange,
-                  backgroundColor: Colors.grey.shade100,
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    for (final f in _DateFilter.values)
+                      ChoiceChip(
+                        label: Text(_dateLbl(f),
+                            style: TextStyle(
+                                color: _dateFilter == f ? Colors.white : Colors.black87,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                        selected: _dateFilter == f,
+                        onSelected: (_) => setState(() => _dateFilter = f),
+                        selectedColor: _kOrange,
+                        backgroundColor: Colors.grey.shade100,
+                      ),
+                    const SizedBox(width: 8),
+                    const Text('Status:',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.black45,
+                            fontWeight: FontWeight.w600)),
+                    _statusChip(null, 'All', Colors.blueGrey),
+                    for (final s in OrderStatus.values)
+                      _statusChip(s, _statusLbl(s), _statusColor(s)),
+                  ],
                 ),
-              const SizedBox(width: 8),
-              Text('Status:',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.black45,
-                      fontWeight: FontWeight.w600)),
-              _statusChip(null, 'All', Colors.blueGrey),
-              for (final s in OrderStatus.values)
-                _statusChip(s, _statusLbl(s), _statusColor(s)),
+              ),
+              const SizedBox(width: 16),
+              SizedBox(
+                width: 240,
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search order #...',
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                ),
+              ),
             ],
           ),
         ],
@@ -487,27 +545,54 @@ class _OrdersScreenState extends State<OrdersScreen> {
         ),
       );
     }
+
+    // Group child orders under their parent using parentOrderId.
+    // Child orders are not shown as top-level rows.
+    final childrenByParent = <String, List<RestaurantOrder>>{};
+    final childIds = <String>{};
+
+    for (final o in orders) {
+      if (o.parentOrderId != null) {
+        childrenByParent.putIfAbsent(o.parentOrderId!, () => []).add(o);
+        childIds.add(o.id);
+      }
+    }
+
+    final items = <Widget>[];
+    for (final o in orders) {
+      if (childIds.contains(o.id)) continue; // rendered under parent
+      final children = childrenByParent[o.id] ?? [];
+      if (children.isEmpty) {
+        items.add(_buildOrderCard(o));
+      } else {
+        children.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        items.add(_buildSessionCard(o, children));
+      }
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.all(20),
-      itemCount: orders.length,
-      itemBuilder: (_, i) => _buildOrderCard(orders[i]),
+      itemCount: items.length,
+      itemBuilder: (_, i) => items[i],
     );
   }
 
-  Widget _buildOrderCard(RestaurantOrder order) {
-    final isCancelled = order.status == OrderStatus.cancelled;
-    final isServed = order.status == OrderStatus.served;
-    final canCancel = !isCancelled && !isServed;
-    final hasRefundable = isServed && order.items.any((i) => !i.isFullyRefunded);
-    final totalRefunded = order.items.fold(
-        0.0, (s, i) => s + i.menuItem.price * i.refundedQuantity);
+  Widget _buildSessionCard(RestaurantOrder parent, List<RestaurantOrder> children) {
+    final allOrders = [parent, ...children];
+    final tableName = _tableName(parent.tableId);
+    final combinedSubtotal =
+        allOrders.fold(0.0, (s, o) => s + o.totalAmount);
+    final totalItems = allOrders.fold(
+        0,
+        (s, o) =>
+            s + o.items.fold(0, (s2, i) => s2 + (i.quantity - i.refundedQuantity)));
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: isCancelled ? Border.all(color: Colors.red.shade100) : null,
+        border: Border.all(color: Colors.teal.shade100, width: 1.5),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withOpacity(0.04),
@@ -515,6 +600,110 @@ class _OrdersScreenState extends State<OrdersScreen> {
               offset: const Offset(0, 2))
         ],
       ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: _kOrangeBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '#${parent.orderNumber}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      color: _kOrange),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (parent.tableId != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    tableName,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        color: Colors.teal.shade700),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              _chip('${children.length} ADD-ON${children.length == 1 ? "" : "S"}',
+                  Colors.teal.shade700, icon: Icons.add_circle_outline_rounded),
+              const SizedBox(width: 6),
+              _chip(_paymentLbl(parent.paymentStatus),
+                  _paymentColor(parent.paymentStatus),
+                  icon: _paymentIcon(parent.paymentStatus)),
+              const Spacer(),
+              Text(
+                DateFormat('MMM d, HH:mm').format(parent.createdAt),
+                style: const TextStyle(fontSize: 12, color: Colors.black38),
+              ),
+            ],
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 4),
+            child: Text(
+              '${allOrders.map((o) => "#${o.orderNumber}").join(" + ")}  ·  $totalItems item(s)  ·  Combined: ${_currency.format(combinedSubtotal)}',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            ),
+          ),
+          children: allOrders
+              .map((o) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: o.parentOrderId != null
+                              ? Colors.teal.shade100
+                              : Colors.grey.shade200,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: _buildOrderCard(o, nested: true),
+                    ),
+                  ))
+              .toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderCard(RestaurantOrder order, {bool nested = false}) {
+    final isCancelled = order.status == OrderStatus.cancelled;
+    final isServed = order.status == OrderStatus.served;
+    final canCancel = !isCancelled && !isServed;
+    final hasRefundable = isServed && order.items.any((i) => !i.isFullyRefunded);
+    final totalRefunded = order.items.fold(
+        0.0, (s, i) => s + i.unitPrice * order.discountFactor * i.refundedQuantity);
+
+    return Container(
+      margin: nested ? EdgeInsets.zero : const EdgeInsets.only(bottom: 12),
+      decoration: nested
+          ? null
+          : BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  isCancelled ? Border.all(color: Colors.red.shade100) : null,
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2))
+              ],
+            ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -538,10 +727,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                _chip(_statusLbl(order.status), _statusColor(order.status)),
+                _chip(_statusLbl(order.status), _statusColor(order.status),
+                    icon: _statusIcon(order.status)),
                 const SizedBox(width: 6),
                 _chip(_paymentLbl(order.paymentStatus),
-                    _paymentColor(order.paymentStatus)),
+                    _paymentColor(order.paymentStatus),
+                    icon: _paymentIcon(order.paymentStatus)),
                 const Spacer(),
                 Text(
                   DateFormat('MMM d, HH:mm').format(order.createdAt),
@@ -652,7 +843,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
-                if (hasRefundable) ...[
+                if (hasRefundable && canEditSection(ref, 'restaurant_orders')) ...[
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
                     onPressed: () => _showRefundDialog(order),
@@ -668,7 +859,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     ),
                   ),
                 ],
-                if (canCancel) ...[
+                if (canCancel && canEditSection(ref, 'restaurant_orders')) ...[
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
                     onPressed: () => _cancelOrder(order),
@@ -695,16 +886,43 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   // ─── Helpers ─────────────────────────────────────────
 
-  Widget _chip(String label, Color color) {
+  Widget _chip(String label, Color color, {IconData? icon}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(6)),
-      child: Text(label,
-          style: TextStyle(
-              fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 10, color: color),
+            const SizedBox(width: 3),
+          ],
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+        ],
+      ),
     );
+  }
+
+  IconData _statusIcon(OrderStatus s) {
+    switch (s) {
+      case OrderStatus.pending:    return Icons.schedule_rounded;
+      case OrderStatus.preparing:  return Icons.local_fire_department_rounded;
+      case OrderStatus.ready:      return Icons.check_circle_rounded;
+      case OrderStatus.served:     return Icons.done_all_rounded;
+      case OrderStatus.cancelled:  return Icons.cancel_rounded;
+    }
+  }
+
+  IconData _paymentIcon(PaymentStatus s) {
+    switch (s) {
+      case PaymentStatus.paid:          return Icons.check_circle_rounded;
+      case PaymentStatus.chargedToRoom: return Icons.hotel_rounded;
+      case PaymentStatus.unpaid:        return Icons.error_outline_rounded;
+    }
   }
 
   Widget _metaIcon(IconData icon, String label) {

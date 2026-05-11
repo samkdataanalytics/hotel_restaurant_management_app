@@ -1,9 +1,9 @@
 import '../../domain/entities/booking.dart';
 import '../../domain/repositories/booking_repository.dart';
-import '../datasources/local_data_source.dart';
+import '../datasources/supabase_data_source.dart';
 
 class BookingRepositoryImpl implements BookingRepository {
-  final LocalDataSource _dataSource;
+  final SupabaseDataSource _dataSource;
 
   BookingRepositoryImpl(this._dataSource);
 
@@ -28,4 +28,16 @@ class BookingRepositoryImpl implements BookingRepository {
   @override
   Future<List<Booking>> getBookingsByStatus(BookingStatus status) =>
       _dataSource.getBookingsByStatus(status);
+
+  @override
+  Future<void> addBooking(Booking booking) => _dataSource.insertBooking(booking);
+
+  @override
+  Future<String> getNextBookingRef() => _dataSource.getNextBookingRef();
+
+  @override
+  Future<int> countPendingArrivalsToday() => _dataSource.countPendingArrivalsToday();
+
+  @override
+  Future<List<Map<String, dynamic>>> getEnrichedBookings() => _dataSource.getEnrichedBookings();
 }

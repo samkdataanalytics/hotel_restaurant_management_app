@@ -1,24 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
+import '../providers/hotel_session.dart';
 import '../app_theme.dart';
-import '../models/expense.dart';
-import '../models/room.dart';
+import '../domain/entities/expense.dart';
+import '../domain/entities/room.dart';
 import '../services/booking_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/service_providers.dart';
+import 'widgets/responsive_dialog.dart';
 
-class RoomExpensesDialog extends StatefulWidget {
+class RoomExpensesDialog extends ConsumerStatefulWidget {
   final Room room;
 
   const RoomExpensesDialog({super.key, required this.room});
 
   @override
-  State<RoomExpensesDialog> createState() => _RoomExpensesDialogState();
+  ConsumerState<RoomExpensesDialog> createState() => _RoomExpensesDialogState();
 }
 
-class _RoomExpensesDialogState extends State<RoomExpensesDialog> {
-  final _bookingService = BookingService();
+class _RoomExpensesDialogState extends ConsumerState<RoomExpensesDialog> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   final _dateFormat = DateFormat('MMM dd, yyyy');
-  final _currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  NumberFormat get _currencyFormat => NumberFormat.currency(
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
   final _uuid = const Uuid();
 
   List<Expense> _expenses = [];
@@ -87,14 +94,22 @@ class _RoomExpensesDialogState extends State<RoomExpensesDialog> {
       roomId: widget.room.id,
     );
 
-    await _bookingService.addExpense(expense);
+    try {
+      await _bookingService.addExpense(expense);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to add expense: $e'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+    if (!mounted) return;
     _formKey.currentState!.reset();
     setState(() {
       _expenseDate = DateTime.now();
       _category = ExpenseCategory.other;
     });
-    
-    // Clear text fields without losing focus context implicitly by resetting form state
     _loadExpenses();
   }
 
@@ -143,11 +158,13 @@ class _RoomExpensesDialogState extends State<RoomExpensesDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 600,
-        height: 700,
+    return ResponsiveDialogNoScroll(
+      maxWidth: 600,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,7 +245,7 @@ class _RoomExpensesDialogState extends State<RoomExpensesDialog> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<ExpenseCategory>(
-                            value: _category,
+                            initialValue: _category,
                             decoration: InputDecoration(
                               labelText: 'Category',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -337,6 +354,7 @@ class _RoomExpensesDialogState extends State<RoomExpensesDialog> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

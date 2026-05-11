@@ -2,23 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
-import '../models/expense.dart';
-import '../models/room.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
+import '../domain/entities/expense.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
 import '../services/booking_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/service_providers.dart';
+import 'widgets/responsive_dialog.dart';
 
-class ExpenseDialog extends StatefulWidget {
+class ExpenseDialog extends ConsumerStatefulWidget {
   final Expense? expense;
 
   const ExpenseDialog({super.key, this.expense});
 
   @override
-  State<ExpenseDialog> createState() => _ExpenseDialogState();
+  ConsumerState<ExpenseDialog> createState() => _ExpenseDialogState();
 }
 
-class _ExpenseDialogState extends State<ExpenseDialog> {
-  final _bookingService = BookingService();
+class _ExpenseDialogState extends ConsumerState<ExpenseDialog> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   final _dateFormat = DateFormat('MMM dd, yyyy');
   final _uuid = const Uuid();
 
@@ -176,14 +179,23 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
       bookingId: _isBillable ? _bookingId : null,
     );
 
-    if (widget.expense == null) {
-      await _bookingService.addExpense(expense);
-    } else {
-      await _bookingService.updateExpense(expense);
-    }
-    
-    if (mounted) {
-      Navigator.of(context).pop(true);
+    try {
+      if (widget.expense == null) {
+        await _bookingService.addExpense(expense);
+      } else {
+        await _bookingService.updateExpense(expense);
+      }
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save expense: $e'),
+            backgroundColor: AppTheme.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -204,10 +216,9 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
         ? '${_dateFormat.format(_startDate)} - ${_dateFormat.format(_endDate!)}'
         : _dateFormat.format(_startDate);
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    return ResponsiveDialogNoScroll(
+      maxWidth: 600,
       child: Container(
-        width: 600,
         padding: const EdgeInsets.all(32),
         child: SingleChildScrollView(
           child: Column(
@@ -278,7 +289,7 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<ExpenseCategory>(
-                            value: _category,
+                            initialValue: _category,
                             decoration: InputDecoration(
                               labelText: 'Category',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -351,7 +362,7 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
 
                     // ROW 3: Room optional link
                     DropdownButtonFormField<String?>(
-                      value: _roomId,
+                      initialValue: _roomId,
                       decoration: InputDecoration(
                         labelText: 'Link to Room (Optional)',
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -433,7 +444,7 @@ class _ExpenseDialogState extends State<ExpenseDialog> {
                             ),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
-                              value: _bookingId,
+                              initialValue: _bookingId,
                               decoration: InputDecoration(
                                 labelText: 'Select Guest Booking',
                                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),

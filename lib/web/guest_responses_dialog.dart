@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../app_theme.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import 'widgets/responsive_dialog.dart';
 
 class GuestResponsesDialog extends StatelessWidget {
   final Booking booking;
@@ -18,11 +19,10 @@ class GuestResponsesDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final dateFormatter = DateFormat('MMM dd, yyyy');
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        width: 600,
-        constraints: const BoxConstraints(maxHeight: 800),
+    return ResponsiveDialogNoScroll(
+      maxWidth: 600,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
         child: Column(
           children: [
             // Header
@@ -39,9 +39,9 @@ class GuestResponsesDialog extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        const Text(
                           'Guest Registration Responses',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -84,7 +84,7 @@ class GuestResponsesDialog extends StatelessWidget {
                     else
                       ...booking.guestPreferences!.entries.map((e) {
                         return _buildInfoRow(_formatCamelCaseToTitle(e.key), e.value.toString());
-                      }).toList(),
+                      }),
                   ],
                 ),
               ),

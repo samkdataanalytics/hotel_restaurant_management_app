@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider;
+import 'package:go_router/go_router.dart';
 import '../app_theme.dart';
-import 'admin_app.dart';
+import '../providers/app_auth_provider.dart';
+import '../router.dart';
+import '../providers/service_providers.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _LoginScreenState extends ConsumerState<LoginScreen>
     with SingleTickerProviderStateMixin {
-  final _usernameController = TextEditingController(text: '');
-  final _passwordController = TextEditingController(text: '');
+  final _emailController    = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _error;
@@ -36,18 +40,18 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     _fadeController.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
-    final username = _usernameController.text.trim();
+    final input    = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (username.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Please enter username and password');
+    if (input.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Please enter your email/username and password');
       return;
     }
 
@@ -56,40 +60,111 @@ class _LoginScreenState extends State<LoginScreen>
       _error = null;
     });
 
-    await Future.delayed(const Duration(milliseconds: 800));
+    // If the input has no '@' it's a username — look up the synthetic email
+    String email = input;
+    if (!input.contains('@')) {
+      final resolved = await ref.read(staffServiceProvider).getEmailByUsername(input);
+      if (resolved == null || resolved.isEmpty) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Username not found. Please check and try again.';
+        });
+        return;
+      }
+      email = resolved;
+    }
+
+    // Sign in via Riverpod auth notifier — GoRouter redirect handles navigation
+    final err = await ref.read(authProvider.notifier).signIn(email, password);
 
     if (!mounted) return;
 
-    if (username == 'admin' && password == 'admin123') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminLayout()),
-      );
-    } else {
+    if (err != null) {
       setState(() {
         _isLoading = false;
-        _error = 'Invalid credentials. Use admin / admin123';
+        _error = null; // clear any old inline error
       });
+      _showAuthError(err);
     }
+    // On success: GoRouter listens to authProvider and redirects automatically
+  }
+
+  void _showAuthError(String message) {
+    // Translate Supabase raw messages to friendlier text
+    final String friendly;
+    final String detail;
+    if (message.toLowerCase().contains('invalid login') ||
+        message.toLowerCase().contains('invalid credentials') ||
+        message.toLowerCase().contains('user not found')) {
+      friendly = 'Account not found';
+      detail = 'No account matches these credentials.\n'
+          'Check your email/username and password, or create a new account.';
+    } else if (message.toLowerCase().contains('wrong password') ||
+        message.toLowerCase().contains('invalid password')) {
+      friendly = 'Incorrect password';
+      detail = 'The password you entered is incorrect. Please try again.';
+    } else if (message.toLowerCase().contains('email not confirmed')) {
+      friendly = 'Email not verified';
+      detail = 'Please verify your email address before signing in.';
+    } else {
+      friendly = 'Sign-in failed';
+      detail = message;
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: const Color(0xFF1E293B),
+        icon: Icon(Icons.error_outline_rounded,
+            color: AppTheme.danger, size: 40),
+        title: Text(
+          friendly,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          textAlign: TextAlign.center,
+        ),
+        content: Text(
+          detail,
+          style: TextStyle(color: Colors.white.withOpacity(0.7), height: 1.5),
+          textAlign: TextAlign.center,
+        ),
+        actionsAlignment: MainAxisAlignment.center,
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.adminPrimary,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+              minimumSize: const Size(120, 40),
+            ),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // Gradient background shared by both loading and form states
+    final bg = BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          AppTheme.sidebarDark,
+          const Color(0xFF1E293B),
+          const Color(0xFF0F172A),
+        ],
+      ),
+    );
+
     return Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppTheme.sidebarDark,
-              const Color(0xFF1E293B),
-              const Color(0xFF0F172A),
-            ],
-          ),
-        ),
+        decoration: bg,
         child: Center(
           child: FadeTransition(
             opacity: _fadeAnimation,
@@ -112,41 +187,15 @@ class _LoginScreenState extends State<LoginScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Logo
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [AppTheme.goldPrimary, AppTheme.goldLight],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppTheme.goldPrimary.withOpacity(0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.admin_panel_settings_rounded,
-                      color: Color(0xFF0F172A),
-                      size: 32,
-                    ),
+                  Image.asset(
+                    'assets/images/hotrest_logo.webp',
+                    width: 180,
+                    height: 180,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 8),
 
-                  const Text(
-                    'Admin Portal',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
                   Text(
-                    'Grand Luxe Hotel Management',
+                    'Management Portal',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.white.withOpacity(0.5),
@@ -154,15 +203,16 @@ class _LoginScreenState extends State<LoginScreen>
                   ),
                   const SizedBox(height: 36),
 
-                  // Username
+                  // Email or Username
                   TextField(
-                    controller: _usernameController,
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: 'Username',
+                      hintText: 'Email or Username',
                       hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
                       prefixIcon: Icon(
-                        Icons.person_outline,
+                        Icons.person_outline_rounded,
                         color: Colors.white.withOpacity(0.4),
                       ),
                       filled: true,
@@ -228,35 +278,53 @@ class _LoginScreenState extends State<LoginScreen>
                     onSubmitted: (_) => _login(),
                   ),
 
+                  // Validation errors (empty fields) shown inline
                   if (_error != null) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.danger.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                        border:
-                            Border.all(color: AppTheme.danger.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.error_outline,
-                              color: AppTheme.danger, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _error!,
-                              style:
-                                  TextStyle(color: AppTheme.danger, fontSize: 13),
-                            ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded,
+                            color: AppTheme.danger, size: 16),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: TextStyle(
+                                color: AppTheme.danger, fontSize: 12.5),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
 
                   const SizedBox(height: 24),
+
+                  // Sign up link
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Don't have an account? ",
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 13,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => context.go(AppRoutes.signup),
+                        child: Text(
+                          'Create one',
+                          style: TextStyle(
+                            color: AppTheme.adminPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
 
                   // Login button
                   SizedBox(
@@ -266,14 +334,15 @@ class _LoginScreenState extends State<LoginScreen>
                       onPressed: _isLoading ? null : _login,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.adminPrimary,
+                        disabledBackgroundColor: AppTheme.adminPrimary.withOpacity(0.6),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                       child: _isLoading
                           ? const SizedBox(
-                              height: 20,
                               width: 20,
+                              height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
                                 color: Colors.white,
@@ -286,34 +355,6 @@ class _LoginScreenState extends State<LoginScreen>
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Demo hint
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.adminPrimary.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: AppTheme.adminPrimary,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Demo: admin / admin123',
-                          style: TextStyle(
-                            color: AppTheme.adminPrimary,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],

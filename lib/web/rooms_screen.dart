@@ -1,19 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as pkg_provider;
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
-import '../models/room.dart';
-import '../services/booking_service.dart';
+import 'widgets/skeleton.dart';
+import 'widgets/responsive_dialog.dart';
+import '../providers/hotel_session.dart';
+import '../providers/app_auth_provider.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/staff_permission.dart';
+import '../domain/repositories/room_repository.dart';
+import '../di/injection_container.dart';
+import '../services/organization_service.dart';
 import 'room_expenses_dialog.dart';
+import 'widgets/upgrade_plan_dialog.dart';
 
-class RoomsScreen extends StatefulWidget {
+class RoomsScreen extends ConsumerStatefulWidget {
   const RoomsScreen({super.key});
 
   @override
-  State<RoomsScreen> createState() => _RoomsScreenState();
+  ConsumerState<RoomsScreen> createState() => _RoomsScreenState();
 }
 
-class _RoomsScreenState extends State<RoomsScreen> {
-  final _bookingService = BookingService();
+class _RoomsScreenState extends ConsumerState<RoomsScreen> {
+  final _roomRepo = sl<RoomRepository>();
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
   List<Room> _rooms = [];
   bool _isLoading = true;
   String _filterStatus = 'all';
@@ -25,12 +38,20 @@ class _RoomsScreenState extends State<RoomsScreen> {
   }
 
   Future<void> _loadRooms() async {
-    final rooms = await _bookingService.getAllRooms();
-    if (!mounted) return;
-    setState(() {
-      _rooms = rooms;
-      _isLoading = false;
-    });
+    try {
+      final rooms = await _roomRepo.getAllRooms();
+      if (!mounted) return;
+      setState(() {
+        _rooms = rooms;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load rooms: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   List<Room> get _filteredRooms {
@@ -109,29 +130,75 @@ class _RoomsScreenState extends State<RoomsScreen> {
         status: RoomStatus.available,
         clearMaintenance: true,
       );
-      await _bookingService.updateRoom(updated);
+      try {
+        await _roomRepo.updateRoom(updated);
+        if (!mounted) return;
+        setState(() {
+          final index = _rooms.indexWhere((r) => r.id == room.id);
+          if (index != -1) _rooms[index] = updated;
+        });
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update room: $e'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+
+    try {
+      final newStatus = room.status == RoomStatus.available
+          ? RoomStatus.maintenance
+          : room.status == RoomStatus.maintenance
+              ? RoomStatus.available
+              : RoomStatus.occupied;
+      final updated = room.copyWith(status: newStatus);
+      await _roomRepo.updateRoom(updated);
+      if (!mounted) return;
       setState(() {
         final index = _rooms.indexWhere((r) => r.id == room.id);
         if (index != -1) _rooms[index] = updated;
       });
-      return;
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update room status: $e'), backgroundColor: Colors.red),
+      );
     }
+  }
 
-    final updated = await _bookingService.toggleRoomStatus(room);
-    setState(() {
-      final index = _rooms.indexWhere((r) => r.id == room.id);
-      if (index != -1) _rooms[index] = updated;
-    });
+  void _showPlanLimitDialog(String resource) {
+    showUpgradePlanDialog(context, ref, blockedResource: resource);
   }
 
   Future<void> _showAddRoomDialog() async {
+    final authState = ref.read(authProvider).valueOrNull;
+    final property = ref.read(activePropertyProvider);
+    final orgId = authState?.organization?.id;
+    if (orgId != null && property != null) {
+      final canAdd = await OrganizationService().canAddRoom(orgId, property.id);
+      if (!canAdd && mounted) {
+        _showPlanLimitDialog('rooms');
+        return;
+      }
+    }
+
+    if (!mounted) return;
     final result = await showDialog<Room>(
       context: context,
       builder: (context) => const _RoomFormDialog(title: 'Add New Room'),
     );
     if (result != null) {
-      await _bookingService.addRoom(result);
-      await _loadRooms();
+      try {
+        await _roomRepo.addRoom(result);
+        await _loadRooms();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add room: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -141,9 +208,108 @@ class _RoomsScreenState extends State<RoomsScreen> {
       builder: (context) => _RoomFormDialog(title: 'Edit Room', room: room),
     );
     if (result != null) {
-      await _bookingService.updateRoom(result);
-      await _loadRooms();
+      try {
+        await _roomRepo.updateRoom(result);
+        await _loadRooms();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save room: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
+  }
+
+  void _showRoomServiceQr(Room room) {
+    final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
+    final propertyId = session.hotelId ?? '';
+    final baseUrl = Uri.base.origin;
+    final url = '$baseUrl/room-service/$propertyId/${room.roomNumber}';
+
+    showDialog(
+      context: context,
+      // Use Dialog (not AlertDialog) — AlertDialog wraps content in IntrinsicWidth
+      // which is incompatible with QrImageView's internal LayoutBuilder.
+      builder: (ctx) => ResponsiveDialog(
+        maxWidth: 380,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Title
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.room_service_rounded, color: Colors.purple, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Room ${room.roomNumber} — Room Service QR',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                // Description
+                const Text(
+                  'Place this QR code in the room so guests can order food directly from their room.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                // QR code — fixed size avoids IntrinsicWidth → LayoutBuilder conflict
+                Center(
+                  child: QrImageView(
+                    data: url,
+                    version: QrVersions.auto,
+                    size: 220,
+                    eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                    dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square, color: Colors.black),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Center(
+                  child: SelectableText(
+                    url,
+                    style: TextStyle(fontSize: 11, color: AppTheme.adminPrimary),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // Actions
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('URL copied to clipboard')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy URL'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+      ),
+    );
   }
 
   Future<void> _showDeleteConfirmation(Room room) async {
@@ -209,16 +375,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
     );
 
     if (confirmed == true) {
-      await _bookingService.deleteRoom(room.id);
+      await _roomRepo.deleteRoom(room.id);
       await _loadRooms();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const TableListSkeleton(rowCount: 7, cellCount: 5);
 
     final availableCount =
         _rooms.where((r) => r.status == RoomStatus.available).length;
@@ -230,19 +394,23 @@ class _RoomsScreenState extends State<RoomsScreen> {
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  'Room Management',
-                  style: Theme.of(context).textTheme.displayMedium,
+                Expanded(
+                  child: Text(
+                    'Room Management',
+                    style: Theme.of(context).textTheme.displayMedium,
+                  ),
                 ),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
                       onPressed: _loadRooms,
@@ -251,7 +419,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
-                      onPressed: _showAddRoomDialog,
+                      onPressed: canEditSection(ref, 'hotel_rooms') ? _showAddRoomDialog : null,
                       icon: const Icon(Icons.add_rounded, size: 20),
                       label: const Text('Add Room'),
                       style: ElevatedButton.styleFrom(
@@ -383,7 +551,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => _toggleStatus(room),
+        onTap: canEditSection(ref, 'hotel_rooms') ? () => _toggleStatus(room) : null,
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -444,7 +612,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     ),
                   ),
                   Text(
-                    '\$${room.pricePerNight.toInt()} / night',
+                    '$_sym${room.pricePerNight.toInt()} / night',
                     style: TextStyle(
                       color: AppTheme.adminPrimary,
                       fontWeight: FontWeight.w600,
@@ -457,7 +625,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
               // Action buttons
               Row(
                 children: [
-                  if (room.status != RoomStatus.occupied)
+                  if (room.status != RoomStatus.occupied && canEditSection(ref, 'hotel_rooms'))
                     Expanded(
                       child: Text(
                         'Tap to toggle status',
@@ -470,6 +638,14 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     )
                   else
                     const Spacer(),
+                  _actionIconButton(
+                    icon: Icons.qr_code_rounded,
+                    tooltip: 'Room service QR',
+                    color: Colors.purple,
+                    onPressed: () => _showRoomServiceQr(room),
+                  ),
+                  const SizedBox(width: 4),
+                  if (canEditSection(ref, 'hotel_rooms')) ...[
                   _actionIconButton(
                     icon: Icons.edit_outlined,
                     tooltip: 'Edit room',
@@ -495,6 +671,7 @@ class _RoomsScreenState extends State<RoomsScreen> {
                     color: AppTheme.danger,
                     onPressed: () => _showDeleteConfirmation(room),
                   ),
+                  ], // end canEdit
                 ],
               ),
             ],
@@ -510,21 +687,20 @@ class _RoomsScreenState extends State<RoomsScreen> {
     required Color color,
     required VoidCallback onPressed,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+    // GestureDetector with HitTestBehavior.opaque wins the gesture arena
+    // over the outer Card InkWell, so the button tap is not swallowed.
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: onPressed,
-        child: Tooltip(
-          message: tooltip,
-          child: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(icon, size: 18, color: color),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(8),
           ),
+          child: Icon(icon, size: 18, color: color),
         ),
       ),
     );
@@ -548,6 +724,7 @@ class _RoomFormDialogState extends State<_RoomFormDialog> {
   late final TextEditingController _roomNumberController;
   late final TextEditingController _floorController;
   late final TextEditingController _priceController;
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
   late RoomType _selectedType;
   late RoomStatus _selectedStatus;
   DateTime? _maintenanceStart;
@@ -757,10 +934,10 @@ class _RoomFormDialogState extends State<_RoomFormDialog> {
                       child: TextFormField(
                         controller: _priceController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Price / Night (\$)',
+                        decoration: InputDecoration(
+                          labelText: 'Price / Night ($_sym)',
                           hintText: 'e.g. 150',
-                          prefixIcon: Icon(Icons.attach_money),
+                          prefixIcon: const Icon(Icons.attach_money),
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../app_theme.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
-import '../models/room.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
 
 class GuestDetailsScreen extends StatefulWidget {
   const GuestDetailsScreen({super.key});
@@ -229,7 +229,7 @@ class _GuestDetailsScreenState extends State<GuestDetailsScreen> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: DropdownButtonFormField<String>(
-                    value: _selectedIdType,
+                    initialValue: _selectedIdType,
                     dropdownColor: AppTheme.darkCard,
                     style: const TextStyle(color: Colors.white, fontSize: 16),
                     decoration: const InputDecoration(

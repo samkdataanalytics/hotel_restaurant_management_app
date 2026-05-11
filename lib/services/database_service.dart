@@ -1,10 +1,9 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:uuid/uuid.dart';
-import '../models/guest.dart';
-import '../models/booking.dart';
-import '../models/room.dart';
-import '../models/check_in.dart';
-import '../models/expense.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/check_in.dart';
+import '../domain/entities/expense.dart';
 
 class DatabaseService {
   static final DatabaseService _instance = DatabaseService._internal();

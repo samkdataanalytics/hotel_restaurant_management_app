@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/restaurant_order.dart';
+import 'package:provider/provider.dart';
+import '../domain/entities/restaurant_order.dart';
+import '../providers/hotel_session.dart';
 import '../app_theme.dart';
-import '../models/restaurant_table.dart';
-import '../services/restaurant_service.dart';
+import '../di/injection_container.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
 
 const _kOrange = AppTheme.restaurantAccent;
 const _kOrangeBg = AppTheme.restaurantAccentBg;
@@ -47,8 +50,11 @@ class CancellationsRefundsScreen extends StatefulWidget {
 class _CancellationsRefundsScreenState
     extends State<CancellationsRefundsScreen>
     with SingleTickerProviderStateMixin {
-  final _service = RestaurantService();
-  final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+  final _orderRepo = sl<OrderRepository>();
+  final _tableRepo = sl<RestaurantTableRepository>();
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
   final _dateF = DateFormat('MMM d, HH:mm');
 
   bool _isLoading = true;
@@ -80,8 +86,9 @@ class _CancellationsRefundsScreenState
 
   Future<void> _load() async {
     setState(() => _isLoading = true);
-    final orders = await _service.getOrders();
-    final tables = await _service.getTables();
+    try {
+    final orders = await _orderRepo.getOrders();
+    final tables = await _tableRepo.getTables();
 
     String tableLabel(String? id) {
       if (id == null) return 'Takeaway';
@@ -111,7 +118,7 @@ class _CancellationsRefundsScreenState
         0.0,
         (s, o) => s +
             o.items.fold(
-                0.0, (si, i) => si + i.menuItem.price * i.quantity));
+                0.0, (si, i) => si + i.unitPrice * i.quantity));
     _inventoryRestoredCount =
         cancelledOrders.where((o) => o.inventoryRestored).length;
 
@@ -131,11 +138,11 @@ class _CancellationsRefundsScreenState
             itemEmoji: item.menuItem.imageUrl.isNotEmpty
                 ? item.menuItem.imageUrl
                 : '🍽️',
-            unitPrice: item.menuItem.price,
+            unitPrice: item.unitPrice,
             orderedQty: item.quantity,
             refundedQty: item.refundedQuantity,
           ));
-          totalRefVal += item.menuItem.price * item.refundedQuantity;
+          totalRefVal += item.unitPrice * item.refundedQuantity;
           hasRefund = true;
         }
       }
@@ -150,6 +157,13 @@ class _CancellationsRefundsScreenState
     _ordersWithRefunds = ordersWithRef;
 
     if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load data: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   // ─── Build ───────────────────────────────────────────
@@ -316,7 +330,7 @@ class _CancellationsRefundsScreenState
   Widget _cancelledCard(_CancelledRow row) {
     final o = row.order;
     final grossValue =
-        o.items.fold(0.0, (s, i) => s + i.menuItem.price * i.quantity);
+        o.items.fold(0.0, (s, i) => s + i.unitPrice * i.quantity);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -377,7 +391,7 @@ class _CancellationsRefundsScreenState
                       ),
                     ),
                     Text(
-                      _currency.format(item.menuItem.price * item.quantity),
+                      _currency.format(item.unitPrice * item.quantity),
                       style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade400,

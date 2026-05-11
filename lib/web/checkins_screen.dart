@@ -1,26 +1,43 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../app_theme.dart';
-import '../models/check_in.dart';
-import '../models/guest.dart';
-import '../models/room.dart';
-import '../models/booking.dart';
-import '../models/expense.dart';
+import 'widgets/skeleton.dart';
+import '../domain/entities/check_in.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/booking.dart';
 import '../services/booking_service.dart';
+import '../services/restaurant_service.dart';
 import '../services/invoice_service.dart';
+import 'widgets/responsive_dialog.dart';
+import 'package:provider/provider.dart' as pkg_provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/hotel_session.dart';
+import '../providers/service_providers.dart';
+import '../domain/repositories/check_in_repository.dart';
+import '../domain/repositories/booking_repository.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/expense_repository.dart';
+import '../di/injection_container.dart';
 import 'guest_responses_dialog.dart';
 
-class CheckinsScreen extends StatefulWidget {
+class CheckinsScreen extends ConsumerStatefulWidget {
   const CheckinsScreen({super.key});
 
   @override
-  State<CheckinsScreen> createState() => _CheckinsScreenState();
+  ConsumerState<CheckinsScreen> createState() => _CheckinsScreenState();
 }
 
-class _CheckinsScreenState extends State<CheckinsScreen> {
-  final _bookingService = BookingService();
-  final _invoiceService = InvoiceService();
+class _CheckinsScreenState extends ConsumerState<CheckinsScreen> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
+  RestaurantService get _restaurantService => ref.read(restaurantServiceProvider);
+  InvoiceService get _invoiceService => ref.read(invoiceServiceProvider);
+  final _checkInRepo       = sl<CheckInRepository>();
+  final _bookingRepo       = sl<BookingRepository>();
+  final _orderRepo         = sl<OrderRepository>();
+  final _expenseRepo       = sl<ExpenseRepository>();
   final _timeFormat = DateFormat('hh:mm a');
   final _dateFormat = DateFormat('MMM dd, yyyy');
   final _searchController = TextEditingController();
@@ -45,17 +62,24 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
   }
 
   Future<void> _loadData() async {
-    final checkIns = await _bookingService.getEnrichedCheckIns();
-    final bookings = await _bookingService.getEnrichedBookings();
-
-    if (!mounted) return;
-    setState(() {
-      _allCheckIns = checkIns;
-      _filteredCheckIns = checkIns;
-      _allBookings = bookings;
-      _filteredBookings = bookings;
-      _isLoading = false;
-    });
+    try {
+      final checkIns = await _checkInRepo.getEnrichedCheckIns();
+      final bookings = await _bookingRepo.getEnrichedBookings();
+      if (!mounted) return;
+      setState(() {
+        _allCheckIns = checkIns;
+        _filteredCheckIns = checkIns;
+        _allBookings = bookings;
+        _filteredBookings = bookings;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load data: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   void _filterData(String query) {
@@ -79,14 +103,12 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const TableListSkeleton(rowCount: 8, cellCount: 5);
 
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -112,30 +134,49 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
             const SizedBox(height: 24),
 
             // Search & tabs
-            Row(
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: _filterData,
-                    decoration: InputDecoration(
-                      hintText: 'Search by guest name, booking ref, or room...',
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+            if (AppTheme.isMobile(context)) ...[
+              TextField(
+                controller: _searchController,
+                onChanged: _filterData,
+                decoration: InputDecoration(
+                  hintText: 'Search guests, rooms...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  _tabButton('Check-ins', 'checkins', '${_filteredCheckIns.length}'),
+                  const SizedBox(width: 8),
+                  _tabButton('All Bookings', 'bookings', '${_filteredBookings.length}'),
+                ],
+              ),
+            ] else
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: _filterData,
+                      decoration: InputDecoration(
+                        hintText: 'Search by guest name, booking ref, or room...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                _tabButton('Check-ins', 'checkins',
-                    '${_filteredCheckIns.length}'),
-                const SizedBox(width: 8),
-                _tabButton(
-                    'All Bookings', 'bookings', '${_filteredBookings.length}'),
-              ],
-            ),
+                  const SizedBox(width: 16),
+                  _tabButton('Check-ins', 'checkins', '${_filteredCheckIns.length}'),
+                  const SizedBox(width: 8),
+                  _tabButton('All Bookings', 'bookings', '${_filteredBookings.length}'),
+                ],
+              ),
             const SizedBox(height: 24),
 
             // Content
@@ -209,8 +250,8 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
       return _emptyState('No check-ins found');
     }
 
-    return SizedBox(
-      width: double.infinity,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: DataTable(
         columnSpacing: 24,
         columns: const [
@@ -244,8 +285,8 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
       return _emptyState('No bookings found');
     }
 
-    return SizedBox(
-      width: double.infinity,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: DataTable(
         columnSpacing: 24,
         columns: const [
@@ -360,35 +401,47 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
   }
 
   Widget _statusBadge(String label, BookingStatus status) {
-    Color color;
+    final Color color;
+    final IconData icon;
     switch (status) {
       case BookingStatus.pending:
         color = AppTheme.warning;
+        icon  = Icons.schedule_rounded;
         break;
       case BookingStatus.checkedIn:
         color = AppTheme.success;
+        icon  = Icons.login_rounded;
         break;
       case BookingStatus.checkedOut:
         color = AppTheme.adminTextMuted;
+        icon  = Icons.logout_rounded;
         break;
       case BookingStatus.cancelled:
         color = AppTheme.danger;
+        icon  = Icons.cancel_rounded;
         break;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -411,8 +464,8 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
     return InkWell(
       onTap: () async {
         final updated = booking.copyWith(isQrSent: false);
-        await _bookingService.updateBooking(updated);
-        _loadData();
+        try { await _bookingService.updateBooking(updated); } catch (_) { return; }
+        if (mounted) _loadData();
       },
       borderRadius: BorderRadius.circular(6),
       child: Container(
@@ -434,8 +487,8 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
     return InkWell(
       onTap: () async {
         final updated = booking.copyWith(isQrSent: true);
-        await _bookingService.updateBooking(updated);
-        _loadData();
+        try { await _bookingService.updateBooking(updated); } catch (_) { return; }
+        if (mounted) _loadData();
       },
       borderRadius: BorderRadius.circular(6),
       child: Container(
@@ -484,65 +537,117 @@ class _CheckinsScreenState extends State<CheckinsScreen> {
 
   Future<void> _showQrDialog(Booking booking) async {
     final baseUrl = Uri.base.origin; // Gets e.g 'http://localhost:8080'
-    final url = '$baseUrl/#/guest-registration?ref=${booking.bookingRef}';
+    final url = '$baseUrl/guest-registration?ref=${booking.bookingRef}';
 
     if (!booking.isQrGenerated) {
       final updated = booking.copyWith(isQrGenerated: true);
-      await _bookingService.updateBooking(updated);
-      _loadData();
+      try { await _bookingService.updateBooking(updated); } catch (_) {}
+      if (mounted) _loadData();
     }
 
     if (!mounted) return;
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Guest Registration QR: ${booking.bookingRef}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Ask the guest to scan this QR code to securely fill out their information.', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: 250,
-                height: 250,
-                child: QrImageView(
+      builder: (ctx) => ResponsiveDialog(
+        maxWidth: 380,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Guest Registration QR: ${booking.bookingRef}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                const Text(
+                  'Ask the guest to scan this QR code to securely fill out their information.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.black54),
+                ),
+                const SizedBox(height: 24),
+                QrImageView(
                   data: url,
                   version: QrVersions.auto,
+                  size: 220,
                   eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
                   dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
                 ),
-              ),
-              const SizedBox(height: 16),
-              SelectableText(url, style: TextStyle(fontSize: 12, color: AppTheme.adminPrimary)),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
+                const SizedBox(height: 12),
+                SelectableText(url, style: TextStyle(fontSize: 12, color: AppTheme.adminPrimary), textAlign: TextAlign.center),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('URL copied to clipboard')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy URL'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
-        );
-      },
+          ),
+      ),
     );
   }
 
   Future<void> _printInvoice(Booking booking, Room room, Guest guest) async {
-    showDialog(context: context, builder: (_) => const Center(child: CircularProgressIndicator()));
-    
-    // Fetch expenses just in time
-    final expenses = await _bookingService.getAllExpenses();
-    
-    if (mounted) {
-      Navigator.pop(context); // Close loading dialog
+    BuildContext? dialogContext;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        dialogContext = ctx;
+        return const Center(child: CircularProgressIndicator());
+      },
+    );
+
+    try {
+      final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
+      _restaurantService.hotelId = session.hotelId;
+
+      final expenses        = await _expenseRepo.getExpenses();
+      final restaurantOrders = await _orderRepo.getChargedToRoomOrders(booking.id);
+
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+        dialogContext = null;
+      }
+
+      final settings = session.settings;
       await _invoiceService.displayInvoicePdf(
-        booking: booking,
-        room: room,
-        guest: guest,
-        expenses: expenses,
+        booking:          booking,
+        room:             room,
+        guest:            guest,
+        expenses:         expenses,
+        restaurantOrders: restaurantOrders,
+        currencySymbol:   settings?.currencySymbol ?? '\$',
+        settings:         settings,
       );
+    } catch (e) {
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load guest folio: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 }

@@ -1,29 +1,43 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
-import '../models/room.dart';
-import '../models/expense.dart';
-import '../services/booking_service.dart';
+import 'widgets/skeleton.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
+import 'widgets/responsive_dialog.dart';
+import 'package:provider/provider.dart' as pkg_provider;
+import '../providers/hotel_session.dart';
 import '../services/invoice_service.dart';
-import 'room_expenses_dialog.dart';
+import '../domain/repositories/booking_repository.dart';
+import '../domain/repositories/room_repository.dart';
+import '../di/injection_container.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'guest_responses_dialog.dart';
+import '../domain/entities/staff_permission.dart';
+import '../services/booking_service.dart';
+import '../services/restaurant_service.dart';
+import '../providers/service_providers.dart';
 
-class ReservationsScreen extends StatefulWidget {
+class ReservationsScreen extends ConsumerStatefulWidget {
   const ReservationsScreen({super.key});
 
   @override
-  State<ReservationsScreen> createState() => _ReservationsScreenState();
+  ConsumerState<ReservationsScreen> createState() => _ReservationsScreenState();
 }
 
-class _ReservationsScreenState extends State<ReservationsScreen> {
-  final _bookingService = BookingService();
-  final _invoiceService = InvoiceService();
+class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
+  RestaurantService get _restaurantService => ref.read(restaurantServiceProvider);
+  InvoiceService get _invoiceService => ref.read(invoiceServiceProvider);
+  final _bookingRepo       = sl<BookingRepository>();
+  final _roomRepo          = sl<RoomRepository>();
   final _dateFormat = DateFormat('MMM dd');
   final _fullDateFormat = DateFormat('MMM dd, yyyy');
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   List<Map<String, dynamic>> _enrichedBookings = [];
   List<Room> _rooms = [];
@@ -41,6 +55,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     BookingSource.other,
   };
 
+  List<BookingSource> get _enabledSources => BookingSource.values;
+
   @override
   void initState() {
     super.initState();
@@ -51,14 +67,22 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   }
 
   Future<void> _loadData() async {
-    final bookings = await _bookingService.getEnrichedBookings();
-    final rooms = await _bookingService.getAllRooms();
-    if (!mounted) return;
-    setState(() {
-      _enrichedBookings = bookings;
-      _rooms = rooms;
-      _isLoading = false;
-    });
+    try {
+      final bookings = await _bookingRepo.getEnrichedBookings();
+      final rooms = await _roomRepo.getAllRooms();
+      if (!mounted) return;
+      setState(() {
+        _enrichedBookings = bookings;
+        _rooms = rooms;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load reservations: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   // ─── Helpers ──────────────────────────────────────────────
@@ -69,40 +93,31 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
   Color _sourceColor(BookingSource source) {
     switch (source) {
-      case BookingSource.bookingCom:
-        return const Color(0xFF003580);
-      case BookingSource.airbnb:
-        return const Color(0xFFFF5A5F);
-      case BookingSource.direct:
-        return AppTheme.success;
-      case BookingSource.other:
-        return AppTheme.warning;
+      case BookingSource.bookingCom: return const Color(0xFF003580);
+      case BookingSource.airbnb:     return const Color(0xFFFF5A5F);
+      case BookingSource.expedia:    return const Color(0xFF00355F);
+      case BookingSource.direct:     return AppTheme.success;
+      case BookingSource.other:      return AppTheme.warning;
     }
   }
 
   IconData _sourceIcon(BookingSource source) {
     switch (source) {
-      case BookingSource.bookingCom:
-        return Icons.language_rounded;
-      case BookingSource.airbnb:
-        return Icons.house_rounded;
-      case BookingSource.direct:
-        return Icons.phone_in_talk_rounded;
-      case BookingSource.other:
-        return Icons.more_horiz_rounded;
+      case BookingSource.bookingCom: return Icons.language_rounded;
+      case BookingSource.airbnb:     return Icons.house_rounded;
+      case BookingSource.expedia:    return Icons.flight_rounded;
+      case BookingSource.direct:     return Icons.phone_in_talk_rounded;
+      case BookingSource.other:      return Icons.more_horiz_rounded;
     }
   }
 
   String _sourceLabel(BookingSource source) {
     switch (source) {
-      case BookingSource.bookingCom:
-        return 'Booking.com';
-      case BookingSource.airbnb:
-        return 'Airbnb';
-      case BookingSource.direct:
-        return 'Direct';
-      case BookingSource.other:
-        return 'Other';
+      case BookingSource.bookingCom: return 'Booking.com';
+      case BookingSource.airbnb:     return 'Airbnb';
+      case BookingSource.expedia:    return 'Expedia';
+      case BookingSource.direct:     return 'Direct';
+      case BookingSource.other:      return 'Other';
     }
   }
 
@@ -115,17 +130,20 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   }
 
   /// Get the booking for a specific room on a specific day (filtered)
+  /// Returns the booking occupying [room] on [day], regardless of source filter.
+  /// Used for calendar cell colour / availability — a room is never "free" just
+  /// because its source is hidden in the filter panel.
   Map<String, dynamic>? _getBookingForRoomOnDay(Room room, DateTime day) {
     for (final data in _enrichedBookings) {
       final booking = data['booking'] as Booking;
       if (booking.roomId != room.id) continue;
-      if (!_activeFilters.contains(booking.source)) continue;
       if (_bookingSpansDay(booking, day)) return data;
     }
     return null;
   }
 
-  /// Get all bookings for a specific day (filtered)
+  /// Get all bookings for a specific day that match the active source filter.
+  /// Used only for the booking list / day-view counts — not for availability.
   List<Map<String, dynamic>> _getBookingsForDay(DateTime day) {
     return _enrichedBookings.where((data) {
       final booking = data['booking'] as Booking;
@@ -154,7 +172,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       builder: (context) => _ReservationFormDialog(
         rooms: _rooms,
         bookingService: _bookingService,
+        bookingRepo: _bookingRepo,
         enrichedBookings: _enrichedBookings,
+        enabledSources: _enabledSources,
       ),
     );
     if (result == true) await _loadData();
@@ -166,8 +186,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       builder: (context) => _ReservationFormDialog(
         rooms: _rooms,
         bookingService: _bookingService,
+        bookingRepo: _bookingRepo,
         existingData: data,
         enrichedBookings: _enrichedBookings,
+        enabledSources: _enabledSources,
       ),
     );
     if (result == true) await _loadData();
@@ -223,12 +245,12 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const TableListSkeleton(rowCount: 8, cellCount: 5);
 
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -269,30 +291,39 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Reservations', style: Theme.of(context).textTheme.displayMedium),
-            const SizedBox(height: 4),
-            Text(
-              'Manage all reservations from Booking.com, Airbnb & direct bookings.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Reservations', style: Theme.of(context).textTheme.displayMedium),
+              const SizedBox(height: 4),
+              Text(
+                'Manage all reservations from Booking.com, Airbnb & direct bookings.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
         ),
+        const SizedBox(width: 16),
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(onPressed: _loadData, icon: const Icon(Icons.refresh), tooltip: 'Refresh'),
             const SizedBox(width: 8),
             ElevatedButton.icon(
-              onPressed: _showAddReservationDialog,
+              onPressed: canEditSection(ref, 'hotel_reservations') ? _showAddReservationDialog : null,
               icon: const Icon(Icons.add_rounded, size: 20),
-              label: const Text('Add Reservation'),
+              label: AppTheme.isMobile(context)
+                  ? const SizedBox.shrink()
+                  : const Text('Add Reservation'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.adminPrimary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                padding: AppTheme.isMobile(context)
+                    ? const EdgeInsets.all(14)
+                    : const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
@@ -308,7 +339,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     return Wrap(
       spacing: 8,
       runSpacing: 8,
-      children: BookingSource.values.map((source) {
+      children: _enabledSources.map((source) {
         final isActive = _activeFilters.contains(source);
         final color = _sourceColor(source);
         final count = _enrichedBookings
@@ -536,7 +567,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                           height: 28,
                           alignment: Alignment.center,
                           child: Text(
-                            total > 0 ? '\$${total.toStringAsFixed(0)}' : '-',
+                            total > 0 ? '$_sym${total.toStringAsFixed(0)}' : '-',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -581,6 +612,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                               (_selectedCell!['room'] as Room).id == room.id &&
                               (_selectedCell!['date'] as DateTime) == date;
 
+                          final isSourceVisible = bookingData == null ||
+                              _activeFilters.contains((bookingData['booking'] as Booking).source);
                           return GestureDetector(
                             onTap: () => setState(() => _selectedCell = {'room': room, 'date': date}),
                             child: Container(
@@ -591,7 +624,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                 color: isMaintenance
                                     ? Colors.orange.shade50
                                     : bookingData != null
-                                        ? _sourceColor((bookingData['booking'] as Booking).source).withOpacity(0.12)
+                                        ? isSourceVisible
+                                            ? _sourceColor((bookingData['booking'] as Booking).source).withOpacity(0.12)
+                                            : Colors.grey.shade200
                                         : isEven
                                             ? Colors.grey.shade50
                                             : Colors.white,
@@ -608,7 +643,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                                       child: Icon(Icons.build_rounded, size: 14, color: AppTheme.warning),
                                     )
                                   : bookingData != null
-                                      ? _buildCellContent(bookingData)
+                                      ? _buildCellContent(bookingData, sourceVisible: isSourceVisible)
                                       : const SizedBox.shrink(),
                             ),
                           );
@@ -662,10 +697,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     );
   }
 
-  Widget _buildCellContent(Map<String, dynamic> data) {
+  Widget _buildCellContent(Map<String, dynamic> data, {bool sourceVisible = true}) {
     final booking = data['booking'] as Booking;
     final guest = data['guest'] as Guest?;
-    final color = _sourceColor(booking.source);
+    final color = sourceVisible ? _sourceColor(booking.source) : Colors.grey.shade500;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -679,7 +714,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            guest?.fullName.split(' ').first ?? '?',
+            sourceVisible ? (guest?.fullName.split(' ').first ?? '?') : booking.sourceLabel,
             style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
             overflow: TextOverflow.ellipsis,
             maxLines: 1,
@@ -739,7 +774,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_fullDateFormat.format(date), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              Text(_fullDateFormat.format(date), style: AppTheme.dmSerif(fontSize: 18)),
               const SizedBox(height: 4),
               Text('Room ${room.roomNumber} — ${room.typeLabel}', style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 13)),
               const SizedBox(height: 16),
@@ -752,7 +787,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     _statColumn(dayReserved.toString(), 'Booked', AppTheme.danger),
                     _statColumn(dayAvailable.toString(), 'Available', AppTheme.success),
                     _statColumn(dayMaintenance.toString(), 'Maint.', AppTheme.warning),
-                    _statColumn('\$${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
+                    _statColumn('$_sym${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
                   ],
                 ),
               ),
@@ -807,7 +842,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                   _statColumn(dayReserved.toString(), 'Booked', AppTheme.danger),
                   _statColumn(dayAvailable.toString(), 'Available', AppTheme.success),
                   _statColumn(dayMaintenance.toString(), 'Maint.', AppTheme.warning),
-                  _statColumn('\$${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
+                  _statColumn('$_sym${dayRevenue.toStringAsFixed(0)}', 'Revenue', AppTheme.adminPrimary),
                 ],
               ),
             ),
@@ -932,6 +967,31 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     Text('(${booking.nights}n)', style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 11)),
                   ],
                 ),
+                if (booking.specialRequests.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.shade200),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.note_outlined, size: 13, color: Colors.amber.shade700),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            booking.specialRequests,
+                            style: TextStyle(fontSize: 12, color: Colors.amber.shade900),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (booking.totalAmount > 0) ...[
                   const SizedBox(height: 8),
                   Row(
@@ -939,7 +999,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                       Icon(Icons.attach_money, size: 14, color: AppTheme.success),
                       const SizedBox(width: 4),
                       Text(
-                        '\$${booking.totalAmount.toStringAsFixed(2)}',
+                        '$_sym${booking.totalAmount.toStringAsFixed(2)}',
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.success),
                       ),
                       const SizedBox(width: 8),
@@ -968,9 +1028,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     if (guest != null && room != null)
                       _tileAction(icon: Icons.receipt_long_rounded, tooltip: 'Print Guest Folio', color: AppTheme.success, onTap: () => _printInvoice(booking, room, guest)),
                     const SizedBox(width: 4),
+                    if (canEditSection(ref, 'hotel_reservations')) ...[
                     _tileAction(icon: Icons.edit_outlined, tooltip: 'Edit', color: AppTheme.adminPrimary, onTap: () => _showEditReservationDialog(data)),
                     const SizedBox(width: 4),
                     _tileAction(icon: Icons.delete_outline_rounded, tooltip: 'Delete', color: AppTheme.danger, onTap: () => _deleteReservation(booking)),
+                    ],
                   ],
                 ),
               ],
@@ -1062,7 +1124,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
   Future<void> _showQrDialog(Booking booking) async {
     final baseUrl = Uri.base.origin; // Gets e.g 'http://localhost:8080' or whatever is being used
-    final url = '$baseUrl/#/guest-registration?ref=${booking.bookingRef}';
+    final url = '$baseUrl/guest-registration?ref=${booking.bookingRef}';
 
     if (!booking.isQrGenerated) {
       final updated = booking.copyWith(isQrGenerated: true);
@@ -1073,37 +1135,57 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     if (!mounted) return;
     showDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text('Guest Registration QR: ${booking.bookingRef}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Ask the guest to scan this QR code to securely fill out their information and preferences.', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54)),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: 250,
-                height: 250,
-                child: QrImageView(
+      builder: (ctx) => ResponsiveDialog(
+        maxWidth: 380,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Guest Registration QR: ${booking.bookingRef}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                const Text(
+                  'Ask the guest to scan this QR code to securely fill out their information and preferences.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.black54),
+                ),
+                const SizedBox(height: 24),
+                QrImageView(
                   data: url,
                   version: QrVersions.auto,
+                  size: 220,
                   eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
                   dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
                 ),
-              ),
-              const SizedBox(height: 16),
-              SelectableText(url, style: TextStyle(fontSize: 12, color: AppTheme.adminPrimary)),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
+                const SizedBox(height: 12),
+                SelectableText(url, style: TextStyle(fontSize: 12, color: AppTheme.adminPrimary), textAlign: TextAlign.center),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('URL copied to clipboard')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy URL'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
-        );
-      },
+          ),
+      ),
     );
   }
 
@@ -1126,19 +1208,60 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   }
 
   Future<void> _printInvoice(Booking booking, Room room, Guest guest) async {
-    showDialog(context: context, builder: (_) => const Center(child: CircularProgressIndicator()));
-    
-    // Fetch expenses just in time
-    final expenses = await _bookingService.getAllExpenses();
-    
-    if (mounted) {
-      Navigator.pop(context); // Close loading dialog
+    BuildContext? dialogContext;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        dialogContext = ctx;
+        return const Center(child: CircularProgressIndicator());
+      },
+    );
+
+    void dismissDialog() {
+      if (dialogContext != null && dialogContext!.mounted) {
+        Navigator.pop(dialogContext!);
+        dialogContext = null;
+      }
+    }
+
+    try {
+      final session = pkg_provider.Provider.of<HotelSession>(context, listen: false);
+      _restaurantService.hotelId = session.hotelId;
+
+      final settings = session.settings;
+
+      // Fetch DB data + warm up fonts/logo all in parallel
+      final expensesFuture  = _bookingService.getAllExpenses();
+      final ordersFuture    = _restaurantService.getChargedToRoomOrders(booking.id);
+      final warmUpFuture    = _invoiceService.warmUp(settings?.logoUrl ?? '');
+      final expenses         = await expensesFuture;
+      final restaurantOrders = await ordersFuture;
+      await warmUpFuture;
+
+      // PDF is already warm — generation is now fast
       await _invoiceService.displayInvoicePdf(
-        booking: booking,
-        room: room,
-        guest: guest,
-        expenses: expenses,
+        booking:          booking,
+        room:             room,
+        guest:            guest,
+        expenses:         expenses,
+        restaurantOrders: restaurantOrders,
+        currencySymbol:   settings?.currencySymbol ?? '\$',
+        settings:         settings,
       );
+
+      dismissDialog();
+    } catch (e) {
+      dismissDialog();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate guest folio: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 }
@@ -1148,14 +1271,18 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 class _ReservationFormDialog extends StatefulWidget {
   final List<Room> rooms;
   final BookingService bookingService;
-  final Map<String, dynamic>? existingData;
+  final BookingRepository bookingRepo;
   final List<Map<String, dynamic>> enrichedBookings;
+  final List<BookingSource> enabledSources;
+  final Map<String, dynamic>? existingData;
 
   const _ReservationFormDialog({
     required this.rooms,
     required this.bookingService,
-    this.existingData,
+    required this.bookingRepo,
     required this.enrichedBookings,
+    required this.enabledSources,
+    this.existingData,
   });
 
   @override
@@ -1165,6 +1292,7 @@ class _ReservationFormDialog extends StatefulWidget {
 class _ReservationFormDialogState extends State<_ReservationFormDialog> {
   final _formKey = GlobalKey<FormState>();
   final _uuid = const Uuid();
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   late final TextEditingController _guestNameController;
   late final TextEditingController _emailController;
@@ -1195,7 +1323,8 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     _specialRequestsController = TextEditingController(text: existingBooking?.specialRequests ?? '');
     _amountController = TextEditingController(text: existingBooking?.totalAmount.toStringAsFixed(2) ?? '');
 
-    _selectedSource = existingBooking?.source ?? BookingSource.bookingCom;
+    _selectedSource = existingBooking?.source ??
+        (widget.enabledSources.isNotEmpty ? widget.enabledSources.first : BookingSource.direct);
     _selectedStatus = existingBooking?.status ?? BookingStatus.pending;
     _selectedRoomId = existingBooking?.roomId;
     _checkInDate = existingBooking?.checkInDate;
@@ -1279,7 +1408,10 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     }
   }
 
+  bool _saving = false;
+
   Future<void> _submit() async {
+    if (_saving) return;
     if (!_formKey.currentState!.validate()) return;
     if (_checkInDate == null || _checkOutDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1308,10 +1440,15 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
       idNumber: existingGuest?.idNumber ?? '',
       nationality: existingGuest?.nationality ?? '',
     );
-    await widget.bookingService.addGuest(guest);
+    await widget.bookingService.updateGuest(guest);
 
     // Auto-generate ref for new bookings, keep existing for edits
-    final bookingRef = existingBooking?.bookingRef ?? widget.bookingService.getNextBookingRef();
+    final String bookingRef;
+    if (_isEditing) {
+      bookingRef = existingBooking!.bookingRef;
+    } else {
+      bookingRef = await widget.bookingRepo.getNextBookingRef();
+    }
 
     final booking = Booking(
       id: existingBooking?.id ?? _uuid.v4(),
@@ -1328,8 +1465,24 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
       isPaid: _isPaid,
     );
 
-    await widget.bookingService.addReservation(booking);
-    if (mounted) Navigator.pop(context, true);
+    setState(() => _saving = true);
+    try {
+      if (existingBooking != null) {
+        await widget.bookingService.updateBooking(booking);
+      } else {
+        await widget.bookingService.addReservation(booking);
+      }
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Save failed: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    }
   }
 
   @override
@@ -1367,7 +1520,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                       const SizedBox(width: 14),
                       Text(
                         _isEditing ? 'Edit Reservation' : 'Add Reservation',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                        style: AppTheme.serifHeadingLarge,
                       ),
                       const Spacer(),
                       IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close, size: 20), splashRadius: 18),
@@ -1381,7 +1534,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
-                    children: BookingSource.values.map((source) {
+                    children: widget.enabledSources.map((source) {
                       final isSelected = _selectedSource == source;
                       final color = _colorForSource(source);
                       return GestureDetector(
@@ -1471,7 +1624,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                       Expanded(
                         flex: 2,
                         child: DropdownButtonFormField<String>(
-                          value: _selectedRoomId,
+                          initialValue: _selectedRoomId,
                           decoration: const InputDecoration(labelText: 'Room', prefixIcon: Icon(Icons.meeting_room_outlined)),
                           items: _availableRooms.map((room) {
                             final underMaintenance = room.status == RoomStatus.maintenance;
@@ -1508,17 +1661,17 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                         child: TextFormField(
                           controller: _amountController,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Total Amount (\$)',
+                          decoration: InputDecoration(
+                            labelText: 'Total Amount ($_sym)',
                             hintText: 'e.g. 450.00',
-                            prefixIcon: Icon(Icons.attach_money),
+                            prefixIcon: const Icon(Icons.attach_money),
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<BookingStatus>(
-                          value: _selectedStatus,
+                          initialValue: _selectedStatus,
                           decoration: const InputDecoration(labelText: 'Status', prefixIcon: Icon(Icons.info_outline)),
                           items: BookingStatus.values.map((status) {
                             String label;
@@ -1604,18 +1757,20 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
   Color _colorForSource(BookingSource source) {
     switch (source) {
       case BookingSource.bookingCom: return const Color(0xFF003580);
-      case BookingSource.airbnb: return const Color(0xFFFF5A5F);
-      case BookingSource.direct: return AppTheme.success;
-      case BookingSource.other: return AppTheme.warning;
+      case BookingSource.airbnb:     return const Color(0xFFFF5A5F);
+      case BookingSource.expedia:    return const Color(0xFF00355F);
+      case BookingSource.direct:     return AppTheme.success;
+      case BookingSource.other:      return AppTheme.warning;
     }
   }
 
   String _labelForSource(BookingSource source) {
     switch (source) {
       case BookingSource.bookingCom: return 'Booking.com';
-      case BookingSource.airbnb: return 'Airbnb';
-      case BookingSource.direct: return 'Direct';
-      case BookingSource.other: return 'Other';
+      case BookingSource.airbnb:     return 'Airbnb';
+      case BookingSource.expedia:    return 'Expedia';
+      case BookingSource.direct:     return 'Direct';
+      case BookingSource.other:      return 'Other';
     }
   }
 }

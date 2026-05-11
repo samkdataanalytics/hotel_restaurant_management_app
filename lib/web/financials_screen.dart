@@ -1,23 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart' as pkg_provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app_theme.dart';
-import '../models/booking.dart';
-import '../models/room.dart';
-import '../models/expense.dart';
+import 'widgets/skeleton.dart';
+import '../providers/hotel_session.dart';
+import '../providers/app_auth_provider.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/expense.dart';
 import '../services/booking_service.dart';
+import '../providers/service_providers.dart';
 
-class FinancialsScreen extends StatefulWidget {
+class FinancialsScreen extends ConsumerStatefulWidget {
   const FinancialsScreen({super.key});
 
   @override
-  State<FinancialsScreen> createState() => _FinancialsScreenState();
+  ConsumerState<FinancialsScreen> createState() => _FinancialsScreenState();
 }
 
-class _FinancialsScreenState extends State<FinancialsScreen> {
-  final _bookingService = BookingService();
+class _FinancialsScreenState extends ConsumerState<FinancialsScreen> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   final _dateFormat = DateFormat('MMM dd, yyyy');
   final _shortDateFormat = DateFormat('MMM dd');
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   List<Map<String, dynamic>> _enrichedBookings = [];
   List<Room> _rooms = [];
@@ -25,7 +32,13 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
   bool _isLoading = true;
 
   late DateTimeRange _dateRange;
-  Set<BookingSource> _selectedSources = BookingSource.values.toSet();
+  late Set<BookingSource> _selectedSources;
+
+  List<BookingSource> get _enabledSources {
+    final channels = ref.read(activePropertyProvider)?.bookingChannels ?? [];
+    if (channels.isEmpty) return BookingSource.values;
+    return channelsToSources(channels);
+  }
 
   @override
   void initState() {
@@ -36,20 +49,33 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
       start: DateTime(now.year, now.month, 1),
       end: DateTime(now.year, now.month + 1, 0),
     );
+    // Initialize after first frame so ref is available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() => _selectedSources = _enabledSources.toSet());
+    });
+    _selectedSources = BookingSource.values.toSet(); // safe default until frame
     _loadData();
   }
 
   Future<void> _loadData() async {
-    final bookings = await _bookingService.getEnrichedBookings();
-    final rooms = await _bookingService.getAllRooms();
-    final expenses = await _bookingService.getAllExpenses();
-    if (!mounted) return;
-    setState(() {
-      _enrichedBookings = bookings;
-      _rooms = rooms;
-      _cachedExpenses = expenses;
-      _isLoading = false;
-    });
+    try {
+      final bookings = await _bookingService.getEnrichedBookings();
+      final rooms = await _bookingService.getAllRooms();
+      final expenses = await _bookingService.getAllExpenses();
+      if (!mounted) return;
+      setState(() {
+        _enrichedBookings = bookings;
+        _rooms = rooms;
+        _cachedExpenses = expenses;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load financials: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _selectDateRange() async {
@@ -132,33 +158,27 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
 
   Color _sourceColor(BookingSource source) {
     switch (source) {
-      case BookingSource.bookingCom:
-        return Colors.blue.shade600;
-      case BookingSource.airbnb:
-        return Colors.red.shade500;
-      case BookingSource.direct:
-        return Colors.green.shade600;
-      case BookingSource.other:
-        return Colors.orange.shade500;
+      case BookingSource.bookingCom: return Colors.blue.shade600;
+      case BookingSource.airbnb:     return Colors.red.shade500;
+      case BookingSource.expedia:    return const Color(0xFF00355F);
+      case BookingSource.direct:     return Colors.green.shade600;
+      case BookingSource.other:      return Colors.orange.shade500;
     }
   }
 
   String _sourceLabel(BookingSource source) {
     switch (source) {
-      case BookingSource.bookingCom:
-        return 'Booking.com';
-      case BookingSource.airbnb:
-        return 'Airbnb';
-      case BookingSource.direct:
-        return 'Direct';
-      case BookingSource.other:
-        return 'Other';
+      case BookingSource.bookingCom: return 'Booking.com';
+      case BookingSource.airbnb:     return 'Airbnb';
+      case BookingSource.expedia:    return 'Expedia';
+      case BookingSource.direct:     return 'Direct';
+      case BookingSource.other:      return 'Other';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const KpiTableSkeleton();
 
     final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
     double materializedRevenue = 0;
@@ -182,7 +202,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
       double dayRevenue = 0;
       
       Map<BookingSource, double> sourceRevenues = {
-        for (var s in BookingSource.values) s: 0.0
+        for (var s in _enabledSources) s: 0.0
       };
 
       for (final b in dayBookings) {
@@ -225,7 +245,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -234,25 +254,32 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Financials Dashboard', style: Theme.of(context).textTheme.displayMedium),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Monitor past, present, and potential future revenues.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Financials Dashboard', style: Theme.of(context).textTheme.displayMedium),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Monitor past, present, and potential future revenues.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 12),
                 OutlinedButton.icon(
                   onPressed: _selectDateRange,
                   icon: const Icon(Icons.date_range_rounded, size: 18),
-                  label: Text('${_dateFormat.format(_dateRange.start)} — ${_dateFormat.format(_dateRange.end)}'),
+                  label: AppTheme.isMobile(context)
+                      ? const SizedBox.shrink()
+                      : Text('${_dateFormat.format(_dateRange.start)} — ${_dateFormat.format(_dateRange.end)}'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppTheme.adminPrimary,
                     side: BorderSide(color: AppTheme.adminPrimary.withOpacity(0.5)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    padding: AppTheme.isMobile(context)
+                        ? const EdgeInsets.all(14)
+                        : const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
@@ -261,48 +288,60 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
             const SizedBox(height: 24),
 
             // Advanced Summary Cards
-            Row(
-              children: [
-                Expanded(
-                  child: _buildSummaryCard(
-                    title: 'Gross Revenue',
-                    subtitle: 'Up to today',
-                    value: '\$${materializedRevenue.toStringAsFixed(0)}',
-                    icon: Icons.account_balance_wallet_rounded,
-                    color: AppTheme.success,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildSummaryCard(
-                    title: 'Total Costs',
-                    subtitle: 'Room expenses up to today',
-                    value: '\$${totalExpenses.toStringAsFixed(0)}',
-                    icon: Icons.money_off_csred_rounded,
-                    color: AppTheme.danger,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildSummaryCard(
-                    title: 'Net Profit',
-                    subtitle: 'Gross Revenue - Costs',
-                    value: '\$${(materializedRevenue - totalExpenses).toStringAsFixed(0)}',
-                    icon: Icons.payments_rounded,
-                    color: AppTheme.warning,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildSummaryCard(
-                    title: 'Future & Potential',
-                    subtitle: 'Expected + \$${potentialRevenue.toStringAsFixed(0)} possible',
-                    value: '\$${futureRevenue.toStringAsFixed(0)}',
-                    icon: Icons.event_available_rounded,
-                    color: AppTheme.adminPrimary,
-                  ),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 700;
+                final spacing = isNarrow ? 12.0 : 16.0;
+                final cardWidth = isNarrow
+                    ? (constraints.maxWidth - spacing) / 2
+                    : (constraints.maxWidth - spacing * 3) / 4;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    SizedBox(
+                      width: cardWidth,
+                      child: _buildSummaryCard(
+                        title: 'Gross Revenue',
+                        subtitle: 'Up to today',
+                        value: _fmtAmt(materializedRevenue),
+                        icon: Icons.account_balance_wallet_rounded,
+                        color: AppTheme.success,
+                      ),
+                    ),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _buildSummaryCard(
+                        title: 'Total Costs',
+                        subtitle: 'Room expenses up to today',
+                        value: _fmtAmt(totalExpenses),
+                        icon: Icons.money_off_csred_rounded,
+                        color: AppTheme.danger,
+                      ),
+                    ),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _buildSummaryCard(
+                        title: 'Net Profit',
+                        subtitle: 'Revenue minus costs',
+                        value: _fmtAmt(materializedRevenue - totalExpenses),
+                        icon: Icons.payments_rounded,
+                        color: AppTheme.warning,
+                      ),
+                    ),
+                    SizedBox(
+                      width: cardWidth,
+                      child: _buildSummaryCard(
+                        title: 'Future & Potential',
+                        subtitle: '+ ${_fmtAmt(potentialRevenue)} possible',
+                        value: _fmtAmt(futureRevenue),
+                        icon: Icons.event_available_rounded,
+                        color: AppTheme.adminPrimary,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 32),
 
@@ -314,11 +353,13 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.grey.shade200),
               ),
-              child: Row(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
                 children: [
                   Text('Filter Platforms:', style: TextStyle(fontWeight: FontWeight.w600, color: AppTheme.adminTextMuted)),
                   const SizedBox(width: 16),
-                  ...BookingSource.values.map((source) {
+                  ..._enabledSources.map((source) {
                     final isSelected = _selectedSources.contains(source);
                     final color = _sourceColor(source);
                     return Padding(
@@ -340,62 +381,73 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                   }),
                 ],
               ),
+              ),
             ),
             const SizedBox(height: 32),
 
             // Charts
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Daily Revenue by Source', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            height: 300,
-                            child: _buildRevenueChart(days, dailyStats),
-                          ),
-                        ],
-                      ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final revenueCard = Card(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Daily Revenue by Source', style: AppTheme.dmSerif(fontSize: 16)),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          height: 260,
+                          child: _buildRevenueChart(days, dailyStats),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                const SizedBox(width: 20),
-                Expanded(
-                  flex: 2,
-                  child: Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Active Reservations', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            height: 300,
-                            child: _buildBookingsLineChart(days, dailyStats),
-                          ),
-                        ],
-                      ),
+                );
+                final bookingsCard = Card(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Active Reservations', style: AppTheme.dmSerif(fontSize: 16)),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          height: 260,
+                          child: _buildBookingsLineChart(days, dailyStats),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
+                );
+                if (constraints.maxWidth > 700) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 3, child: revenueCard),
+                      const SizedBox(width: 20),
+                      Expanded(flex: 2, child: bookingsCard),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [revenueCard, const SizedBox(height: 16), bookingsCard],
+                );
+              },
             ),
             const SizedBox(height: 32),
 
             // Data Table
-            const Text('Daily Breakdown', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Text('Daily Breakdown', style: AppTheme.dmSerif(fontSize: 18)),
             const SizedBox(height: 16),
-            Card(
+            LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: constraints.maxWidth < 560 ? 560 : constraints.maxWidth,
+                  child: Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
@@ -475,18 +527,19 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                             ),
                             Expanded(
                               flex: 2,
-                              child: Text(activeBookings.toString(), style: const TextStyle(fontWeight: FontWeight.w500)),
+                              child: Text(
+                                activeBookings.toString(),
+                                style: _numStyle(fontWeight: FontWeight.w500),
+                              ),
                             ),
                             Expanded(
                               flex: 2,
                               child: Align(
                                 alignment: Alignment.centerRight,
                                 child: Text(
-                                  '\$${revenue.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                  _fmtAmt(revenue, decimals: true),
+                                  style: _numStyle(
                                     color: revenue > 0 ? AppTheme.success : AppTheme.adminTextMuted,
-                                    fontSize: 14,
                                   ),
                                 ),
                               ),
@@ -496,11 +549,9 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                               child: Align(
                                 alignment: Alignment.centerRight,
                                 child: Text(
-                                  '\$${expenses.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                  _fmtAmt(expenses, decimals: true),
+                                  style: _numStyle(
                                     color: expenses > 0 ? AppTheme.danger : AppTheme.adminTextMuted,
-                                    fontSize: 14,
                                   ),
                                 ),
                               ),
@@ -510,11 +561,13 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                               child: Align(
                                 alignment: Alignment.centerRight,
                                 child: Text(
-                                  profit < 0 ? '-\$${profit.abs().toStringAsFixed(2)}' : '\$${profit.toStringAsFixed(2)}',
-                                  style: TextStyle(
+                                  profit < 0
+                                      ? '-${_fmtAmt(profit.abs(), decimals: true)}'
+                                      : _fmtAmt(profit, decimals: true),
+                                  style: _numStyle(
                                     fontWeight: FontWeight.w700,
+                                    fontSize: 15,
                                     color: profit > 0 ? AppTheme.success : (profit < 0 ? AppTheme.danger : AppTheme.adminTextMuted),
-                                    fontSize: 16,
                                   ),
                                 ),
                               ),
@@ -524,6 +577,9 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                       );
                     }),
                   ],
+                ),
+              ),
+            ),
                 ),
               ),
             ),
@@ -556,8 +612,12 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
             tooltipMargin: 8,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               return BarTooltipItem(
-                '${_shortDateFormat.format(days[group.x.toInt()])}\n\$${rod.toY.toStringAsFixed(0)}',
-                const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                '${_shortDateFormat.format(days[group.x.toInt()])}\n${_fmtAmt(rod.toY)}',
+                const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
               );
             },
           ),
@@ -589,7 +649,14 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
               reservedSize: 40,
               getTitlesWidget: (value, meta) {
                 if (value == 0 || value == maxRevenue) return const SizedBox.shrink();
-                return Text('\$${value.toInt()}', style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 10));
+                return Text(
+                  _fmtAmt(value),
+                  style: TextStyle(
+                    color: AppTheme.adminTextMuted,
+                    fontSize: 10,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                );
               },
             ),
           ),
@@ -612,7 +679,7 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
           List<BarChartRodStackItem> stackItems = [];
           
           // Order defined by _selectedSources or enum order to maintain consistent stacking
-          for (final source in BookingSource.values) {
+          for (final source in _enabledSources) {
             if (!_selectedSources.contains(source)) continue;
             final val = sources[source] ?? 0.0;
             if (val > 0) {
@@ -727,6 +794,28 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
     );
   }
 
+  /// Formats a monetary amount with thousand separators and the property currency symbol.
+  /// [decimals] true → two decimal places (table rows); false → whole number (KPI cards).
+  String _fmtAmt(double amount, {bool decimals = false}) {
+    final fmt = NumberFormat(decimals ? '#,##0.00' : '#,##0');
+    return '$_sym${fmt.format(amount)}';
+  }
+
+  /// Text style for all numeric values — enables tabular (fixed-width) figures
+  /// so digits align perfectly in columns regardless of their value.
+  TextStyle _numStyle({
+    double fontSize = 14,
+    FontWeight fontWeight = FontWeight.w600,
+    Color? color,
+  }) {
+    return TextStyle(
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+  }
+
   Widget _buildSummaryCard({
     required String title,
     required String subtitle,
@@ -766,29 +855,23 @@ class _FinancialsScreenState extends State<FinancialsScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        value,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          subtitle,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.adminTextMuted,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      style: _numStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.adminTextMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),

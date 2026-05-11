@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // ─── Mobile Theme (Luxury Hotel) ─────────────────────────
@@ -26,25 +25,23 @@ class AppTheme {
         onSecondary: _darkBg,
         onSurface: _textLight,
       ),
-      textTheme: GoogleFonts.outfitTextTheme(
-        const TextTheme(
-          displayLarge: TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: _textLight, letterSpacing: -0.5),
-          displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.w600, color: _textLight),
-          headlineLarge: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: _textLight),
-          headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: _textLight),
-          titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: _textLight),
-          titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: _textLight),
-          bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: _textLight),
-          bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w400, color: _textMuted),
-          labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _goldPrimary, letterSpacing: 1.2),
-        ),
+      textTheme: const TextTheme(
+        displayLarge:   TextStyle(fontFamily: 'Outfit', fontSize: 36, fontWeight: FontWeight.w700, color: _textLight, letterSpacing: -0.5),
+        displayMedium:  TextStyle(fontFamily: 'Outfit', fontSize: 28, fontWeight: FontWeight.w600, color: _textLight),
+        headlineLarge:  TextStyle(fontFamily: 'Outfit', fontSize: 24, fontWeight: FontWeight.w600, color: _textLight),
+        headlineMedium: TextStyle(fontFamily: 'Outfit', fontSize: 20, fontWeight: FontWeight.w600, color: _textLight),
+        titleLarge:     TextStyle(fontFamily: 'Outfit', fontSize: 18, fontWeight: FontWeight.w500, color: _textLight),
+        titleMedium:    TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.w500, color: _textLight),
+        bodyLarge:      TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.w400, color: _textLight),
+        bodyMedium:     TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w400, color: _textMuted),
+        labelLarge:     TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w600, color: _goldPrimary, letterSpacing: 1.2),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: _goldPrimary,
           foregroundColor: _darkBg,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-          textStyle: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 0.8),
+          textStyle: const TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 0.8),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           elevation: 4,
         ),
@@ -79,16 +76,17 @@ class AppTheme {
         shadowColor: Colors.black38,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
-      appBarTheme: AppBarTheme(
+      appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.outfit(
+        titleTextStyle: TextStyle(
+          fontFamily: 'Outfit',
           fontSize: 20,
           fontWeight: FontWeight.w600,
           color: _goldPrimary,
         ),
-        iconTheme: const IconThemeData(color: _goldPrimary),
+        iconTheme: IconThemeData(color: _goldPrimary),
       ),
     );
   }
@@ -112,7 +110,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       scaffoldBackgroundColor: _adminContent,
-      colorScheme: ColorScheme.light(
+      colorScheme: const ColorScheme.light(
         primary: _adminPrimary,
         secondary: _adminPrimaryLight,
         surface: _adminCard,
@@ -120,18 +118,16 @@ class AppTheme {
         onSecondary: Colors.white,
         onSurface: _adminTextDark,
       ),
-      textTheme: GoogleFonts.interTextTheme(
-        TextTheme(
-          displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: _adminTextDark),
-          displayMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: _adminTextDark),
-          headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: _adminTextDark),
-          headlineMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: _adminTextDark),
-          titleLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: _adminTextDark),
-          titleMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: _adminTextDark),
-          bodyLarge: TextStyle(fontSize: 15, fontWeight: FontWeight.w400, color: _adminTextDark),
-          bodyMedium: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: _adminTextMuted),
-          labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _adminPrimary),
-        ),
+      textTheme: const TextTheme(
+        displayLarge:   TextStyle(fontFamily: 'Inter', fontSize: 32, fontWeight: FontWeight.w700, color: _adminTextDark),
+        displayMedium:  TextStyle(fontFamily: 'Inter', fontSize: 24, fontWeight: FontWeight.w600, color: _adminTextDark),
+        headlineLarge:  TextStyle(fontFamily: 'Inter', fontSize: 22, fontWeight: FontWeight.w600, color: _adminTextDark),
+        headlineMedium: TextStyle(fontFamily: 'Inter', fontSize: 18, fontWeight: FontWeight.w600, color: _adminTextDark),
+        titleLarge:     TextStyle(fontFamily: 'Inter', fontSize: 16, fontWeight: FontWeight.w600, color: _adminTextDark),
+        titleMedium:    TextStyle(fontFamily: 'Inter', fontSize: 14, fontWeight: FontWeight.w500, color: _adminTextDark),
+        bodyLarge:      TextStyle(fontFamily: 'Inter', fontSize: 15, fontWeight: FontWeight.w400, color: _adminTextDark),
+        bodyMedium:     TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.w400, color: _adminTextMuted),
+        labelLarge:     TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.w600, color: _adminPrimary),
       ),
       cardTheme: CardThemeData(
         color: _adminCard,
@@ -163,14 +159,15 @@ class AppTheme {
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
-      dataTableTheme: DataTableThemeData(
-        headingRowColor: WidgetStateProperty.all(Colors.grey.shade50),
-        headingTextStyle: GoogleFonts.inter(
+      dataTableTheme: const DataTableThemeData(
+        headingTextStyle: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: _adminTextMuted,
         ),
-        dataTextStyle: GoogleFonts.inter(
+        dataTextStyle: TextStyle(
+          fontFamily: 'Inter',
           fontSize: 14,
           fontWeight: FontWeight.w400,
           color: _adminTextDark,

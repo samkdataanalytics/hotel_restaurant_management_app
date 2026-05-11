@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart' as pkg_provider;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app_theme.dart';
-import '../models/restaurant_order.dart';
+import '../providers/hotel_session.dart';
+import '../providers/service_providers.dart';
+import '../domain/entities/restaurant_order.dart';
 import '../services/restaurant_service.dart';
+import '../di/injection_container.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/menu_item_repository.dart';
 
 const _kOrange = AppTheme.restaurantAccent;
 const _kOrangeBg = AppTheme.restaurantAccentBg;
@@ -11,174 +18,321 @@ const _kBlue = AppTheme.statusBlue;
 const _kGreen = AppTheme.statusGreen;
 const _kPurple = AppTheme.statusPurple;
 
-class RestaurantAnalyticsScreen extends StatefulWidget {
+// ─── Time scale ───────────────────────────────────────────────────────────────
+
+enum _TimeScale { today, sevenDays, thirtyDays, ninetyDays, custom }
+
+extension _TimeScaleX on _TimeScale {
+  String get label => switch (this) {
+    _TimeScale.today       => 'Today',
+    _TimeScale.sevenDays   => '7 Days',
+    _TimeScale.thirtyDays  => '30 Days',
+    _TimeScale.ninetyDays  => '90 Days',
+    _TimeScale.custom      => 'Custom',
+  };
+
+  String barTitle(DateTime start, DateTime end) => switch (this) {
+    _TimeScale.today      => 'Revenue — Today (hourly)',
+    _TimeScale.sevenDays  => 'Revenue — Last 7 Days',
+    _TimeScale.thirtyDays => 'Revenue — Last 30 Days',
+    _TimeScale.ninetyDays => 'Revenue — Last 90 Days (weekly)',
+    _TimeScale.custom     =>
+      'Revenue — ${DateFormat('MMM d').format(start)} – ${DateFormat('MMM d, y').format(end)}',
+  };
+
+  /// Start of the period relative to [now]. Not used for [custom].
+  DateTime start(DateTime now) => switch (this) {
+    _TimeScale.today       => DateTime(now.year, now.month, now.day),
+    _TimeScale.sevenDays   => now.subtract(const Duration(days: 6)),
+    _TimeScale.thirtyDays  => now.subtract(const Duration(days: 29)),
+    _TimeScale.ninetyDays  => now.subtract(const Duration(days: 89)),
+    _TimeScale.custom      => now, // overridden by _customStart
+  };
+}
+
+class RestaurantAnalyticsScreen extends ConsumerStatefulWidget {
   const RestaurantAnalyticsScreen({super.key});
 
   @override
-  State<RestaurantAnalyticsScreen> createState() =>
+  ConsumerState<RestaurantAnalyticsScreen> createState() =>
       _RestaurantAnalyticsScreenState();
 }
 
 class _RestaurantAnalyticsScreenState
-    extends State<RestaurantAnalyticsScreen> {
-  final _service = RestaurantService();
-  final _currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+    extends ConsumerState<RestaurantAnalyticsScreen> {
+  RestaurantService get _service => ref.read(restaurantServiceProvider);
+  final _orderRepo = sl<OrderRepository>();
+  final _menuItemRepo = sl<MenuItemRepository>();
+  NumberFormat get _currency => NumberFormat.currency(
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   bool _isLoading = true;
+  int  _selectedTab = 0; // 0 = Overview, 1 = Service Charge
 
-  // KPIs
-  double _todayRevenue = 0;
-  double _weekRevenue = 0;
-  double _monthRevenue = 0;
+  // Overview time scale
+  _TimeScale _selectedScale = _TimeScale.sevenDays;
+  DateTime? _customStart;
+  DateTime? _customEnd;
+
+  // Service charge tab date range (defaults to current month)
+  late DateTime _scStart;
+  late DateTime _scEnd;
+
+  // All orders cache — shared by both tabs
+  List<RestaurantOrder> _allOrders = [];
+
+  // KPIs (period-scoped)
+  double _periodRevenue = 0;
   double _aov = 0;
   double _cancellationRate = 0;
   int _totalOrders = 0;
-  int _todayCovers = 0; // number of dine-in orders today (proxy for covers)
-  double _totalRefundedAmount = 0; // gross refund value across all orders
+  int _periodCovers = 0;
+  double _totalRefundedAmount = 0;
   int _refundedOrdersCount = 0;
 
-  // Revenue bar chart
-  List<double> _last7Rev = List.filled(7, 0);
-  List<String> _last7Labels = [];
+  // Revenue bar chart (adapts to scale)
+  List<double> _barData = [];
+  List<String> _barLabels = [];
 
-  // Order type mix
+  // Order type mix (period-scoped)
   int _dineInCount = 0;
   int _takeawayCount = 0;
+  int _deliveryCount = 0;
 
-  // Peak hours
+  // Delivery platform breakdown (period-scoped)
+  int    _uberEatsCount   = 0;
+  int    _pickMeCount     = 0;
+  int    _otherCount      = 0;
+  double _uberEatsRevenue = 0;
+  double _pickMeRevenue   = 0;
+  double _otherRevenue    = 0;
+
+  // Peak hours (period-scoped)
   List<int> _peakHours = List.filled(24, 0);
 
-  // Top items
+  // Top items (period-scoped)
   List<MapEntry<String, double>> _topItems = [];
   Map<String, String> _itemNames = {};
   Map<String, int> _itemCounts = {};
 
-  // Food cost
+  // Food cost (static — not period-dependent)
   List<Map<String, dynamic>> _foodCostData = [];
+
+  // Service charge tab state
+  double _scRate = 0.0;
+  double _scTotal = 0.0;
+  double _scAvgPerDineIn = 0.0;
+  double _scPctOfRevenue = 0.0;
+  int    _scDineInOrders = 0;
+  List<double> _scBarData   = [];
+  List<String> _scBarLabels = [];
+  String _scChartTitle = '';
+  // breakdown table: {label, dineIn, sc, revenue}
+  List<Map<String, dynamic>> _scBreakdown = [];
+
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _scStart = DateTime(now.year, now.month, 1);
+    _scEnd   = now;
     _loadData();
   }
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
+    try {
+      _allOrders = await _orderRepo.getOrders();
+      final allOrders = _allOrders;
+      final now = DateTime.now();
 
-    final allOrders = await _service.getOrders();
-    final valid = allOrders
-        .where((o) => o.status != OrderStatus.cancelled)
-        .toList();
-
-    final now = DateTime.now();
-
-    bool sameDay(DateTime a, DateTime b) =>
-        a.year == b.year && a.month == b.month && a.day == b.day;
-
-    final todayOrders =
-        valid.where((o) => sameDay(o.createdAt, now)).toList();
-    final weekOrders =
-        valid.where((o) => now.difference(o.createdAt).inDays < 7).toList();
-    final monthOrders = valid
-        .where((o) =>
-            o.createdAt.month == now.month &&
-            o.createdAt.year == now.year)
-        .toList();
-
-    _todayRevenue = todayOrders.fold(0.0, (s, o) => s + o.totalAmount);
-    _weekRevenue = weekOrders.fold(0.0, (s, o) => s + o.totalAmount);
-    _monthRevenue = monthOrders.fold(0.0, (s, o) => s + o.totalAmount);
-    _totalOrders = valid.length;
-    _aov = valid.isNotEmpty
-        ? valid.fold(0.0, (s, o) => s + o.totalAmount) / valid.length
-        : 0;
-    _cancellationRate = allOrders.isNotEmpty
-        ? allOrders
-                .where((o) => o.status == OrderStatus.cancelled)
-                .length /
-            allOrders.length *
-            100
-        : 0;
-    _todayCovers = todayOrders
-        .where((o) => o.type == OrderType.dineIn)
-        .length;
-
-    // Last 7 days bar chart
-    _last7Rev = List.generate(7, (i) {
-      final day = now.subtract(Duration(days: 6 - i));
-      return valid
-          .where((o) => sameDay(o.createdAt, day))
-          .fold(0.0, (s, o) => s + o.totalAmount);
-    });
-    _last7Labels = List.generate(7, (i) {
-      final day = now.subtract(Duration(days: 6 - i));
-      return DateFormat('EEE').format(day);
-    });
-
-    // Order type mix
-    _dineInCount = valid.where((o) => o.type == OrderType.dineIn).length;
-    _takeawayCount = valid.where((o) => o.type == OrderType.takeaway).length;
-
-    // Peak hours (0-23)
-    _peakHours = List.filled(24, 0);
-    for (final o in valid) {
-      _peakHours[o.createdAt.hour]++;
-    }
-
-    // Refund totals (across all non-cancelled orders)
-    _totalRefundedAmount = 0;
-    _refundedOrdersCount = 0;
-    for (final o in valid) {
-      final refundedInOrder = o.items.fold(
-          0.0, (s, i) => s + i.menuItem.price * i.refundedQuantity);
-      if (refundedInOrder > 0) {
-        _totalRefundedAmount += refundedInOrder;
-        _refundedOrdersCount++;
+      // Resolve period boundaries
+      final DateTime periodStart;
+      final DateTime periodEnd;
+      if (_selectedScale == _TimeScale.custom &&
+          _customStart != null && _customEnd != null) {
+        periodStart = DateTime(_customStart!.year, _customStart!.month, _customStart!.day);
+        periodEnd   = DateTime(_customEnd!.year, _customEnd!.month, _customEnd!.day, 23, 59, 59);
+      } else {
+        periodStart = _selectedScale.start(now);
+        periodEnd   = now;
       }
-    }
 
-    // Top selling items by net revenue (after refunds, using activeQuantity)
-    final itemRev = <String, double>{};
-    final itemCnt = <String, int>{};
-    final itemNames = <String, String>{};
-    for (final o in valid) {
-      for (final item in o.items) {
-        final qty = item.activeQuantity;
-        if (qty <= 0) continue; // fully refunded — exclude entirely
-        itemRev[item.menuItem.id] =
-            (itemRev[item.menuItem.id] ?? 0) + item.subtotal;
-        itemCnt[item.menuItem.id] =
-            (itemCnt[item.menuItem.id] ?? 0) + qty;
-        itemNames[item.menuItem.id] = item.menuItem.name;
+      bool sameDay(DateTime a, DateTime b) =>
+          a.year == b.year && a.month == b.month && a.day == b.day;
+
+      // All non-cancelled orders in the selected period
+      final valid = allOrders
+          .where((o) =>
+              o.status != OrderStatus.cancelled &&
+              !o.createdAt.isBefore(periodStart) &&
+              !o.createdAt.isAfter(periodEnd))
+          .toList();
+
+      // KPIs
+      _periodRevenue = valid.fold(0.0, (s, o) => s + o.totalAmount);
+      _totalOrders   = valid.length;
+      _aov           = valid.isNotEmpty ? _periodRevenue / valid.length : 0;
+      _cancellationRate = allOrders.isNotEmpty
+          ? allOrders.where((o) => o.status == OrderStatus.cancelled).length /
+                allOrders.length * 100
+          : 0;
+      _periodCovers = valid.where((o) => o.type == OrderType.dineIn).length;
+
+      // Refunds
+      _totalRefundedAmount = 0;
+      _refundedOrdersCount = 0;
+      for (final o in valid) {
+        final refundedInOrder = o.items.fold(
+            0.0, (s, i) => s + i.unitPrice * o.discountFactor * i.refundedQuantity);
+        if (refundedInOrder > 0) {
+          _totalRefundedAmount += refundedInOrder;
+          _refundedOrdersCount++;
+        }
       }
-    }
-    _topItems = (itemRev.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value)))
-        .take(5)
-        .toList();
-    _itemNames = itemNames;
-    _itemCounts = itemCnt;
 
-    // Food cost % per menu item
-    final menuItems = await _service.getMenuItems();
-    final foodCostList = <Map<String, dynamic>>[];
-    for (final item in menuItems) {
-      if (item.ingredients.isEmpty) continue;
-      final cost = await _service.getCurrentCostForItem(item.id);
-      if (cost != null && item.price > 0) {
-        foodCostList.add({
-          'name': item.name,
-          'cost': cost,
-          'price': item.price,
-          'costPct': (cost / item.price * 100).clamp(0.0, 100.0),
-        });
+      // Bar chart — granularity depends on scale
+      final spanDays = periodEnd.difference(periodStart).inDays + 1;
+      switch (_selectedScale) {
+        case _TimeScale.today:
+          // Hourly buckets: 0–23
+          _barData = List.generate(24, (h) =>
+              valid.where((o) => o.createdAt.hour == h).fold(0.0, (s, o) => s + o.totalAmount));
+          _barLabels = List.generate(24, (h) => '${h}h');
+
+        case _TimeScale.sevenDays:
+          _barData = List.generate(7, (i) {
+            final day = now.subtract(Duration(days: 6 - i));
+            return valid.where((o) => sameDay(o.createdAt, day)).fold(0.0, (s, o) => s + o.totalAmount);
+          });
+          _barLabels = List.generate(7, (i) =>
+              DateFormat('EEE').format(now.subtract(Duration(days: 6 - i))));
+
+        case _TimeScale.thirtyDays:
+          _barData = List.generate(30, (i) {
+            final day = now.subtract(Duration(days: 29 - i));
+            return valid.where((o) => sameDay(o.createdAt, day)).fold(0.0, (s, o) => s + o.totalAmount);
+          });
+          _barLabels = List.generate(30, (i) {
+            final day = now.subtract(Duration(days: 29 - i));
+            return i % 5 == 0 ? DateFormat('MMM d').format(day) : '';
+          });
+
+        case _TimeScale.ninetyDays:
+          // Group into 13 weekly buckets
+          _barData = List.generate(13, (i) {
+            final weekStart = now.subtract(Duration(days: (12 - i) * 7 + 6));
+            final weekEnd   = now.subtract(Duration(days: (12 - i) * 7));
+            return valid.where((o) =>
+                !o.createdAt.isBefore(weekStart) && !o.createdAt.isAfter(weekEnd))
+              .fold(0.0, (s, o) => s + o.totalAmount);
+          });
+          _barLabels = List.generate(13, (i) {
+            final weekEnd = now.subtract(Duration(days: (12 - i) * 7));
+            return DateFormat('MMM d').format(weekEnd);
+          });
+
+        case _TimeScale.custom:
+          if (spanDays <= 1) {
+            // Single day → hourly
+            _barData = List.generate(24, (h) =>
+                valid.where((o) => o.createdAt.hour == h).fold(0.0, (s, o) => s + o.totalAmount));
+            _barLabels = List.generate(24, (h) => '${h}h');
+          } else if (spanDays <= 31) {
+            // Daily
+            _barData = List.generate(spanDays, (i) {
+              final day = periodStart.add(Duration(days: i));
+              return valid.where((o) => sameDay(o.createdAt, day)).fold(0.0, (s, o) => s + o.totalAmount);
+            });
+            final labelEvery = spanDays > 14 ? 5 : 1;
+            _barLabels = List.generate(spanDays, (i) {
+              final day = periodStart.add(Duration(days: i));
+              return i % labelEvery == 0 ? DateFormat('MMM d').format(day) : '';
+            });
+          } else {
+            // Weekly
+            final weeks = (spanDays / 7).ceil();
+            _barData = List.generate(weeks, (i) {
+              final wStart = periodStart.add(Duration(days: i * 7));
+              final wEnd   = wStart.add(const Duration(days: 6));
+              return valid.where((o) =>
+                  !o.createdAt.isBefore(wStart) && !o.createdAt.isAfter(wEnd))
+                .fold(0.0, (s, o) => s + o.totalAmount);
+            });
+            _barLabels = List.generate(weeks, (i) {
+              final wStart = periodStart.add(Duration(days: i * 7));
+              return DateFormat('MMM d').format(wStart);
+            });
+          }
       }
-    }
-    foodCostList.sort(
-        (a, b) => (b['costPct'] as double).compareTo(a['costPct'] as double));
-    _foodCostData = foodCostList;
 
-    if (mounted) setState(() => _isLoading = false);
+      // Order type mix
+      _dineInCount   = valid.where((o) => o.type == OrderType.dineIn).length;
+      _takeawayCount = valid.where((o) => o.type == OrderType.takeaway).length;
+      _deliveryCount = valid.where((o) => o.type == OrderType.delivery).length;
+
+      // Delivery platform breakdown
+      final deliveryOrders = valid.where((o) => o.type == OrderType.delivery).toList();
+      _uberEatsCount   = deliveryOrders.where((o) => o.deliveryPlatform == 'UberEats').length;
+      _pickMeCount     = deliveryOrders.where((o) => o.deliveryPlatform == 'PickMe').length;
+      _otherCount      = deliveryOrders.where((o) => o.deliveryPlatform == 'Other').length;
+      _uberEatsRevenue = deliveryOrders.where((o) => o.deliveryPlatform == 'UberEats').fold(0.0, (s, o) => s + o.totalAmount);
+      _pickMeRevenue   = deliveryOrders.where((o) => o.deliveryPlatform == 'PickMe').fold(0.0, (s, o) => s + o.totalAmount);
+      _otherRevenue    = deliveryOrders.where((o) => o.deliveryPlatform == 'Other').fold(0.0, (s, o) => s + o.totalAmount);
+
+      // Peak hours
+      _peakHours = List.filled(24, 0);
+      for (final o in valid) { _peakHours[o.createdAt.hour]++; }
+
+      // Top selling items
+      final itemRev   = <String, double>{};
+      final itemCnt   = <String, int>{};
+      final itemNames = <String, String>{};
+      for (final o in valid) {
+        for (final item in o.items) {
+          final qty = item.activeQuantity;
+          if (qty <= 0) continue;
+          itemRev[item.menuItem.id]   = (itemRev[item.menuItem.id] ?? 0) + item.subtotal;
+          itemCnt[item.menuItem.id]   = (itemCnt[item.menuItem.id] ?? 0) + qty;
+          itemNames[item.menuItem.id] = item.menuItem.name;
+        }
+      }
+      _topItems   = (itemRev.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).take(5).toList();
+      _itemNames  = itemNames;
+      _itemCounts = itemCnt;
+
+      // Food cost — not period-dependent, load once
+      if (_foodCostData.isEmpty) {
+        final menuItems = await _menuItemRepo.getMenuItems();
+        final foodCostList = <Map<String, dynamic>>[];
+        for (final item in menuItems) {
+          if (item.ingredients.isEmpty) continue;
+          final cost = await _service.getComputedCostForItem(item);
+          if (cost != null && item.price > 0) {
+            foodCostList.add({
+              'name': item.name,
+              'cost': cost,
+              'price': item.price,
+              'costPct': (cost / item.price * 100).clamp(0.0, 100.0),
+            });
+          }
+        }
+        foodCostList.sort((a, b) => (b['costPct'] as double).compareTo(a['costPct'] as double));
+        _foodCostData = foodCostList;
+      }
+
+      _computeScData();
+      if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load analytics: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   // ─── Build ───────────────────────────────────────────
@@ -195,18 +349,29 @@ class _RestaurantAnalyticsScreenState
                 SliverPadding(
                   padding: const EdgeInsets.all(20),
                   sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      _buildKpiRow(),
-                      const SizedBox(height: 20),
-                      _buildChartsRow(),
-                      const SizedBox(height: 20),
-                      _buildBottomRow(),
-                      if (_foodCostData.isNotEmpty) ...[
-                        const SizedBox(height: 20),
-                        _buildFoodCostSection(),
-                      ],
-                      const SizedBox(height: 20),
-                    ]),
+                    delegate: SliverChildListDelegate(
+                      _selectedTab == 0
+                          ? [
+                              _buildKpiRow(),
+                              const SizedBox(height: 20),
+                              _buildChartsRow(),
+                              const SizedBox(height: 20),
+                              _buildBottomRow(),
+                              if (_deliveryCount > 0) ...[
+                                const SizedBox(height: 20),
+                                _buildDeliveryBreakdown(),
+                              ],
+                              if (_foodCostData.isNotEmpty) ...[
+                                const SizedBox(height: 20),
+                                _buildFoodCostSection(),
+                              ],
+                              const SizedBox(height: 20),
+                            ]
+                          : [
+                              _buildScContent(),
+                              const SizedBox(height: 20),
+                            ],
+                    ),
                   ),
                 ),
               ],
@@ -217,70 +382,342 @@ class _RestaurantAnalyticsScreenState
   Widget _buildHeader() {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Title row ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child: Row(
+              children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                      color: _kOrangeBg, borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.analytics_rounded, color: _kOrange, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Text('Restaurant Analytics',
+                    style: Theme.of(context).textTheme.displayMedium),
+                const Spacer(),
+                // Right-side control switches based on active tab
+                if (_selectedTab == 0) ...[
+                  // ── Overview: time scale selector ──
           Container(
-            width: 40,
-            height: 40,
             decoration: BoxDecoration(
-                color: _kOrangeBg, borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.analytics_rounded, color: _kOrange, size: 22),
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: const EdgeInsets.all(3),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: _TimeScale.values.map((scale) {
+                final selected = _selectedScale == scale;
+                return GestureDetector(
+                  onTap: () async {
+                    if (scale == _TimeScale.custom) {
+                      await _pickDateRange();
+                      return;
+                    }
+                    if (_selectedScale == scale) return;
+                    setState(() { _selectedScale = scale; _foodCostData = []; });
+                    _loadData();
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: selected ? Colors.white : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: selected
+                          ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 1))]
+                          : null,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (scale == _TimeScale.custom)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 5),
+                            child: Icon(Icons.calendar_month_rounded, size: 13,
+                                color: selected ? _kOrange : Colors.black45),
+                          ),
+                        Text(
+                          // Show chosen range when custom is active
+                          selected && scale == _TimeScale.custom && _customStart != null && _customEnd != null
+                              ? '${DateFormat('MMM d').format(_customStart!)} – ${DateFormat('MMM d').format(_customEnd!)}'
+                              : scale.label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                            color: selected ? _kOrange : Colors.black45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
           ),
-          const SizedBox(width: 14),
-          Text('Restaurant Analytics',
-              style: Theme.of(context).textTheme.displayMedium),
-          const Spacer(),
-          Text('$_totalOrders total orders',
-              style: const TextStyle(
-                  color: Colors.black38,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500)),
-          const SizedBox(width: 16),
-          OutlinedButton.icon(
-            onPressed: _loadData,
-            icon: const Icon(Icons.refresh_rounded, size: 16),
-            label: const Text('Refresh'),
-            style: OutlinedButton.styleFrom(
-                foregroundColor: _kOrange,
-                side: const BorderSide(color: _kOrange)),
+                  const SizedBox(width: 12),
+                  Text('$_totalOrders orders',
+                      style: const TextStyle(
+                          color: Colors.black38, fontSize: 13, fontWeight: FontWeight.w500)),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: _loadData,
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Refresh'),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: _kOrange,
+                        side: const BorderSide(color: _kOrange)),
+                  ),
+                ] else ...[
+                  // ── Service Charge tab: custom date range picker ──
+                  _ScDateRangeButton(
+                    start: _scStart,
+                    end: _scEnd,
+                    onTap: _pickScDateRange,
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _computeScData()),
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('Refresh'),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: _kPurple,
+                        side: const BorderSide(color: _kPurple)),
+                  ),
+                ],
+              ],
+            ),
           ),
+          const SizedBox(height: 12),
+          // ── Tab bar ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+            child: Row(children: [
+              _AnalyticsTab(
+                label: 'Overview',
+                icon: Icons.bar_chart_rounded,
+                selected: _selectedTab == 0,
+                accent: _kOrange,
+                onTap: () => setState(() => _selectedTab = 0),
+              ),
+              const SizedBox(width: 4),
+              _AnalyticsTab(
+                label: 'Service Charge',
+                icon: Icons.receipt_long_rounded,
+                selected: _selectedTab == 1,
+                accent: _kPurple,
+                onTap: () => setState(() => _selectedTab = 1),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 1),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
         ],
       ),
     );
   }
 
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 2),
+      lastDate: now,
+      initialDateRange: (_customStart != null && _customEnd != null)
+          ? DateTimeRange(start: _customStart!, end: _customEnd!)
+          : DateTimeRange(
+              start: now.subtract(const Duration(days: 6)),
+              end: now,
+            ),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(
+            primary: _kOrange,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() {
+      _selectedScale = _TimeScale.custom;
+      _customStart   = picked.start;
+      _customEnd     = picked.end;
+      _foodCostData  = [];
+    });
+    _loadData();
+  }
+
+  // ─── Service charge compute & date pick ──────────────
+
+  void _computeScData() {
+    final session  = pkg_provider.Provider.of<HotelSession>(context, listen: false);
+    _scRate        = session.settings?.serviceChargeRate ?? 0.0;
+
+    double orderSC(RestaurantOrder o) =>
+        o.type == OrderType.dineIn ? o.itemsTotal * _scRate : 0.0;
+
+    final periodStart = DateTime(_scStart.year, _scStart.month, _scStart.day);
+    final periodEnd   = DateTime(_scEnd.year, _scEnd.month, _scEnd.day, 23, 59, 59);
+
+    bool sameDay(DateTime a, DateTime b) =>
+        a.year == b.year && a.month == b.month && a.day == b.day;
+
+    final valid = _allOrders
+        .where((o) =>
+            o.status != OrderStatus.cancelled &&
+            !o.createdAt.isBefore(periodStart) &&
+            !o.createdAt.isAfter(periodEnd))
+        .toList();
+
+    _scTotal        = valid.fold(0.0, (s, o) => s + orderSC(o));
+    _scDineInOrders = valid.where((o) => o.type == OrderType.dineIn).length;
+    _scAvgPerDineIn = _scDineInOrders > 0 ? _scTotal / _scDineInOrders : 0.0;
+    final revenue   = valid.fold(0.0, (s, o) => s + o.totalAmount);
+    _scPctOfRevenue = revenue > 0 ? (_scTotal / revenue * 100) : 0.0;
+
+    final spanDays = periodEnd.difference(periodStart).inDays + 1;
+
+    if (spanDays <= 31) {
+      // Daily
+      _scBarData = List.generate(spanDays, (i) {
+        final day = periodStart.add(Duration(days: i));
+        return valid.where((o) => sameDay(o.createdAt, day)).fold(0.0, (s, o) => s + orderSC(o));
+      });
+      final labelEvery = spanDays > 14 ? 3 : 1;
+      _scBarLabels = List.generate(spanDays, (i) {
+        final day = periodStart.add(Duration(days: i));
+        return i % labelEvery == 0 ? DateFormat('d MMM').format(day) : '';
+      });
+      _scChartTitle = 'Daily Service Charge';
+      _scBreakdown = List.generate(spanDays, (i) {
+        final day   = periodStart.add(Duration(days: i));
+        final dayOr = valid.where((o) => sameDay(o.createdAt, day)).toList();
+        return {
+          'label':   DateFormat('EEE d MMM').format(day),
+          'dineIn':  dayOr.where((o) => o.type == OrderType.dineIn).length,
+          'sc':      dayOr.fold(0.0, (s, o) => s + orderSC(o)),
+          'revenue': dayOr.fold(0.0, (s, o) => s + o.totalAmount),
+        };
+      });
+    } else if (spanDays <= 91) {
+      // Weekly
+      final weeks = (spanDays / 7).ceil();
+      _scBarData = List.generate(weeks, (i) {
+        final wStart = periodStart.add(Duration(days: i * 7));
+        final wEnd   = wStart.add(const Duration(days: 6));
+        return valid.where((o) =>
+            !o.createdAt.isBefore(wStart) && !o.createdAt.isAfter(wEnd))
+            .fold(0.0, (s, o) => s + orderSC(o));
+      });
+      _scBarLabels = List.generate(weeks, (i) =>
+          DateFormat('d MMM').format(periodStart.add(Duration(days: i * 7))));
+      _scChartTitle = 'Weekly Service Charge';
+      _scBreakdown = List.generate(weeks, (i) {
+        final wStart = periodStart.add(Duration(days: i * 7));
+        final wEnd   = wStart.add(const Duration(days: 6));
+        final wOr    = valid.where((o) =>
+            !o.createdAt.isBefore(wStart) && !o.createdAt.isAfter(wEnd)).toList();
+        return {
+          'label':   'Wk ${i + 1}  ${DateFormat('d MMM').format(wStart)}–${DateFormat('d MMM').format(wEnd)}',
+          'dineIn':  wOr.where((o) => o.type == OrderType.dineIn).length,
+          'sc':      wOr.fold(0.0, (s, o) => s + orderSC(o)),
+          'revenue': wOr.fold(0.0, (s, o) => s + o.totalAmount),
+        };
+      });
+    } else {
+      // Monthly
+      final months = <DateTime>[];
+      var cur = DateTime(periodStart.year, periodStart.month, 1);
+      while (!cur.isAfter(periodEnd)) {
+        months.add(cur);
+        cur = DateTime(cur.year, cur.month + 1, 1);
+      }
+      _scBarData = months.map((m) {
+        final mEnd = DateTime(m.year, m.month + 1, 1).subtract(const Duration(seconds: 1));
+        return valid.where((o) =>
+            !o.createdAt.isBefore(m) && !o.createdAt.isAfter(mEnd))
+            .fold(0.0, (s, o) => s + orderSC(o));
+      }).toList();
+      _scBarLabels = months.map((m) => DateFormat('MMM yy').format(m)).toList();
+      _scChartTitle = 'Monthly Service Charge';
+      _scBreakdown = months.map((m) {
+        final mEnd = DateTime(m.year, m.month + 1, 1).subtract(const Duration(seconds: 1));
+        final mOr  = valid.where((o) =>
+            !o.createdAt.isBefore(m) && !o.createdAt.isAfter(mEnd)).toList();
+        return {
+          'label':   DateFormat('MMMM yyyy').format(m),
+          'dineIn':  mOr.where((o) => o.type == OrderType.dineIn).length,
+          'sc':      mOr.fold(0.0, (s, o) => s + orderSC(o)),
+          'revenue': mOr.fold(0.0, (s, o) => s + o.totalAmount),
+        };
+      }).toList();
+    }
+  }
+
+  Future<void> _pickScDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 3),
+      lastDate: now,
+      initialDateRange: DateTimeRange(start: _scStart, end: _scEnd),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(
+            primary: _kPurple,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() {
+      _scStart = picked.start;
+      _scEnd   = picked.end;
+      _computeScData();
+    });
+  }
+
   // ─── KPI Row ─────────────────────────────────────────
 
   Widget _buildKpiRow() {
+    final periodLabel = (_selectedScale == _TimeScale.custom &&
+            _customStart != null && _customEnd != null)
+        ? '${DateFormat('MMM d').format(_customStart!)} – ${DateFormat('MMM d').format(_customEnd!)}'
+        : _selectedScale.label;
     return Wrap(
       spacing: 14,
       runSpacing: 14,
       children: [
         SizedBox(
           width: 180,
-          child: _kpiCard("Today's Revenue", _currency.format(_todayRevenue),
-              Icons.today_rounded, _kGreen),
+          child: _kpiCard('Revenue ($periodLabel)', _currency.format(_periodRevenue),
+              Icons.payments_rounded, _kGreen),
         ),
         SizedBox(
           width: 180,
-          child: _kpiCard("This Week", _currency.format(_weekRevenue),
-              Icons.date_range_rounded, _kBlue),
+          child: _kpiCard('Orders ($periodLabel)', '$_totalOrders',
+              Icons.receipt_long_rounded, _kBlue),
         ),
         SizedBox(
           width: 180,
-          child: _kpiCard("This Month", _currency.format(_monthRevenue),
-              Icons.calendar_month_rounded, _kOrange),
-        ),
-        SizedBox(
-          width: 180,
-          child: _kpiCard("Avg Order Value", _currency.format(_aov),
+          child: _kpiCard('Avg Order Value', _currency.format(_aov),
               Icons.show_chart_rounded, _kPurple),
         ),
         SizedBox(
           width: 180,
           child: _kpiCard(
-              "Cancel Rate",
+              'Cancel Rate',
               '${_cancellationRate.toStringAsFixed(1)}%',
               Icons.cancel_outlined,
               _cancellationRate > 10 ? Colors.red : _kGreen,
@@ -288,13 +725,13 @@ class _RestaurantAnalyticsScreenState
         ),
         SizedBox(
           width: 180,
-          child: _kpiCard("Today's Covers", '$_todayCovers dine-ins',
+          child: _kpiCard('Dine-in Covers', '$_periodCovers',
               Icons.people_rounded, Colors.teal),
         ),
         SizedBox(
           width: 180,
           child: _kpiCard(
-              "Total Refunds",
+              'Refunds ($periodLabel)',
               _currency.format(_totalRefundedAmount),
               Icons.undo_rounded,
               Colors.deepOrange,
@@ -362,12 +799,17 @@ class _RestaurantAnalyticsScreenState
   }
 
   Widget _revenueBarChart() {
-    final maxY = _last7Rev.fold(0.0, (a, b) => a > b ? a : b);
+    final maxY = _barData.fold(0.0, (a, b) => a > b ? a : b);
     final chartMax = maxY > 0 ? maxY * 1.3 : 100.0;
     final allZero = maxY == 0;
+    final count = _barData.length;
+    // Bar width shrinks for larger datasets
+    final barW = count <= 7 ? 22.0 : count <= 30 ? 10.0 : 14.0;
 
     return _card(
-      title: 'Revenue — Last 7 Days',
+      title: _selectedScale.barTitle(
+          _customStart ?? _selectedScale.start(DateTime.now()),
+          _customEnd   ?? DateTime.now()),
       icon: Icons.bar_chart_rounded,
       height: 240,
       child: allZero
@@ -377,18 +819,18 @@ class _RestaurantAnalyticsScreenState
                 alignment: BarChartAlignment.spaceAround,
                 maxY: chartMax,
                 barGroups: List.generate(
-                  7,
+                  count,
                   (i) => BarChartGroupData(
                     x: i,
                     barRods: [
                       BarChartRodData(
-                        toY: _last7Rev[i],
-                        color: i == 6
+                        toY: _barData[i],
+                        color: i == count - 1
                             ? _kOrange
                             : _kOrange.withOpacity(0.4),
-                        width: 22,
+                        width: barW,
                         borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(6)),
+                            top: Radius.circular(4)),
                       ),
                     ],
                   ),
@@ -399,9 +841,8 @@ class _RestaurantAnalyticsScreenState
                       showTitles: true,
                       reservedSize: 48,
                       getTitlesWidget: (value, meta) => Text(
-                        '\$${value.toInt()}',
-                        style: const TextStyle(
-                            fontSize: 9, color: Colors.black38),
+                        '$_sym${value.toInt()}',
+                        style: const TextStyle(fontSize: 9, color: Colors.black38),
                       ),
                     ),
                   ),
@@ -410,31 +851,25 @@ class _RestaurantAnalyticsScreenState
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
-                        if (idx < 0 || idx >= _last7Labels.length) {
-                          return const SizedBox();
-                        }
+                        if (idx < 0 || idx >= _barLabels.length) return const SizedBox();
+                        final label = _barLabels[idx];
+                        if (label.isEmpty) return const SizedBox();
                         return SideTitleWidget(
                           meta: meta,
                           child: Text(
-                            _last7Labels[idx],
+                            label,
                             style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: idx == 6
-                                  ? FontWeight.w800
-                                  : FontWeight.w500,
-                              color: idx == 6
-                                  ? _kOrange
-                                  : Colors.black54,
+                              fontSize: 9,
+                              fontWeight: idx == count - 1 ? FontWeight.w800 : FontWeight.w400,
+                              color: idx == count - 1 ? _kOrange : Colors.black45,
                             ),
                           ),
                         );
                       },
                     ),
                   ),
-                  rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 ),
                 gridData: FlGridData(
                   show: true,
@@ -449,7 +884,8 @@ class _RestaurantAnalyticsScreenState
   }
 
   Widget _orderTypePie() {
-    final total = _dineInCount + _takeawayCount;
+    const kDeliveryGreen = Color(0xFF06C167);
+    final total = _dineInCount + _takeawayCount + _deliveryCount;
     return _card(
       title: 'Order Type Mix',
       icon: Icons.donut_large_rounded,
@@ -462,28 +898,33 @@ class _RestaurantAnalyticsScreenState
                   child: PieChart(
                     PieChartData(
                       sections: [
-                        PieChartSectionData(
-                          value: _dineInCount.toDouble(),
-                          color: _kOrange,
-                          title:
-                              '${(_dineInCount * 100 / total).round()}%',
-                          radius: 70,
-                          titleStyle: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white),
-                        ),
-                        PieChartSectionData(
-                          value: _takeawayCount.toDouble(),
-                          color: _kBlue,
-                          title:
-                              '${(_takeawayCount * 100 / total).round()}%',
-                          radius: 70,
-                          titleStyle: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white),
-                        ),
+                        if (_dineInCount > 0)
+                          PieChartSectionData(
+                            value: _dineInCount.toDouble(),
+                            color: _kOrange,
+                            title: '${(_dineInCount * 100 / total).round()}%',
+                            radius: 70,
+                            titleStyle: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
+                        if (_takeawayCount > 0)
+                          PieChartSectionData(
+                            value: _takeawayCount.toDouble(),
+                            color: _kBlue,
+                            title: '${(_takeawayCount * 100 / total).round()}%',
+                            radius: 70,
+                            titleStyle: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
+                        if (_deliveryCount > 0)
+                          PieChartSectionData(
+                            value: _deliveryCount.toDouble(),
+                            color: kDeliveryGreen,
+                            title: '${(_deliveryCount * 100 / total).round()}%',
+                            radius: 70,
+                            titleStyle: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
                       ],
                       sectionsSpace: 3,
                       centerSpaceRadius: 36,
@@ -491,12 +932,14 @@ class _RestaurantAnalyticsScreenState
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 16,
+                  runSpacing: 6,
                   children: [
-                    _legend(_kOrange, 'Dine-in ($_dineInCount)'),
-                    const SizedBox(width: 20),
-                    _legend(_kBlue, 'Takeaway ($_takeawayCount)'),
+                    if (_dineInCount > 0)   _legend(_kOrange,        'Dine-in ($_dineInCount)'),
+                    if (_takeawayCount > 0) _legend(_kBlue,          'Takeaway ($_takeawayCount)'),
+                    if (_deliveryCount > 0) _legend(kDeliveryGreen, 'Delivery ($_deliveryCount)'),
                   ],
                 ),
               ],
@@ -531,8 +974,8 @@ class _RestaurantAnalyticsScreenState
             )
           : Column(
               children: [
-                Row(
-                  children: const [
+                const Row(
+                  children: [
                     Expanded(
                         flex: 3,
                         child: _TH('Item')),
@@ -695,6 +1138,134 @@ class _RestaurantAnalyticsScreenState
     );
   }
 
+  // ─── Delivery Platform Breakdown ─────────────────────
+
+  Widget _buildDeliveryBreakdown() {
+    const kUber   = Color(0xFF06C167);
+    const kPickMe = Color(0xFFFF6B35);
+    const kOther  = Color(0xFF6B7280);
+
+    final platforms = [
+      (
+        label: 'UberEats',
+        icon: Icons.delivery_dining_rounded,
+        color: kUber,
+        count: _uberEatsCount,
+        revenue: _uberEatsRevenue,
+      ),
+      (
+        label: 'PickMe',
+        icon: Icons.moped_rounded,
+        color: kPickMe,
+        count: _pickMeCount,
+        revenue: _pickMeRevenue,
+      ),
+      (
+        label: 'Other',
+        icon: Icons.storefront_rounded,
+        color: kOther,
+        count: _otherCount,
+        revenue: _otherRevenue,
+      ),
+    ];
+
+    final maxRevenue = platforms.fold(0.0, (m, p) => p.revenue > m ? p.revenue : m);
+
+    return _card(
+      title: 'Delivery Platform Breakdown',
+      icon: Icons.delivery_dining_rounded,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Summary row
+          Row(
+            children: platforms.asMap().entries.map((e) {
+              final i = e.key;
+              final p = e.value;
+              final isLast = i == platforms.length - 1;
+              return Expanded(
+                child: Container(
+                  margin: EdgeInsets.only(right: isLast ? 0 : 12),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: p.color.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: p.color.withOpacity(0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(p.icon, color: p.color, size: 18),
+                          const SizedBox(width: 6),
+                          Text(p.label,
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: p.color)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text('${p.count} orders',
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.black54)),
+                      const SizedBox(height: 2),
+                      Text(_currency.format(p.revenue),
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: p.color)),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 16),
+          // Revenue bars
+          ...platforms.where((p) => p.count > 0).map((p) {
+            final frac = maxRevenue > 0 ? p.revenue / maxRevenue : 0.0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 80,
+                    child: Text(p.label,
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w600)),
+                  ),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: frac,
+                        backgroundColor: Colors.grey.shade100,
+                        color: p.color,
+                        minHeight: 8,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 50,
+                    child: Text('${p.count}',
+                        textAlign: TextAlign.end,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: p.color)),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   // ─── Food Cost Section ───────────────────────────────
 
   Widget _buildFoodCostSection() {
@@ -763,8 +1334,8 @@ class _RestaurantAnalyticsScreenState
           ),
           const SizedBox(height: 16),
           // Per-item table
-          Row(
-            children: const [
+          const Row(
+            children: [
               Expanded(flex: 3, child: _TH('Menu Item')),
               Expanded(child: _TH('Cost', center: true)),
               Expanded(child: _TH('Price', center: true)),
@@ -914,6 +1485,263 @@ class _RestaurantAnalyticsScreenState
       ),
     );
   }
+  // ─── Service charge tab content ───────────────────────
+
+  Widget _buildScContent() {
+    if (_scRate <= 0) {
+      return _card(
+        title: 'Service Charge',
+        icon: Icons.receipt_long_rounded,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Text(
+              'No service charge configured.\n'
+              'Set a service charge rate in Account Settings.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.black45, fontSize: 13),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final maxSC = _scBarData.isEmpty ? 1.0
+        : _scBarData.reduce((a, b) => a > b ? a : b);
+    final totalRev = _scBreakdown.fold(0.0, (s, m) => s + (m['revenue'] as double));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Info banner ──
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: _kPurple.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _kPurple.withOpacity(0.2)),
+          ),
+          child: Row(children: [
+            Icon(Icons.info_outline_rounded, color: _kPurple, size: 15),
+            const SizedBox(width: 8),
+            Text(
+              'Rate: ${(_scRate * 100).toStringAsFixed(1)}% applied to dine-in orders only',
+              style: TextStyle(color: _kPurple, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 16),
+
+        // ── KPI cards ──
+        LayoutBuilder(builder: (_, c) {
+          final wide = c.maxWidth > 650;
+          final kpis = [
+            (label: 'Total Collected', value: _currency.format(_scTotal),
+             icon: Icons.payments_rounded,   color: _kPurple),
+            (label: 'Dine-in Orders',  value: '$_scDineInOrders',
+             icon: Icons.restaurant_rounded, color: _kBlue),
+            (label: 'Avg per Order',   value: _currency.format(_scAvgPerDineIn),
+             icon: Icons.speed_rounded, color: _kOrange),
+            (label: '% of Revenue',    value: '${_scPctOfRevenue.toStringAsFixed(1)}%',
+             icon: Icons.pie_chart_rounded,  color: _kGreen),
+          ];
+          final cards = kpis.map((k) => _scKpiCard(k.label, k.value, k.icon, k.color)).toList();
+          return wide
+              ? Row(children: cards.asMap().entries.map((e) => Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(right: e.key < cards.length - 1 ? 12 : 0),
+                    child: e.value))).toList())
+              : Wrap(spacing: 12, runSpacing: 12,
+                  children: cards.map((w) => SizedBox(
+                    width: (c.maxWidth - 12) / 2, child: w)).toList());
+        }),
+        const SizedBox(height: 16),
+
+        // ── Bar chart ──
+        _card(
+          title: _scChartTitle,
+          icon: Icons.bar_chart_rounded,
+          child: SizedBox(
+            height: 230,
+            child: _scBarData.isEmpty
+                ? const Center(child: Text('No data for this period',
+                    style: TextStyle(color: Colors.black38)))
+                : LayoutBuilder(builder: (_, bc) {
+                    final barW = ((bc.maxWidth - 60) / _scBarData.length).clamp(6.0, 36.0);
+                    return BarChart(BarChartData(
+                      maxY: maxSC == 0 ? 1 : maxSC * 1.3,
+                      gridData: FlGridData(
+                        show: true, drawVerticalLine: false,
+                        horizontalInterval: maxSC == 0 ? 1 : maxSC / 4,
+                        getDrawingHorizontalLine: (_) =>
+                            FlLine(color: Colors.black.withOpacity(0.05), strokeWidth: 1),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(sideTitles: SideTitles(
+                          showTitles: true, reservedSize: 58,
+                          getTitlesWidget: (v, _) => Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Text(
+                              v == 0 ? '0' : '$_sym${(v / 1000).toStringAsFixed(1)}k',
+                              style: const TextStyle(fontSize: 9, color: Colors.black45),
+                            ),
+                          ),
+                        )),
+                        bottomTitles: AxisTitles(sideTitles: SideTitles(
+                          showTitles: true, reservedSize: 26,
+                          getTitlesWidget: (v, _) {
+                            final i = v.toInt();
+                            if (i < 0 || i >= _scBarLabels.length) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 5),
+                              child: Text(_scBarLabels[i],
+                                  style: const TextStyle(fontSize: 8.5, color: Colors.black45)),
+                            );
+                          },
+                        )),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      ),
+                      barGroups: List.generate(_scBarData.length, (i) =>
+                        BarChartGroupData(x: i, barRods: [
+                          BarChartRodData(
+                            toY: _scBarData[i],
+                            width: barW,
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                              colors: [_kPurple, _kPurple.withOpacity(0.55)],
+                            ),
+                          ),
+                        ])),
+                      barTouchData: BarTouchData(
+                        touchTooltipData: BarTouchTooltipData(
+                          getTooltipColor: (_) => Colors.black87,
+                          getTooltipItem: (group, _, rod, __) {
+                            final m = _scBreakdown[group.x];
+                            return BarTooltipItem(
+                              '${m['label']}\n${_currency.format(rod.toY)}\n${m['dineIn']} dine-in orders',
+                              const TextStyle(color: Colors.white, fontSize: 11, height: 1.5),
+                            );
+                          },
+                        ),
+                      ),
+                    ));
+                  }),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ── Breakdown table ──
+        _card(
+          title: 'Breakdown',
+          icon: Icons.table_rows_rounded,
+          child: Column(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(children: [
+                Expanded(flex: 3, child: Text('Period',   style: _kHdr)),
+                Expanded(child: Text('Dine-in\nOrders', textAlign: TextAlign.center, style: _kHdr)),
+                Expanded(child: Text('Revenue',  textAlign: TextAlign.center, style: _kHdr)),
+                Expanded(child: Text('Service\nCharge', textAlign: TextAlign.center, style: _kHdr)),
+                Expanded(child: Text('SC %\nof Rev.',  textAlign: TextAlign.center, style: _kHdr)),
+              ]),
+            ),
+            const SizedBox(height: 4),
+            ..._scBreakdown.asMap().entries.map((entry) {
+              final i   = entry.key;
+              final m   = entry.value;
+              final sc  = m['sc']      as double;
+              final rev = m['revenue'] as double;
+              final pct = rev > 0 ? sc / rev * 100 : 0.0;
+              return Container(
+                color: i.isOdd ? const Color(0xFFF8FAFC) : Colors.transparent,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                child: Row(children: [
+                  Expanded(flex: 3,
+                    child: Text(m['label'] as String,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))),
+                  Expanded(child: Text('${m['dineIn']}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Colors.black54))),
+                  Expanded(child: Text(_currency.format(rev),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Colors.black54))),
+                  Expanded(child: Text(_currency.format(sc),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w700,
+                          color: sc > 0 ? _kPurple : Colors.black26))),
+                  Expanded(child: Text(rev > 0 ? '${pct.toStringAsFixed(1)}%' : '—',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: Colors.black54))),
+                ]),
+              );
+            }),
+            // Totals
+            Container(
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+              decoration: BoxDecoration(
+                color: _kPurple.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _kPurple.withOpacity(0.2)),
+              ),
+              child: Row(children: [
+                const Expanded(flex: 3,
+                  child: Text('Total', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800))),
+                Expanded(child: Text('$_scDineInOrders',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                Expanded(child: Text(_currency.format(totalRev),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                Expanded(child: Text(_currency.format(_scTotal),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _kPurple))),
+                Expanded(child: Text(
+                    totalRev > 0 ? '${(_scTotal / totalRev * 100).toStringAsFixed(1)}%' : '—',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+              ]),
+            ),
+          ]),
+        ),
+      ],
+    );
+  }
+
+  Widget _scKpiCard(String label, String value, IconData icon, Color color) =>
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        child: Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: color, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
+            Text(label, style: const TextStyle(fontSize: 11, color: Colors.black45)),
+          ])),
+        ]),
+      );
+
+  static const _kHdr = TextStyle(
+      fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black54);
 }
 
 // Reusable table header cell
@@ -941,3 +1769,82 @@ class _TH extends StatelessWidget {
     );
   }
 }
+
+// ─── Tab button ───────────────────────────────────────────────────────────────
+
+class _AnalyticsTab extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
+  const _AnalyticsTab({
+    required this.label, required this.icon, required this.selected,
+    required this.accent, required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? accent : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 15,
+              color: selected ? accent : Colors.black38),
+          const SizedBox(width: 6),
+          Text(label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? accent : Colors.black45,
+              )),
+        ]),
+      ),
+    );
+  }
+}
+
+// ─── SC date range picker button ──────────────────────────────────────────────
+
+class _ScDateRangeButton extends StatelessWidget {
+  final DateTime start, end;
+  final VoidCallback onTap;
+  const _ScDateRangeButton({required this.start, required this.end, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt   = DateFormat('d MMM yyyy');
+    final label = '${fmt.format(start)}  –  ${fmt.format(end)}';
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.statusPurple.withOpacity(0.4)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.calendar_month_rounded, size: 15, color: AppTheme.statusPurple),
+          const SizedBox(width: 8),
+          Text(label,
+              style: const TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.statusPurple)),
+          const SizedBox(width: 6),
+          const Icon(Icons.expand_more_rounded, size: 16, color: AppTheme.statusPurple),
+        ]),
+      ),
+    );
+  }
+}
+

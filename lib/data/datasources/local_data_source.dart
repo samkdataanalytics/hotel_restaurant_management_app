@@ -239,7 +239,7 @@ class LocalDataSource {
         date: now.subtract(const Duration(days: 1)),
         roomId: roomIds[0],
         isBillable: true,
-        bookingId: checkIns[0].bookingId,
+        bookingId: bookingData[0].id,
       ),
       Expense(
         id: _uuid.v4(),

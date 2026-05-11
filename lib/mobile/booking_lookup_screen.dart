@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app_theme.dart';
 import '../services/booking_service.dart';
-import '../models/booking.dart';
+import '../providers/service_providers.dart';
+import '../domain/entities/booking.dart';
 
-class BookingLookupScreen extends StatefulWidget {
+class BookingLookupScreen extends ConsumerStatefulWidget {
   const BookingLookupScreen({super.key});
 
   @override
-  State<BookingLookupScreen> createState() => _BookingLookupScreenState();
+  ConsumerState<BookingLookupScreen> createState() => _BookingLookupScreenState();
 }
 
-class _BookingLookupScreenState extends State<BookingLookupScreen>
+class _BookingLookupScreenState extends ConsumerState<BookingLookupScreen>
     with SingleTickerProviderStateMixin {
   final _refController = TextEditingController();
-  final _bookingService = BookingService();
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   bool _isSearching = false;
   String? _errorMessage;
   late AnimationController _shakeController;

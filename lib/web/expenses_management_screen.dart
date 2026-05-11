@@ -1,23 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import '../app_theme.dart';
-import '../models/expense.dart';
-import '../models/room.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
+import 'widgets/skeleton.dart';
+import '../providers/hotel_session.dart';
+import '../domain/entities/expense.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/staff_permission.dart';
 import '../services/booking_service.dart';
+import '../providers/service_providers.dart';
 import 'expense_dialog.dart';
 
-class ExpensesManagementScreen extends StatefulWidget {
+class ExpensesManagementScreen extends ConsumerStatefulWidget {
   const ExpensesManagementScreen({super.key});
 
   @override
-  State<ExpensesManagementScreen> createState() => _ExpensesManagementScreenState();
+  ConsumerState<ExpensesManagementScreen> createState() => _ExpensesManagementScreenState();
 }
 
-class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
-  final _bookingService = BookingService();
+class _ExpensesManagementScreenState extends ConsumerState<ExpensesManagementScreen> {
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
   final _dateFormat = DateFormat('MMM dd, yyyy');
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
 
   List<Expense> _expenses = [];
   List<Room> _rooms = [];
@@ -31,20 +38,25 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
   }
 
   Future<void> _loadData() async {
-    final expenses = await _bookingService.getAllExpenses();
-    final rooms = await _bookingService.getAllRooms();
-    final bookings = await _bookingService.getEnrichedBookings();
-    
-    // Sort expenses strictly by most recent
-    expenses.sort((a, b) => b.date.compareTo(a.date));
-
-    if (!mounted) return;
-    setState(() {
-      _expenses = expenses;
-      _rooms = rooms;
-      _bookings = bookings;
-      _isLoading = false;
-    });
+    try {
+      final expenses = await _bookingService.getAllExpenses();
+      final rooms = await _bookingService.getAllRooms();
+      final bookings = await _bookingService.getEnrichedBookings();
+      expenses.sort((a, b) => b.date.compareTo(a.date));
+      if (!mounted) return;
+      setState(() {
+        _expenses = expenses;
+        _rooms = rooms;
+        _bookings = bookings;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load expenses: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Future<void> _deleteExpense(Expense expense) async {
@@ -119,14 +131,12 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_isLoading) return const TableListSkeleton(rowCount: 7, cellCount: 5);
 
     return Container(
       color: const Color(0xFFF8FAFC),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: AppTheme.screenPad(context),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -135,19 +145,22 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Property Expenses', style: Theme.of(context).textTheme.displayMedium),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Manage, categorize, and track operational costs and billables.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Property Expenses', style: Theme.of(context).textTheme.displayMedium),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Manage, categorize, and track operational costs and billables.',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 16),
                 ElevatedButton.icon(
-                  onPressed: () => _openExpenseDialog(),
+                  onPressed: canEditSection(ref, 'hotel_expenses') ? () => _openExpenseDialog() : null,
                   icon: const Icon(Icons.add_rounded, size: 20, color: Colors.white),
                   label: const Text('Log Expense', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                   style: ElevatedButton.styleFrom(
@@ -161,7 +174,12 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
             const SizedBox(height: 32),
 
             // Main Table Card
-            Card(
+            LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: constraints.maxWidth < 680 ? 680 : constraints.maxWidth,
+                  child: Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               margin: EdgeInsets.zero,
               child: ClipRRect(
@@ -197,6 +215,9 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
                     else
                       ..._expenses.map((expense) => _buildExpenseRow(expense)),
                   ],
+                ),
+              ),
+            ),
                 ),
               ),
             ),
@@ -326,7 +347,7 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
             child: Align(
               alignment: Alignment.centerRight,
               child: Text(
-                '\$${expense.amount.toStringAsFixed(2)}',
+                '$_sym${expense.amount.toStringAsFixed(2)}',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   color: AppTheme.danger,
@@ -342,6 +363,7 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                if (canEditSection(ref, 'hotel_expenses')) ...[
                 IconButton(
                   icon: const Icon(Icons.edit_outlined, size: 20),
                   color: AppTheme.adminPrimary,
@@ -354,6 +376,7 @@ class _ExpensesManagementScreenState extends State<ExpensesManagementScreen> {
                   onPressed: () => _deleteExpense(expense),
                   tooltip: 'Delete Expense',
                 ),
+                ],
               ],
             ),
           ),

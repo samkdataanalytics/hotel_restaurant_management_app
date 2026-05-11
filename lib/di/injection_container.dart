@@ -1,13 +1,23 @@
 import 'package:get_it/get_it.dart';
-import '../data/datasources/local_data_source.dart';
+import '../data/datasources/supabase_data_source.dart';
 import '../data/repositories/booking_repository_impl.dart';
 import '../data/repositories/room_repository_impl.dart';
 import '../data/repositories/guest_repository_impl.dart';
 import '../data/repositories/check_in_repository_impl.dart';
+import '../data/repositories/expense_repository_impl.dart';
+import '../data/repositories/menu_item_repository_impl.dart';
+import '../data/repositories/restaurant_table_repository_impl.dart';
+import '../data/repositories/order_repository_impl.dart';
+import '../data/repositories/ingredient_repository_impl.dart';
 import '../domain/repositories/booking_repository.dart';
 import '../domain/repositories/room_repository.dart';
 import '../domain/repositories/guest_repository.dart';
 import '../domain/repositories/check_in_repository.dart';
+import '../domain/repositories/expense_repository.dart';
+import '../domain/repositories/menu_item_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/ingredient_repository.dart';
 import '../domain/usecases/lookup_booking.dart';
 import '../domain/usecases/perform_check_in.dart';
 import '../domain/usecases/perform_check_out.dart';
@@ -21,11 +31,10 @@ final sl = GetIt.instance;
 
 Future<void> initDependencies() async {
   // ─── Data Sources ──────────────────────────────────────────
-  final localDataSource = LocalDataSource();
-  await localDataSource.initialize();
-  sl.registerLazySingleton<LocalDataSource>(() => localDataSource);
+  final supabaseDataSource = SupabaseDataSource();
+  sl.registerLazySingleton<SupabaseDataSource>(() => supabaseDataSource);
 
-  // ─── Repositories ─────────────────────────────────────────
+  // ─── Repositories (Hotel / Booking) ────────────────────────
   sl.registerLazySingleton<BookingRepository>(
     () => BookingRepositoryImpl(sl()),
   );
@@ -37,6 +46,23 @@ Future<void> initDependencies() async {
   );
   sl.registerLazySingleton<CheckInRepository>(
     () => CheckInRepositoryImpl(sl()),
+  );
+  sl.registerLazySingleton<ExpenseRepository>(
+    () => ExpenseRepositoryImpl(sl()),
+  );
+
+  // ─── Repositories (Restaurant) ─────────────────────────────
+  sl.registerLazySingleton<MenuItemRepository>(
+    () => MenuItemRepositoryImpl(),
+  );
+  sl.registerLazySingleton<RestaurantTableRepository>(
+    () => RestaurantTableRepositoryImpl(),
+  );
+  sl.registerLazySingleton<OrderRepository>(
+    () => OrderRepositoryImpl(),
+  );
+  sl.registerLazySingleton<IngredientRepository>(
+    () => IngredientRepositoryImpl(),
   );
 
   // ─── Use Cases ────────────────────────────────────────────

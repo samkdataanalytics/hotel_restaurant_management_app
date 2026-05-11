@@ -1,44 +1,86 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart' as pkg_provider;
 import 'package:uuid/uuid.dart';
 import '../app_theme.dart';
-import '../models/menu_item.dart';
-import '../models/restaurant_table.dart';
-import '../models/restaurant_order.dart';
-import '../models/booking.dart';
-import '../models/guest.dart';
-import '../models/expense.dart';
+import 'widgets/skeleton.dart';
+import 'widgets/responsive_dialog.dart';
+import '../providers/hotel_session.dart';
+import '../providers/app_auth_provider.dart';
+import '../domain/entities/menu_item.dart';
+import '../domain/entities/restaurant_table.dart';
+import '../domain/entities/restaurant_order.dart';
+import '../domain/entities/booking.dart';
+import '../domain/entities/guest.dart';
+import '../domain/entities/room.dart';
+import '../domain/entities/expense.dart';
+import '../domain/entities/inventory_item.dart';
 import '../services/restaurant_service.dart';
+import '../domain/entities/staff_permission.dart';
 import '../services/booking_service.dart';
+import '../providers/service_providers.dart';
+import '../domain/repositories/menu_item_repository.dart';
+import '../domain/repositories/restaurant_table_repository.dart';
+import '../domain/repositories/order_repository.dart';
+import '../domain/repositories/ingredient_repository.dart';
+import '../domain/repositories/booking_repository.dart';
+import '../di/injection_container.dart';
+import 'restaurant_invoice_dialog.dart';
+import 'widgets/split_payment_inputs.dart';
 
 // ─── Restaurant brand colors — sourced from AppTheme ─────────────────────────
 const _kOrange = AppTheme.restaurantAccent;
 const _kOrangeBg = AppTheme.restaurantAccentBg;
 
-class PosScreen extends StatefulWidget {
+class PosScreen extends ConsumerStatefulWidget {
   const PosScreen({super.key});
 
   @override
-  State<PosScreen> createState() => _PosScreenState();
+  ConsumerState<PosScreen> createState() => _PosScreenState();
 }
 
-class _PosScreenState extends State<PosScreen> {
-  final _restaurantService = RestaurantService();
-  final _bookingService = BookingService();
-  final _currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+class _PosScreenState extends ConsumerState<PosScreen> {
+  RestaurantService get _restaurantService => ref.read(restaurantServiceProvider);
+  BookingService get _bookingService => ref.read(bookingServiceProvider);
+  final _menuItemRepo = sl<MenuItemRepository>();
+  final _tableRepo = sl<RestaurantTableRepository>();
+  final _orderRepo = sl<OrderRepository>();
+  final _ingredientRepo = sl<IngredientRepository>();
+  final _bookingRepo = sl<BookingRepository>();
+  NumberFormat get _currencyFormat => NumberFormat.currency(
+      symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
+      decimalDigits: 2);
   final _uuid = const Uuid();
 
   List<MenuItem> _menuItems = [];
   List<RestaurantTable> _tables = [];
+  List<InventoryItem> _inventoryItems = [];
   String _selectedCategory = 'All';
+  String _menuSearchQuery = '';
+  final _menuSearchController = TextEditingController();
 
-  List<OrderItem> _cart = [];
+  final List<OrderItem> _cart = [];
   OrderType _orderType = OrderType.dineIn;
   String? _selectedTableId;
   String? _selectedBookingId;
 
+  // Delivery fields
+  String  _deliveryPlatform = 'UberEats'; // 'UberEats' | 'PickMe' | 'Other'
+  final   _deliveryRefController = TextEditingController();
+  static const _kDeliveryPlatforms = ['UberEats', 'PickMe', 'Other'];
+
+  // Discount applied to the current cart before checkout
+  String  _discountType   = 'percentage'; // 'percentage' | 'flat'
+  double  _discountAmount = 0.0;
+  final   _discountController = TextEditingController();
+  bool    _showDiscount   = false; // hidden by default; revealed on tap
+  bool    _mobileCartExpanded = false; // mobile cart panel open/closed
+
   bool _isLoading = true;
-  Map<String, RestaurantOrder> _activeTabs = {};
+  /// All open (non-cancelled, non-paid) orders per table, sorted oldest→newest.
+  Map<String, List<RestaurantOrder>> _allTableOrders = {};
 
   @override
   void initState() {
@@ -46,37 +88,80 @@ class _PosScreenState extends State<PosScreen> {
     _loadData();
   }
 
-  Future<void> _loadData() async {
-    final items = await _restaurantService.getMenuItems();
-    final tables = await _restaurantService.getTables();
+  @override
+  void dispose() {
+    _discountController.dispose();
+    _deliveryRefController.dispose();
+    _menuSearchController.dispose();
+    super.dispose();
+  }
 
-    // Load orders separately — bad stored data should never block the menu
-    List<RestaurantOrder> orders = [];
+  Future<void> _loadData() async {
+    List<MenuItem> items = [];
+    List<RestaurantTable> tables = [];
     try {
-      orders = await _restaurantService.getOrders();
+      items  = await _menuItemRepo.getMenuItems();
+      tables = await _tableRepo.getTables();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load POS data: $e'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    // Load orders and inventory in parallel — failures should not block the menu
+    List<RestaurantOrder> orders = [];
+    List<InventoryItem> inventory = [];
+    try {
+      final results = await Future.wait([
+        _orderRepo.getOrders(),
+        _ingredientRepo.getInventory(),
+      ]);
+      orders    = results[0] as List<RestaurantOrder>;
+      inventory = results[1] as List<InventoryItem>;
     } catch (_) {}
 
     if (!mounted) return;
 
-    // Build active-tab map: tableId → most-recent unpaid non-terminal order
-    final tabs = <String, RestaurantOrder>{};
+    // Build open-order map: tableId → list of all open orders (oldest→newest).
+    final allOrders = <String, List<RestaurantOrder>>{};
     for (final o in orders) {
       if (o.tableId == null) continue;
-      if (o.status == OrderStatus.cancelled || o.status == OrderStatus.served) continue;
+      if (o.status == OrderStatus.cancelled) continue;
       if (o.paymentStatus == PaymentStatus.paid ||
-          o.paymentStatus == PaymentStatus.chargedToRoom) continue;
-      final existing = tabs[o.tableId!];
-      if (existing == null || o.createdAt.isAfter(existing.createdAt)) {
-        tabs[o.tableId!] = o;
+          o.paymentStatus == PaymentStatus.chargedToRoom) {
+        continue;
       }
+      // Skip fully-refunded ghost orders ($0 total, all items refunded)
+      if (o.items.isNotEmpty && o.items.every((i) => i.isFullyRefunded)) continue;
+      allOrders.putIfAbsent(o.tableId!, () => []).add(o);
+    }
+    for (final list in allOrders.values) {
+      list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     }
 
     setState(() {
-      _menuItems = items;
-      _tables = tables;
-      _activeTabs = tabs;
-      _isLoading = false;
+      _menuItems        = items;
+      _tables           = tables;
+      _inventoryItems   = inventory;
+      _allTableOrders   = allOrders;
+      _isLoading        = false;
     });
+  }
+
+  /// Returns true if any ingredient for [item] has insufficient stock
+  /// to add one more unit (accounting for what's already in the cart).
+  bool _isIngredientOutOfStock(MenuItem item) {
+    if (item.ingredients.isEmpty) return false;
+    final cartQty = _cart.fold(0, (s, c) => c.menuItem.id == item.id ? s + c.quantity : s);
+    for (final ing in item.ingredients) {
+      final inv = _inventoryItems.where((i) => i.ingredientId == ing.ingredientId).firstOrNull;
+      if (inv == null) continue; // no inventory tracked → skip
+      final needed = ing.quantity * (cartQty + 1);
+      if (inv.currentStock < needed) return true;
+    }
+    return false;
   }
 
   List<String> get _categories {
@@ -86,22 +171,232 @@ class _PosScreenState extends State<PosScreen> {
   }
 
   List<MenuItem> get _filteredMenu {
-    if (_selectedCategory == 'All') return _menuItems;
-    return _menuItems.where((e) => e.category == _selectedCategory).toList();
+    var items = _selectedCategory == 'All'
+        ? _menuItems
+        : _menuItems.where((e) => e.category == _selectedCategory).toList();
+    if (_menuSearchQuery.isNotEmpty) {
+      final q = _menuSearchQuery.toLowerCase();
+      items = items.where((e) => e.name.toLowerCase().contains(q)).toList();
+    }
+    return items;
   }
 
-  double get _cartTotal => _cart.fold(0.0, (s, i) => s + i.subtotal);
+  double get _cartItemsTotal => _cart.fold(0.0, (s, i) => s + i.subtotal);
 
-  void _addToCart(MenuItem item) {
+  double get _discountValue {
+    if (_discountAmount <= 0) return 0.0;
+    if (_discountType == 'percentage') return _cartItemsTotal * (_discountAmount / 100);
+    return _discountAmount; // flat
+  }
+
+  double get _cartTotal => (_cartItemsTotal - _discountValue).clamp(0.0, double.infinity);
+
+  int _findCartItemIndex(MenuItem item, Map<String, List<String>> mods) {
+    return _cart.indexWhere((e) {
+      if (e.menuItem.id != item.id) return false;
+      if (e.selectedModifiers.length != mods.length) return false;
+      for (final k in mods.keys) {
+        if (!e.selectedModifiers.containsKey(k)) return false;
+        final listA = List<String>.from(e.selectedModifiers[k]!)..sort();
+        final listB = List<String>.from(mods[k]!)..sort();
+        if (listA.join('|') != listB.join('|')) return false;
+      }
+      return true;
+    });
+  }
+
+  void _addToCart(MenuItem item, {Map<String, List<String>>? selectedModifiers}) {
     if (!item.isAvailable) return;
+    if (_isIngredientOutOfStock(item)) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${item.name} cannot be added — ingredient stock is insufficient.'),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    if (item.modifiers.isNotEmpty && selectedModifiers == null) {
+      _showModifierDialog(item);
+      return;
+    }
+
+    final mods = selectedModifiers ?? {};
+
     setState(() {
-      final idx = _cart.indexWhere((e) => e.menuItem.id == item.id);
+      final idx = _findCartItemIndex(item, mods);
       if (idx >= 0) {
         _cart[idx].quantity++;
       } else {
-        _cart.add(OrderItem(id: _uuid.v4(), menuItem: item, quantity: 1));
+        _cart.add(OrderItem(
+          id: _uuid.v4(),
+          menuItem: item,
+          quantity: 1,
+          selectedModifiers: mods,
+        ));
       }
     });
+  }
+
+  Future<void> _showModifierDialog(MenuItem item) async {
+    final Map<String, List<String>> selections = {};
+    for (final mod in item.modifiers) {
+      selections[mod.name] = [];
+    }
+    int qty = 1;
+
+    final result = await showDialog<({Map<String, List<String>> mods, int qty})>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          bool isValid = true;
+          for (final mod in item.modifiers) {
+            if (mod.isRequired && selections[mod.name]!.isEmpty) {
+              isValid = false; break;
+            }
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text('Customize ${item.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ...item.modifiers.map((mod) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(mod.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                if (mod.isRequired)
+                                  const Text(' *', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                const Spacer(),
+                                Text(mod.allowMultiple ? '(Qty per option)' : '(Choose 1)',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ...mod.options.map((opt) {
+                              final priceLabel = opt.priceAdjustment == 0
+                                  ? _currencyFormat.format(item.price)
+                                  : '+${_currencyFormat.format(opt.priceAdjustment)}';
+                              if (mod.allowMultiple) {
+                                final optQty = selections[mod.name]!.where((n) => n == opt.name).length;
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 5),
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: Text(opt.name, style: const TextStyle(fontSize: 14))),
+                                      Text(priceLabel,
+                                          style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                                      const SizedBox(width: 12),
+                                      _qtyBtn(
+                                        icon: Icons.remove_rounded,
+                                        enabled: optQty > 0,
+                                        onTap: () => setSt(() => selections[mod.name]!.remove(opt.name)),
+                                      ),
+                                      SizedBox(
+                                        width: 36,
+                                        child: Text('$optQty',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                                color: optQty > 0 ? _kOrange : Colors.black26)),
+                                      ),
+                                      _qtyBtn(
+                                        icon: Icons.add_rounded,
+                                        enabled: true,
+                                        onTap: () => setSt(() => selections[mod.name]!.add(opt.name)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              } else {
+                                final isSelected = selections[mod.name]!.contains(opt.name);
+                                return InkWell(
+                                  onTap: () => setSt(() => selections[mod.name] = [opt.name]),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                          color: isSelected ? _kOrange : Colors.grey.shade400,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(child: Text(opt.name, style: const TextStyle(fontSize: 14))),
+                                        Text(priceLabel,
+                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }
+                            }),
+                          ],
+                        ),
+                      );
+                    }),
+                    const Divider(),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        const Text('Quantity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                        const Spacer(),
+                        _qtyBtn(icon: Icons.remove_rounded, enabled: qty > 1, onTap: () => setSt(() => qty--)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text('$qty', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                        ),
+                        _qtyBtn(icon: Icons.add_rounded, enabled: true, onTap: () => setSt(() => qty++)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: isValid ? () => Navigator.pop(ctx, (mods: selections, qty: qty)) : null,
+                style: ElevatedButton.styleFrom(backgroundColor: _kOrange, foregroundColor: Colors.white),
+                child: Text('Add $qty to Cart'),
+              )
+            ],
+          );
+        }
+      )
+    );
+
+    if (result != null) {
+      for (int i = 0; i < result.qty; i++) {
+        _addToCart(item, selectedModifiers: result.mods);
+      }
+    }
+  }
+
+  Widget _qtyBtn({required IconData icon, required bool enabled, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: enabled ? _kOrange.withOpacity(0.12) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, size: 18, color: enabled ? _kOrange : Colors.grey.shade400),
+      ),
+    );
   }
 
   void _updateQuantity(int index, int delta) {
@@ -130,6 +425,7 @@ class _PosScreenState extends State<PosScreen> {
 
     setState(() => _isLoading = true);
 
+    final isDelivery = _orderType == OrderType.delivery;
     final order = RestaurantOrder(
       id: _uuid.v4(),
       orderNumber: 'ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
@@ -140,20 +436,42 @@ class _PosScreenState extends State<PosScreen> {
       bookingId: bookingId,
       createdAt: DateTime.now(),
       items: List.from(_cart),
+      discountType:     _discountAmount > 0 ? _discountType : null,
+      discountAmount:   _discountAmount,
+      deliveryPlatform: isDelivery ? _deliveryPlatform : null,
+      deliveryOrderRef: isDelivery ? _deliveryRefController.text.trim() : null,
     );
 
-    await _restaurantService.saveOrder(order); // also deducts inventory
+    try {
+      await _restaurantService.saveOrder(order); // also deducts inventory
+    } catch (e) {
+      if (!mounted) return null;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save order: $e'),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 6),
+        ),
+      );
+      return null;
+    }
 
     if (paymentStatus == PaymentStatus.chargedToRoom && bookingId != null) {
+      final s = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+      final tRate = s?.taxRate ?? 0.0;
+      final scRate = order.type == OrderType.dineIn ? (s?.serviceChargeRate ?? 0.0) : 0.0;
+      final billAmount = order.totalAmount * (1 + tRate + scRate);
       await _bookingService.addExpense(Expense(
         id: _uuid.v4(),
         description: 'Restaurant Order #${order.orderNumber}',
-        amount: order.totalAmount,
+        amount: billAmount,
         date: DateTime.now(),
         category: ExpenseCategory.restaurant,
         isBillable: true,
         bookingId: bookingId,
-        roomId: roomId,   // ← needed so RoomExpensesDialog picks it up
+        roomId: roomId,
         isPaid: false,
       ));
     }
@@ -163,49 +481,146 @@ class _PosScreenState extends State<PosScreen> {
       // Keep _selectedTableId so the next order can be placed immediately
       // for the same table (e.g. dessert after mains).
       _selectedBookingId = null;
+      _discountAmount = 0.0;
+      _discountController.clear();
+      _deliveryRefController.clear();
+      _showDiscount = false;
+      _mobileCartExpanded = false;
       _isLoading = false;
     });
 
-    // Refresh tables to reflect the latest occupancy status.
-    _loadData();
-
     return order;
+  }
+
+  Future<void> _showSplitCheckoutDialog(double total) async {
+    double splitCash = 0;
+    double splitCard = 0;
+    final cashCtrl = TextEditingController();
+    final cardCtrl = TextEditingController();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: MediaQuery.of(ctx).size.width < 600 ? 8 : 40,
+            vertical: 24,
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SingleChildScrollView(child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.call_split_rounded, color: Color(0xFF8B5CF6), size: 22),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text('Split Payment',
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        icon: const Icon(Icons.close_rounded),
+                        style: IconButton.styleFrom(foregroundColor: Colors.black38),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Total due: ${_currencyFormat.format(total)}',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                  const SizedBox(height: 20),
+                  SplitPaymentInputs(
+                    total: total,
+                    currency: _currencyFormat,
+                    cashCtrl: cashCtrl,
+                    cardCtrl: cardCtrl,
+                    cashAmount: splitCash,
+                    cardAmount: splitCard,
+                    onChanged: (cash, card) => setDlg(() {
+                      splitCash = cash;
+                      splitCard = card;
+                    }),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: (splitCash + splitCard - total).abs() < 0.01
+                          ? () => Navigator.pop(ctx, true)
+                          : null,
+                      icon: const Icon(Icons.check_rounded, size: 18),
+                      label: const Text('Confirm Payment',
+                          style: TextStyle(fontSize: 14)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF22C55E),
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: Colors.grey.shade100,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          ),
+        ),
+      ),
+    );
+    cashCtrl.dispose();
+    cardCtrl.dispose();
+    if (confirmed == true && mounted) {
+      await _handleCheckout(PaymentStatus.paid);
+    }
   }
 
   Future<void> _handleCheckout(PaymentStatus status, {String? bookingId, String? roomId}) async {
     final order = await _checkout(paymentStatus: status, bookingId: bookingId, roomId: roomId);
     if (order == null || !mounted) return;
-    // Clear any queued snackbars (e.g. previous "Order placed!" still visible)
-    // before showing the new one so messages never stack invisibly.
+    // Show invoice and refresh table/inventory data in parallel —
+    // sidebar occupancy updates while the user reviews the invoice.
+    await Future.wait([
+      _showInvoiceDialog(order),
+      _loadData(),
+    ]);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Order #${order.orderNumber} placed!'),
         backgroundColor: AppTheme.success,
-        duration: const Duration(seconds: 4),
-        action: SnackBarAction(
-          label: 'Print Invoice',
-          textColor: Colors.white,
-          onPressed: () {
-            if (mounted) _showInvoiceDialog(order);
-          },
-        ),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
 
   Future<void> _showChargeToRoomDialog() async {
+    // useRootNavigator: true ensures the loading dialog is pushed to (and
+    // popped from) the root navigator, not the ShellRoute's child navigator.
+    // Without this, Navigator.pop(context) removes the POS page itself.
     showDialog(
       context: context,
       barrierDismissible: false,
+      useRootNavigator: true,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-    final enrichedBookings = await _bookingService.getEnrichedBookings();
+    final enrichedBookings = await _bookingRepo.getEnrichedBookings();
+    // Only keep bookings that are checked-in AND have a linked guest record
     final active = enrichedBookings
-        .where((d) => (d['booking'] as Booking).status == BookingStatus.checkedIn)
+        .where((d) =>
+            (d['booking'] as Booking).status == BookingStatus.checkedIn &&
+            d['guest'] != null)
         .toList();
     if (!mounted) return;
-    Navigator.pop(context);
+    Navigator.of(context, rootNavigator: true).pop();
 
     showDialog(
       context: context,
@@ -219,23 +634,39 @@ class _PosScreenState extends State<PosScreen> {
           ],
         ),
         content: SizedBox(
-          width: 480,
+          width: double.maxFinite,
           height: 360,
           child: active.isEmpty
-              ? const Center(child: Text('No checked-in guests found.', style: TextStyle(color: Colors.black38)))
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.hotel_outlined, size: 40, color: Colors.black26),
+                      SizedBox(height: 12),
+                      Text('No checked-in guests found.',
+                          style: TextStyle(color: Colors.black38)),
+                      SizedBox(height: 4),
+                      Text('Guests must be checked in via Reservations first.',
+                          style: TextStyle(color: Colors.black26, fontSize: 12),
+                          textAlign: TextAlign.center),
+                    ],
+                  ),
+                )
               : ListView.builder(
                   itemCount: active.length,
                   itemBuilder: (_, i) {
                     final b = active[i]['booking'] as Booking;
                     final g = active[i]['guest'] as Guest;
-                    final r = active[i]['room'];
+                    final r = active[i]['room'] as Room?;
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: AppTheme.adminPrimary.withOpacity(0.1),
                         child: Icon(Icons.bed, color: AppTheme.adminPrimary),
                       ),
-                      title: Text(g.fullName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text('Room ${r?.roomNumber ?? "N/A"} • Ref: ${b.bookingRef}'),
+                      title: Text(g.fullName,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(
+                          'Room ${r?.roomNumber ?? "N/A"} • Ref: ${b.bookingRef}'),
                       trailing: ElevatedButton(
                         onPressed: () {
                           Navigator.pop(context);
@@ -248,7 +679,8 @@ class _PosScreenState extends State<PosScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.warning,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
                         ),
                         child: const Text('Charge'),
                       ),
@@ -256,28 +688,48 @@ class _PosScreenState extends State<PosScreen> {
                   },
                 ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel'))],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'))
+        ],
       ),
     );
   }
 
-  void _showInvoiceDialog(RestaurantOrder order) {
+  Future<void> _showInvoiceDialog(RestaurantOrder order, {List<RestaurantOrder>? allOrders}) {
     final table = order.tableId != null
         ? _tables.firstWhere((t) => t.id == order.tableId, orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0))
         : null;
-    showDialog(
+    return showDialog(
       context: context,
-      builder: (_) => RestaurantInvoiceDialog(order: order, table: table),
+      builder: (_) => RestaurantInvoiceDialog(order: order, table: table, allOrders: allOrders ?? (openOrdersAvailable(order) ? _allTableOrders[order.tableId!] : null)),
     );
+  }
+
+  bool openOrdersAvailable(RestaurantOrder order) {
+    return order.tableId != null && _allTableOrders.containsKey(order.tableId) && _allTableOrders[order.tableId!]!.length > 1;
   }
 
   // ─── BUILD ──────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) return const PosMenuSkeleton();
 
-    return ColoredBox(
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    final content = isMobile ? ColoredBox(
+      color: const Color(0xFFF1F5F9),
+      child: Column(
+        children: [
+          _buildHeader(),
+          _buildCategoryTabs(),
+          Expanded(child: _buildMenuGrid()),
+          _buildMobileCartBar(),
+        ],
+      ),
+    ) : ColoredBox(
       color: const Color(0xFFF1F5F9),
       child: Row(
         children: [
@@ -295,6 +747,27 @@ class _PosScreenState extends State<PosScreen> {
         ],
       ),
     );
+
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.escape) {
+            if (_cart.isNotEmpty) {
+              setState(() => _cart.clear());
+              return KeyEventResult.handled;
+            }
+          } else if (event.logicalKey == LogicalKeyboardKey.enter || event.logicalKey == LogicalKeyboardKey.numpadEnter) {
+            if (_cart.isNotEmpty && canEditSection(ref, 'restaurant_pos')) {
+              _handleCheckout(PaymentStatus.paid);
+              return KeyEventResult.handled;
+            }
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: content,
+    );
   }
 
   Widget _buildHeader() {
@@ -311,8 +784,12 @@ class _PosScreenState extends State<PosScreen> {
           const SizedBox(width: 14),
           Text('Restaurant POS', style: Theme.of(context).textTheme.displayMedium),
           const Spacer(),
-          Text(DateFormat('EEEE, MMM dd').format(DateTime.now()),
-              style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black45, fontSize: 13)),
+          if (MediaQuery.of(context).size.width >= 600)
+            Text(DateFormat('EEEE, MMM dd').format(DateTime.now()),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black45,
+                    fontSize: 13)),
         ],
       ),
     );
@@ -320,50 +797,147 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _buildCategoryTabs() {
     return Container(
-      height: 58,
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: _categories.length,
-        itemBuilder: (_, i) {
-          final cat = _categories[i];
-          final isSel = cat == _selectedCategory;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8, top: 10, bottom: 10),
-            child: ChoiceChip(
-              label: Text(cat,
-                  style: TextStyle(fontWeight: isSel ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
-              selected: isSel,
-              onSelected: (_) => setState(() => _selectedCategory = cat),
-              selectedColor: _kOrange,
-              labelStyle: TextStyle(color: isSel ? Colors.white : Colors.black87),
-              backgroundColor: Colors.grey.shade100,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+      child: Row(
+        children: [
+          // Search bar
+          SizedBox(
+            width: 220,
+            height: 38,
+            child: TextField(
+              controller: _menuSearchController,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Search items…',
+                hintStyle: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                prefixIcon: Icon(Icons.search_rounded, size: 18, color: Colors.grey.shade400),
+                suffixIcon: _menuSearchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.close_rounded, size: 16, color: Colors.grey.shade400),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                        onPressed: () => setState(() {
+                          _menuSearchQuery = '';
+                          _menuSearchController.clear();
+                        }),
+                      )
+                    : null,
+                filled: true,
+                fillColor: const Color(0xFFF1F5F9),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+              onChanged: (v) => setState(() => _menuSearchQuery = v.trim()),
+              onSubmitted: (v) {
+                final items = _filteredMenu;
+                if (items.isNotEmpty) {
+                  _addToCart(items.first);
+                  setState(() {
+                    _menuSearchQuery = '';
+                    _menuSearchController.clear();
+                  });
+                }
+              },
             ),
-          );
-        },
+          ),
+          const SizedBox(width: 16),
+          // Category chips scrollable
+          Expanded(
+            child: SizedBox(
+              height: 38,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _categories.length,
+                itemBuilder: (_, i) {
+                  final cat = _categories[i];
+                  final isSel = cat == _selectedCategory;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(cat,
+                          style: TextStyle(
+                              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 13)),
+                      selected: isSel,
+                      onSelected: (_) => setState(() => _selectedCategory = cat),
+                      selectedColor: _kOrange,
+                      labelStyle: TextStyle(color: isSel ? Colors.white : Colors.black87),
+                      backgroundColor: Colors.grey.shade100,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildMenuGrid() {
+    final items = _filteredMenu;
+    final w = MediaQuery.of(context).size.width;
+    final cols = w < 600 ? 2 : (w < 900 ? 3 : 4);
+    final pad  = w < 600 ? 12.0 : 20.0;
+    final gap  = w < 600 ? 10.0 : 14.0;
+
+    if (items.isEmpty) {
+      final hasSearch = _menuSearchQuery.isNotEmpty || _selectedCategory != 'All';
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(
+            hasSearch ? Icons.search_off_rounded : Icons.restaurant_menu_rounded,
+            size: 52,
+            color: Colors.black12,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            hasSearch ? 'No items match your search' : 'No menu items yet',
+            style: const TextStyle(fontSize: 15, color: Colors.black38,
+                fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            hasSearch
+                ? 'Try a different category or search term'
+                : 'Add items in Restaurant Management → Menu',
+            style: const TextStyle(fontSize: 13, color: Colors.black26),
+          ),
+        ]),
+      );
+    }
+
     return GridView.builder(
-      padding: const EdgeInsets.all(20),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        childAspectRatio: 0.85,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
+      padding: EdgeInsets.all(pad),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
+        childAspectRatio: 0.72,
+        crossAxisSpacing: gap,
+        mainAxisSpacing: gap,
       ),
-      itemCount: _filteredMenu.length,
-      itemBuilder: (_, i) => _buildMenuTile(_filteredMenu[i]),
+      itemCount: items.length,
+      itemBuilder: (_, i) => _buildMenuTile(items[i]),
     );
   }
 
   Widget _buildMenuTile(MenuItem item) {
-    final unavailable = !item.isAvailable;
+    final unavailable = !item.isAvailable || _isIngredientOutOfStock(item);
+    final outOfStock  = item.isAvailable && _isIngredientOutOfStock(item);
     return GestureDetector(
-      onTap: unavailable ? null : () => _addToCart(item),
+      onTap: unavailable || !canEditSection(ref, 'restaurant_pos') ? null : () => _addToCart(item),
       child: Opacity(
         opacity: unavailable ? 0.45 : 1.0,
         child: Container(
@@ -393,11 +967,50 @@ class _PosScreenState extends State<PosScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
-                  Text(unavailable ? 'Unavailable' : _currencyFormat.format(item.price),
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: unavailable ? Colors.red.shade400 : _kOrange,
-                          fontSize: 13)),
+                  Text(
+                    !item.isAvailable
+                        ? 'Unavailable'
+                        : outOfStock
+                            ? 'Out of Stock'
+                            : _currencyFormat.format(item.price),
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: unavailable ? Colors.red.shade400 : _kOrange,
+                        fontSize: 13),
+                  ),
+                  if (item.modifiers.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 6),
+                      child: Divider(height: 1, thickness: 0.8),
+                    ),
+                    ...item.modifiers.take(2).map((mod) {
+                      // Show all option names on one line; append price only where non-zero
+                      final optLabels = mod.options.map((o) => o.priceAdjustment != 0
+                          ? '${o.name} (+${_currencyFormat.format(o.priceAdjustment)})'
+                          : o.name).join('  ·  ');
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(mod.name,
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.grey.shade500)),
+                            const SizedBox(height: 2),
+                            Text(optLabels,
+                                style: TextStyle(fontSize: 9, color: Colors.grey.shade700),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      );
+                    }),
+                    if (item.modifiers.length > 2)
+                      Text('+${item.modifiers.length - 2} more groups',
+                          style: TextStyle(fontSize: 9, color: Colors.grey.shade400)),
+                  ],
                 ],
               ),
               if (unavailable)
@@ -415,6 +1028,296 @@ class _PosScreenState extends State<PosScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ─── MOBILE CART BAR ─────────────────────────────────────────────────────
+
+  /// Sticky bottom panel on mobile. Collapses to a summary strip and expands
+  /// to show order-type selector, cart items, totals, and checkout buttons.
+  Widget _buildMobileCartBar() {
+    final settings =
+        pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+    final taxRate = settings?.taxRate ?? 0.0;
+    final svcRate = _orderType == OrderType.dineIn
+        ? (settings?.serviceChargeRate ?? 0.0)
+        : 0.0;
+    final taxValue = _cartTotal * taxRate;
+    final svcValue = _cartTotal * svcRate;
+    final grandTotal = _cartTotal + taxValue + svcValue;
+    final hasItems = _cart.isNotEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.10),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Summary strip ──────────────────────────────────────────
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: hasItems
+                  ? () => setState(
+                      () => _mobileCartExpanded = !_mobileCartExpanded)
+                  : null,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(
+                  children: [
+                    Stack(clipBehavior: Clip.none, children: [
+                      Icon(Icons.shopping_cart_outlined,
+                          size: 22,
+                          color: hasItems ? _kOrange : Colors.grey.shade300),
+                      if (hasItems)
+                        Positioned(
+                          top: -4,
+                          right: -6,
+                          child: Container(
+                            width: 17,
+                            height: 17,
+                            decoration: const BoxDecoration(
+                                color: _kOrange, shape: BoxShape.circle),
+                            child: Center(
+                              child: Text(
+                                '${_cart.length}',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ]),
+                    const SizedBox(width: 12),
+                    if (!hasItems)
+                      Text('Cart is empty',
+                          style: TextStyle(
+                              color: Colors.grey.shade400, fontSize: 14))
+                    else ...[
+                      Text(
+                        '${_cart.length} item${_cart.length == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 14),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '• ${_currencyFormat.format(grandTotal)}',
+                        style: const TextStyle(
+                            color: _kOrange,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14),
+                      ),
+                    ],
+                    const Spacer(),
+                    if (hasItems)
+                      Icon(
+                        _mobileCartExpanded
+                            ? Icons.keyboard_arrow_down_rounded
+                            : Icons.keyboard_arrow_up_rounded,
+                        color: Colors.grey.shade400,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Expanded: order type + table + items + total ───────────
+            if (_mobileCartExpanded && hasItems) ...[
+              const Divider(height: 1),
+              // Order type chips
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                child: Row(children: [
+                  Expanded(child: _typeBtn('Dine-in', OrderType.dineIn)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _typeBtn('Takeaway', OrderType.takeaway)),
+                  const SizedBox(width: 6),
+                  Expanded(child: _typeBtn('Delivery', OrderType.delivery)),
+                ]),
+              ),
+              // Delivery panel
+              if (_orderType == OrderType.delivery)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  child: _buildDeliveryPanel(),
+                ),
+              // Table selector (dine-in only)
+              if (_orderType == OrderType.dineIn)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                  child: DropdownButtonFormField<String>(
+                    decoration: InputDecoration(
+                      labelText: 'Select Table',
+                      prefixIcon: const Icon(Icons.table_restaurant_rounded,
+                          size: 18),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                    ),
+                    initialValue: _selectedTableId,
+                    items: _tables
+                        .map((t) => DropdownMenuItem(
+                              value: t.id,
+                              child: Text(
+                                  'Table ${t.tableNumber} (${t.capacity} pax)'),
+                            ))
+                        .toList(),
+                    onChanged: (val) =>
+                        setState(() => _selectedTableId = val),
+                  ),
+                ),
+              const Divider(height: 1),
+              // Cart items (scrollable, capped height)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  separatorBuilder: (_, __) =>
+                      Divider(color: Colors.grey.shade100, height: 1),
+                  itemCount: _cart.length,
+                  itemBuilder: (_, i) => _buildCartItem(_cart[i], i),
+                ),
+              ),
+              // Totals
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Column(
+                  children: [
+                    if (taxRate > 0)
+                      _mobileRow('Tax (${(taxRate * 100).toStringAsFixed(0)}%)',
+                          _currencyFormat.format(taxValue)),
+                    if (svcRate > 0)
+                      _mobileRow(
+                          'Service (${(svcRate * 100).toStringAsFixed(0)}%)',
+                          _currencyFormat.format(svcValue)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Total',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 14)),
+                        Text(
+                          _currencyFormat.format(grandTotal),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 20,
+                              color: _kOrange),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+            ],
+
+            // ── Checkout buttons ───────────────────────────────────────
+            if (hasItems)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: Column(children: [
+                  Row(children: [
+                    Expanded(
+                      flex: 5,
+                      child: ElevatedButton.icon(
+                        onPressed: !canEditSection(ref, 'restaurant_pos')
+                            ? null
+                            : () => _handleCheckout(PaymentStatus.paid),
+                        icon: const Icon(Icons.attach_money_rounded, size: 16),
+                        label: Text(
+                          'Cash  •  ${_currencyFormat.format(grandTotal)}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 12),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.success,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                    if (ref.read(activePropertyProvider)?.isHotel ?? false) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: OutlinedButton.icon(
+                          onPressed: _showChargeToRoomDialog,
+                          icon: const Icon(Icons.hotel_rounded, size: 14),
+                          label: const Text('Room',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w600, fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.warning,
+                            side: BorderSide(color: AppTheme.warning),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ]),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: !canEditSection(ref, 'restaurant_pos')
+                          ? null
+                          : () => _showSplitCheckoutDialog(grandTotal),
+                      icon: const Icon(Icons.call_split_rounded, size: 16),
+                      label: const Text('Split Payment',
+                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _mobileRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style:
+                  TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+          Text(value,
+              style:
+                  TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+        ],
       ),
     );
   }
@@ -466,11 +1369,28 @@ class _PosScreenState extends State<PosScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Current Order', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: _kOrange.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                child: Text('${_cart.length} items',
-                    style: const TextStyle(color: _kOrange, fontWeight: FontWeight.bold, fontSize: 12)),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                transitionBuilder: (child, anim) =>
+                    ScaleTransition(scale: anim, child: child),
+                child: Container(
+                  key: ValueKey(_cart.length),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _cart.isEmpty
+                        ? Colors.grey.shade100
+                        : _kOrange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _cart.isEmpty ? 'Empty' : '${_cart.length} items',
+                    style: TextStyle(
+                      color: _cart.isEmpty ? Colors.grey.shade400 : _kOrange,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -478,10 +1398,16 @@ class _PosScreenState extends State<PosScreen> {
           Row(
             children: [
               Expanded(child: _typeBtn('Dine-in', OrderType.dineIn)),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(child: _typeBtn('Takeaway', OrderType.takeaway)),
+              const SizedBox(width: 6),
+              Expanded(child: _typeBtn('Delivery', OrderType.delivery)),
             ],
           ),
+          if (_orderType == OrderType.delivery) ...[
+            const SizedBox(height: 12),
+            _buildDeliveryPanel(),
+          ],
           if (_orderType == OrderType.dineIn) ...[
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -491,9 +1417,9 @@ class _PosScreenState extends State<PosScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
-              value: _selectedTableId,
+              initialValue: _selectedTableId,
               items: _tables.map((t) {
-                final hasTab = _activeTabs.containsKey(t.id);
+                final hasTab = _allTableOrders.containsKey(t.id);
                 return DropdownMenuItem(
                   value: t.id,
                   child: Row(
@@ -523,8 +1449,8 @@ class _PosScreenState extends State<PosScreen> {
               onChanged: (val) => setState(() => _selectedTableId = val),
             ),
             if (_selectedTableId != null &&
-                _activeTabs.containsKey(_selectedTableId!))
-              _buildActiveTabBanner(_activeTabs[_selectedTableId!]!),
+                _allTableOrders.containsKey(_selectedTableId!))
+              _buildActiveTabBanner(_allTableOrders[_selectedTableId!]!),
           ],
         ],
       ),
@@ -533,11 +1459,19 @@ class _PosScreenState extends State<PosScreen> {
 
   Widget _typeBtn(String label, OrderType type) {
     final sel = _orderType == type;
-    return ElevatedButton(
+    final icon = switch (type) {
+      OrderType.dineIn   => Icons.table_restaurant_rounded,
+      OrderType.takeaway => Icons.takeout_dining_rounded,
+      OrderType.delivery => Icons.delivery_dining_rounded,
+      _                  => Icons.receipt_rounded,
+    };
+    return ElevatedButton.icon(
       onPressed: () => setState(() {
         _orderType = type;
-        if (type == OrderType.takeaway) _selectedTableId = null;
+        if (type != OrderType.dineIn) _selectedTableId = null;
       }),
+      icon: Icon(icon, size: 15),
+      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
       style: ElevatedButton.styleFrom(
         backgroundColor: sel ? _kOrange : Colors.grey.shade100,
         foregroundColor: sel ? Colors.white : Colors.black54,
@@ -545,54 +1479,271 @@ class _PosScreenState extends State<PosScreen> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+    );
+  }
+
+  Widget _buildDeliveryPanel() {
+    const kUber   = Color(0xFF06C167); // Uber Eats green
+    const kPickMe = Color(0xFFFF6B35); // PickMe orange
+    const kOther  = Color(0xFF6B7280); // grey
+
+    Color platformColor(String p) => switch (p) {
+      'UberEats' => kUber,
+      'PickMe'   => kPickMe,
+      _          => kOther,
+    };
+
+    IconData platformIcon(String p) => switch (p) {
+      'UberEats' => Icons.delivery_dining_rounded,
+      'PickMe'   => Icons.two_wheeler_rounded,
+      _          => Icons.storefront_rounded,
+    };
+
+    final color = platformColor(_deliveryPlatform);
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Platform picker
+          Row(children: [
+            Icon(Icons.storefront_rounded, size: 13, color: color),
+            const SizedBox(width: 6),
+            Text('Platform', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                color: color)),
+          ]),
+          const SizedBox(height: 8),
+          Row(children: _kDeliveryPlatforms.map((p) {
+            final sel = _deliveryPlatform == p;
+            final c   = platformColor(p);
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: p != _kDeliveryPlatforms.last ? 6 : 0),
+                child: GestureDetector(
+                  onTap: () => setState(() => _deliveryPlatform = p),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: sel ? c : Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: sel ? c : Colors.grey.shade200, width: sel ? 2 : 1),
+                    ),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(platformIcon(p), size: 18,
+                          color: sel ? Colors.white : c),
+                      const SizedBox(height: 3),
+                      Text(p, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700,
+                          color: sel ? Colors.white : c)),
+                    ]),
+                  ),
+                ),
+              ),
+            );
+          }).toList()),
+          const SizedBox(height: 10),
+          // Order reference
+          Row(children: [
+            Icon(Icons.tag_rounded, size: 13, color: color),
+            const SizedBox(width: 6),
+            Text('Order Reference', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+            const SizedBox(width: 4),
+            Text('(optional)', style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+          ]),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _deliveryRefController,
+            style: const TextStyle(fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'e.g. #4829 from app',
+              hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              border:        OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: color.withOpacity(0.3))),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: color.withOpacity(0.3))),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: color, width: 1.5)),
+              isDense: true,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildCartItem(OrderItem item, int index) {
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Qty controls
-        Container(
-          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              InkWell(
-                onTap: () => _updateQuantity(index, 1),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                child: const Padding(padding: EdgeInsets.all(5), child: Icon(Icons.add, size: 14)),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Qty controls
+            Container(
+              decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () => _updateQuantity(index, 1),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                    child: const Padding(padding: EdgeInsets.all(5), child: Icon(Icons.add, size: 14)),
+                  ),
+                  Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  InkWell(
+                    onTap: () => _updateQuantity(index, -1),
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
+                    child: const Padding(padding: EdgeInsets.all(5), child: Icon(Icons.remove, size: 14)),
+                  ),
+                ],
               ),
-              Text('${item.quantity}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              InkWell(
-                onTap: () => _updateQuantity(index, -1),
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(8)),
-                child: const Padding(padding: EdgeInsets.all(5), child: Icon(Icons.remove, size: 14)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(item.menuItem.name,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      InkWell(
+                        onTap: () => _editItemNoteDialog(item, index),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Icon(Icons.edit_note_rounded, size: 16, color: Colors.grey.shade400),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(_currencyFormat.format(item.unitPrice),
+                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                  if (item.selectedModifiers.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: item.selectedModifiers.entries
+                            .where((e) => e.value.isNotEmpty)
+                            .map((e) {
+                              // Collapse duplicates: ['Medium','Medium','Large'] → 'Medium ×2, Large'
+                              final counts = <String, int>{};
+                              for (final n in e.value) {
+                                counts[n] = (counts[n] ?? 0) + 1;
+                              }
+                              final summary = counts.entries.map((c) => c.value > 1 ? '${c.key} ×${c.value}' : c.key).join(', ');
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 2),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('${e.key}: ',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey.shade500,
+                                            fontWeight: FontWeight.w600)),
+                                    Flexible(
+                                      child: Text(summary,
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.grey.shade700)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            })
+                            .toList(),
+                      ),
+                    ),
+                ],
               ),
-            ],
-          ),
+            ),
+            Text(_currencyFormat.format(item.subtotal),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item.menuItem.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-              Text(_currencyFormat.format(item.menuItem.price),
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-            ],
+        if (item.notes.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 34),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.notes_rounded, size: 12, color: _kOrange),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(item.notes,
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic)),
+                ),
+              ],
+            ),
           ),
-        ),
-        Text(_currencyFormat.format(item.subtotal),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
       ],
     );
   }
 
+  Future<void> _editItemNoteDialog(OrderItem item, int index) async {
+    final noteCtrl = TextEditingController(text: item.notes);
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Special Instructions', style: TextStyle(fontSize: 18)),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: noteCtrl,
+            maxLines: 2,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'e.g. No onions, extra spicy...',
+              border: OutlineInputBorder(),
+            ),
+            onFieldSubmitted: (_) => Navigator.pop(ctx),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _kOrange, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Save'),
+          ),
+        ],
+      )
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _cart[index].notes = noteCtrl.text.trim();
+    });
+  }
+
   Widget _buildCartFooter() {
+    final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+    final taxRate  = settings?.taxRate ?? 0.0;
+    final svcRate  = _orderType == OrderType.dineIn ? (settings?.serviceChargeRate ?? 0.0) : 0.0;
+    // Delivery orders: no service charge (same as takeaway)
+    final taxValue = _cartTotal * taxRate;
+    final svcValue = _cartTotal * svcRate;
+    final grandTotal = _cartTotal + taxValue + svcValue;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -601,28 +1752,185 @@ class _PosScreenState extends State<PosScreen> {
       ),
       child: Column(
         children: [
-          // Subtotal row
+          // ── Discount row — hidden until tapped ───────────────────────
+          if (_cart.isNotEmpty) ...[
+            if (!_showDiscount)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => setState(() => _showDiscount = true),
+                  icon: Icon(Icons.local_offer_outlined,
+                      size: 13, color: Colors.grey.shade500),
+                  label: Text('Add Discount',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              )
+            else ...[
+              Row(children: [
+                // Type toggle: % / flat
+                _DiscountTypeToggle(
+                  selected: _discountType,
+                  onChanged: (t) => setState(() {
+                    _discountType = t;
+                    final raw = double.tryParse(_discountController.text.trim()) ?? 0.0;
+                    _discountAmount = t == 'percentage'
+                        ? raw.clamp(0.0, 100.0)
+                        : raw.clamp(0.0, _cartItemsTotal);
+                  }),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SizedBox(
+                    height: 38,
+                    child: TextField(
+                      controller: _discountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: _discountType == 'percentage' ? 'Discount %' : 'Discount amount',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        isDense: true,
+                        suffixText: _discountType == 'percentage' ? '%' : null,
+                      ),
+                      onChanged: (v) => setState(() {
+                        final raw = double.tryParse(v.trim()) ?? 0.0;
+                        _discountAmount = _discountType == 'percentage'
+                            ? raw.clamp(0.0, 100.0)
+                            : raw.clamp(0.0, _cartItemsTotal);
+                      }),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                IconButton(
+                  icon: Icon(Icons.close_rounded, size: 18,
+                      color: _discountAmount > 0 ? Colors.red : Colors.grey.shade400),
+                  tooltip: 'Hide discount',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                  onPressed: () => setState(() {
+                    _discountAmount = 0.0;
+                    _discountController.clear();
+                    _showDiscount = false;
+                  }),
+                ),
+              ]),
+              const SizedBox(height: 10),
+            ],
+          ],
+
+          // ── Subtotal / Discount / Total rows ─────────────────────────
+          if (_discountAmount > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Subtotal', style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                Text(_currencyFormat.format(_cartItemsTotal),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _discountType == 'percentage'
+                      ? 'Discount (${_discountAmount.toStringAsFixed(0)}%)'
+                      : 'Discount',
+                  style: const TextStyle(fontSize: 13, color: Colors.green),
+                ),
+                Text('− ${_currencyFormat.format(_discountValue)}',
+                    style: const TextStyle(fontSize: 13, color: Colors.green, fontWeight: FontWeight.w600)),
+              ],
+            ),
+            const Divider(height: 12),
+          ],
+          if (taxRate > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Tax (${(taxRate * 100).toStringAsFixed(0)}%)',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                Text(_currencyFormat.format(taxValue),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
+          if (svcRate > 0) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Service (${(svcRate * 100).toStringAsFixed(0)}%)',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                Text(_currencyFormat.format(svcValue),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+              ],
+            ),
+            const SizedBox(height: 4),
+          ],
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Total', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade500)),
-              Text(_currencyFormat.format(_cartTotal),
+              Text(_currencyFormat.format(grandTotal),
                   style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _kOrange)),
             ],
           ),
           const SizedBox(height: 14),
-          // Cash / Card
+          // Delivery badge (shown when delivery mode active)
+          if (_orderType == OrderType.delivery)
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _deliveryRefController,
+              builder: (_, val, __) => Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF06C167).withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF06C167).withOpacity(0.3)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.delivery_dining_rounded,
+                      size: 15, color: Color(0xFF06C167)),
+                  const SizedBox(width: 8),
+                  Text(_deliveryPlatform,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                          color: Color(0xFF06C167))),
+                  if (val.text.trim().isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text('· Ref: ${val.text.trim()}',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                    ),
+                  ],
+                ]),
+              ),
+            ),
+          // Cash / Card / Split
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _cart.isEmpty ? null : () => _handleCheckout(PaymentStatus.paid),
+                  onPressed: _cart.isEmpty || !canEditSection(ref, 'restaurant_pos') ? null : () => _handleCheckout(PaymentStatus.paid),
                   icon: const Icon(Icons.attach_money_rounded, size: 18),
                   label: const Text('Cash', style: TextStyle(fontWeight: FontWeight.w700)),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     backgroundColor: AppTheme.success,
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade200,
+                    disabledForegroundColor: Colors.grey.shade400,
+                    elevation: _cart.isEmpty ? 0 : 2,
+                    shadowColor: AppTheme.success.withOpacity(0.4),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
@@ -630,36 +1938,93 @@ class _PosScreenState extends State<PosScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _cart.isEmpty ? null : () => _handleCheckout(PaymentStatus.paid),
+                  onPressed: _cart.isEmpty || !canEditSection(ref, 'restaurant_pos') ? null : () => _handleCheckout(PaymentStatus.paid),
                   icon: const Icon(Icons.credit_card_rounded, size: 18),
                   label: const Text('Card', style: TextStyle(fontWeight: FontWeight.w700)),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     backgroundColor: const Color(0xFF0EA5E9),
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade200,
+                    disabledForegroundColor: Colors.grey.shade400,
+                    elevation: _cart.isEmpty ? 0 : 2,
+                    shadowColor: const Color(0xFF0EA5E9).withOpacity(0.4),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _cart.isEmpty || !canEditSection(ref, 'restaurant_pos') ? null : () => _showSplitCheckoutDialog(grandTotal),
+                  icon: const Icon(Icons.call_split_rounded, size: 18),
+                  label: const Text('Split', style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade200,
+                    disabledForegroundColor: Colors.grey.shade400,
+                    elevation: _cart.isEmpty ? 0 : 2,
+                    shadowColor: const Color(0xFF8B5CF6).withOpacity(0.4),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
+          // ── Send to Kitchen (Dine-In) ──
+          Builder(builder: (_) {
+            if (_orderType != OrderType.dineIn || _selectedTableId == null) {
+              return const SizedBox.shrink();
+            }
+            final openOrders = _allTableOrders[_selectedTableId!];
+            final hasOpenOrders = openOrders != null && openOrders.isNotEmpty;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: SizedBox(
+                width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _cart.isEmpty ? null : _showChargeToRoomDialog,
-                  icon: const Icon(Icons.hotel_rounded, size: 16),
-                  label: const Text('Room Charge', style: TextStyle(fontSize: 12)),
+                  onPressed: _cart.isEmpty ? null : _sendDineInOrderToKitchen,
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: Text(
+                    _cart.isEmpty
+                        ? (hasOpenOrders ? 'Add items then Send to Kitchen' : 'Select items to Send to Kitchen')
+                        : (hasOpenOrders ? 'Send Add-On to Kitchen  ·  ${_currencyFormat.format(grandTotal)}' : 'Send to Kitchen  ·  ${_currencyFormat.format(grandTotal)}'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    backgroundColor: AppTheme.warning,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: const Color(0xFF0D9488),
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: const Color(0xFF0D9488).withOpacity(0.35),
+                    disabledForegroundColor: Colors.white70,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+            );
+          }),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (ref.read(activePropertyProvider)?.isHotel ?? false) ...[
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _cart.isEmpty ? null : _showChargeToRoomDialog,
+                    icon: const Icon(Icons.hotel_rounded, size: 16),
+                    label: const Text('Room Charge', style: TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: AppTheme.warning,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _cart.isEmpty ? null : () {
@@ -673,6 +2038,8 @@ class _PosScreenState extends State<PosScreen> {
                       paymentStatus: PaymentStatus.unpaid,
                       createdAt: DateTime.now(),
                       items: List.from(_cart),
+                      discountType:   _discountAmount > 0 ? _discountType : null,
+                      discountAmount: _discountAmount,
                     );
                     _showInvoiceDialog(previewOrder);
                   },
@@ -693,94 +2060,288 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  /// Banner shown below the table dropdown when the selected table already
-  /// has a running tab (opened from the Tables screen).
-  Widget _buildActiveTabBanner(RestaurantOrder tab) {
-    final table = _tables.firstWhere((t) => t.id == tab.tableId,
-        orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0));
-    final itemCount = tab.items.fold(0, (s, i) => s + i.activeQuantity);
+  /// Banner shown below the table dropdown when the selected table has open orders.
+  ///
+  /// States:
+  ///  • pending          → "Active tab" — [View Invoice] [Add Cart to Tab]
+  ///  • preparing/ready  → "In kitchen" — [Send to Kitchen] (creates add-on order)
+  ///  • served + unpaid  → "Payment due" — [Collect Payment]
+  ///  Multiple open orders → combined total shown
+  Widget _buildActiveTabBanner(List<RestaurantOrder> openOrders) {
+    if (openOrders.isEmpty) return const SizedBox.shrink();
+
+    final latestOrder = openOrders.last;
+    final combinedTotal = openOrders.fold(0.0, (s, o) => s + o.totalAmount);
+    final combinedItems = openOrders.fold(0, (s, o) => s + o.items.fold(0, (si, i) => si + i.activeQuantity));
+    final hasMultiple = openOrders.length > 1;
+
+    const kPurple = Color(0xFF8B5CF6);
+    const kPurpleBg = Color(0xFFF5F3FF);
+    const kTeal = Color(0xFF0D9488);
+    const kTealBg = Color(0xFFF0FDFA);
+
+    // Determine state based on latest order
+    final allServedUnpaid = openOrders.every((o) =>
+        o.status == OrderStatus.served && o.paymentStatus == PaymentStatus.unpaid);
+    final latestIsInKitchen = latestOrder.status == OrderStatus.preparing ||
+        latestOrder.status == OrderStatus.ready;
+    final isPaymentDue = allServedUnpaid;
+    final isInKitchen = !isPaymentDue && latestIsInKitchen;
+
+    // Pick color theme
+    final Color accentColor;
+    final Color bgColor;
+    final Color borderColor;
+    final IconData headerIcon;
+    final String statusBadge;
+
+    if (isPaymentDue) {
+      accentColor = kPurple; bgColor = kPurpleBg;
+      borderColor = kPurple.withOpacity(0.45);
+      headerIcon = Icons.payments_rounded; statusBadge = 'PAYMENT DUE';
+    } else if (isInKitchen) {
+      accentColor = kTeal; bgColor = kTealBg;
+      borderColor = kTeal.withOpacity(0.45);
+      headerIcon = Icons.restaurant_rounded;
+      statusBadge = latestOrder.status == OrderStatus.preparing ? 'PREPARING' : 'READY';
+    } else {
+      accentColor = _kOrange; bgColor = _kOrangeBg;
+      borderColor = _kOrange.withOpacity(0.35);
+      headerIcon = Icons.receipt_long_rounded; statusBadge = 'ACTIVE';
+    }
+
     return Container(
       margin: const EdgeInsets.only(top: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: _kOrangeBg,
+        color: bgColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _kOrange.withOpacity(0.35)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header row: icon + summary + badge
           Row(
             children: [
-              const Icon(Icons.receipt_long_rounded,
-                  size: 14, color: _kOrange),
+              Icon(headerIcon, size: 14, color: accentColor),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(
-                  'Active tab — $itemCount item(s)  ·  '
-                  '${_currencyFormat.format(tab.totalAmount)}',
-                  style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: _kOrange),
-                ),
+                child: hasMultiple
+                    ? Text(
+                        '${openOrders.length} open orders · $combinedItems item(s)  ·  ${_currencyFormat.format(combinedTotal)}',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: accentColor),
+                      )
+                    : Text(
+                        '$combinedItems item(s)  ·  ${_currencyFormat.format(combinedTotal)}',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: accentColor),
+                      ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: accentColor, borderRadius: BorderRadius.circular(4)),
+                child: Text(statusBadge,
+                    style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w800, color: Colors.white)),
               ),
             ],
           ),
+
+          // In-kitchen hint
+          if (isInKitchen) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Order is ${latestOrder.status.name} in the kitchen. New items will be sent as a separate kitchen ticket.',
+              style: TextStyle(fontSize: 11, color: accentColor.withOpacity(0.8)),
+            ),
+          ],
+
           const SizedBox(height: 8),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => _showInvoiceDialog(tab),
-                icon: const Icon(Icons.receipt_outlined, size: 13),
-                label: const Text('View Invoice',
-                    style: TextStyle(fontSize: 11)),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _kOrange,
-                  side: const BorderSide(color: _kOrange),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(7)),
+
+          // Action row
+          if (isPaymentDue)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _collectPayment(openOrders),
+                icon: const Icon(Icons.payment_rounded, size: 15),
+                label: Text(
+                  hasMultiple
+                      ? 'Collect Payment · ${_currencyFormat.format(combinedTotal)}'
+                      : 'Collect Payment',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPurple,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 0,
                 ),
               ),
-              const SizedBox(width: 8),
-              if (_cart.isNotEmpty)
+            )
+          else if (isInKitchen)
+            Row(
+              children: [
                 OutlinedButton.icon(
-                  onPressed: _addCartToTab,
-                  icon: const Icon(Icons.playlist_add_rounded, size: 13),
-                  label: const Text('Add Cart to Tab',
-                      style: TextStyle(fontSize: 11)),
+                  onPressed: () => _showInvoiceDialog(latestOrder, allOrders: openOrders),
+                  icon: const Icon(Icons.receipt_outlined, size: 13),
+                  label: const Text('View Invoice', style: TextStyle(fontSize: 11)),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.teal,
-                    side: const BorderSide(color: Colors.teal),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 6),
+                    foregroundColor: kTeal,
+                    side: const BorderSide(color: kTeal),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(7)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
                   ),
                 ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                if (_cart.isNotEmpty)
+                  ElevatedButton.icon(
+                    onPressed: _sendDineInOrderToKitchen,
+                    icon: const Icon(Icons.send_rounded, size: 13),
+                    label: const Text('Send to Kitchen', style: TextStyle(fontSize: 11)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kTeal,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                    ),
+                  ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _showInvoiceDialog(latestOrder, allOrders: openOrders),
+                  icon: const Icon(Icons.receipt_outlined, size: 13),
+                  label: const Text('View Invoice', style: TextStyle(fontSize: 11)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _kOrange,
+                    side: const BorderSide(color: _kOrange),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (_cart.isNotEmpty)
+                  OutlinedButton.icon(
+                    onPressed: _addCartToTab,
+                    icon: const Icon(Icons.playlist_add_rounded, size: 13),
+                    label: const Text('Add Cart to Tab', style: TextStyle(fontSize: 11)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.teal,
+                      side: const BorderSide(color: Colors.teal),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                    ),
+                  ),
+              ],
+            ),
         ],
       ),
     );
   }
 
-  /// Adds all cart items to an existing table tab then clears the cart.
+  /// Collect payment for all open orders on a table (combined settlement).
+  Future<void> _collectPayment(List<RestaurantOrder> openOrders) async {
+    if (openOrders.isEmpty) return;
+    final tableId = openOrders.first.tableId!;
+    final table = _tables.firstWhere((t) => t.id == tableId,
+        orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0));
+    // itemsTotal = sum of each order's items before individual discounts
+    final itemsTotal = openOrders.fold(0.0, (s, o) => s + o.itemsTotal);
+
+    final settings = pkg_provider.Provider.of<HotelSession>(context, listen: false).settings;
+    final taxRate           = settings?.taxRate           ?? 0.0;
+    final serviceChargeRate = settings?.serviceChargeRate ?? 0.0;
+
+    final result = await showDialog<_PosPaymentResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _PosPaymentDialog(
+        displayOrder: openOrders.last,
+        table: table,
+        bookingService: _bookingService,
+        currency: _currencyFormat,
+        itemsTotal: itemsTotal,
+        taxRate: taxRate,
+        serviceChargeRate: serviceChargeRate,
+        orderCount: openOrders.length,
+        isHotelProperty: ref.read(activePropertyProvider)?.isHotel ?? false,
+        roomNumber: openOrders.last.roomNumber,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    setState(() => _isLoading = true);
+    try {
+      // Apply discount to the first (parent) order before settling
+      if (result.discountAmount > 0 || result.discountType != null) {
+        await _restaurantService.updateOrderDiscount(
+          orderId:        openOrders.first.id,
+          discountType:   result.discountType,
+          discountAmount: result.discountAmount,
+        );
+      }
+      await _restaurantService.settleAllTableOrders(
+        tableId: tableId,
+        paymentStatus: result.paymentStatus,
+        bookingId: result.bookingId,
+        roomId: result.roomId,
+      );
+      if (!mounted) return;
+      // Build updated orders list — first order carries the discount
+      final updatedFirst = openOrders.first.copyWith(
+        discountType:   result.discountType,
+        discountAmount: result.discountAmount,
+      );
+      final updatedOrders = [updatedFirst, ...openOrders.skip(1)];
+      // Show combined invoice
+      await showDialog(
+        context: context,
+        builder: (_) => RestaurantInvoiceDialog(
+          order: updatedOrders.first,
+          table: table,
+          allOrders: updatedOrders.length > 1 ? updatedOrders : null,
+        ),
+      );
+      setState(() {
+        _selectedTableId = null;
+        _isLoading = false;
+      });
+      _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  /// Adds all cart items to the existing pending tab (append to same order).
   Future<void> _addCartToTab() async {
-    final tab = _activeTabs[_selectedTableId!];
-    if (tab == null || _cart.isEmpty) return;
+    final orders = _allTableOrders[_selectedTableId!];
+    if (orders == null || orders.isEmpty || _cart.isEmpty) return;
+    final pendingOrder = orders.lastWhere(
+      (o) => o.status == OrderStatus.pending,
+      orElse: () => orders.last,
+    );
     setState(() => _isLoading = true);
     try {
       final newItems = _cart
           .map((i) => OrderItem(id: _uuid.v4(), menuItem: i.menuItem, quantity: i.quantity))
           .toList();
-      await _restaurantService.addItemsToOrder(tab.id, newItems);
+      await _restaurantService.addItemsToOrder(pendingOrder.id, newItems);
       setState(() {
         _cart.clear();
         _isLoading = false;
@@ -791,8 +2352,67 @@ class _PosScreenState extends State<PosScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              '${newItems.length} item(s) added to Table ${_tables.firstWhere((t) => t.id == _selectedTableId).tableNumber} tab.'),
+              '${newItems.length} item(s) added to Table ${_tables.firstWhere((t) => t.id == _selectedTableId, orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0)).tableNumber} tab.'),
           backgroundColor: _kOrange,
+        ),
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  /// Creates a new pending order for the current table and sends
+  /// it directly to the kitchen.
+  Future<void> _sendDineInOrderToKitchen() async {
+    if (_cart.isEmpty || _selectedTableId == null) return;
+    setState(() => _isLoading = true);
+    try {
+      final tableNum = _tables
+          .firstWhere((t) => t.id == _selectedTableId, orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0))
+          .tableNumber;
+      // Find the root parent for this table's session
+      final openOrders = _allTableOrders[_selectedTableId!] ?? [];
+      final rootParent = openOrders.firstOrNull;
+      final parentId =
+          rootParent?.parentOrderId ?? rootParent?.id; // always link to root
+
+      final order = RestaurantOrder(
+        id: _uuid.v4(),
+        orderNumber: 'ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+        tableId: _selectedTableId,
+        type: OrderType.dineIn,
+        status: OrderStatus.pending,
+        paymentStatus: PaymentStatus.unpaid,
+        createdAt: DateTime.now(),
+        items: List.from(_cart),
+        parentOrderId: parentId,
+      );
+      await _restaurantService.saveOrder(order);
+      setState(() {
+        _cart.clear();
+        _isLoading = false;
+      });
+      _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(openOrders.isEmpty 
+              ? 'Order sent to kitchen for Table $tableNum.'
+              : 'Add-on order sent to kitchen for Table $tableNum.'),
+          backgroundColor: const Color(0xFF0D9488),
+          duration: const Duration(seconds: 4),
+          action: SnackBarAction(
+            label: 'View',
+            textColor: Colors.white,
+            onPressed: () {
+              if (mounted) _showInvoiceDialog(order);
+            },
+          ),
         ),
       );
     } catch (e) {
@@ -805,320 +2425,590 @@ class _PosScreenState extends State<PosScreen> {
   }
 }
 
+
 // ═══════════════════════════════════════════════════════════════════════════
-//  INVOICE DIALOG
+//  POS PAYMENT DIALOG  (collect payment for a payment-due tab)
 // ═══════════════════════════════════════════════════════════════════════════
 
-class RestaurantInvoiceDialog extends StatelessWidget {
-  final RestaurantOrder order;
-  final RestaurantTable? table;
+class _PosPaymentResult {
+  final PaymentStatus paymentStatus;
+  final String? bookingId;
+  final String? roomId;
+  final String? discountType;
+  final double discountAmount;
+  final double cashAmount;
+  final double cardAmount;
+  const _PosPaymentResult({
+    required this.paymentStatus,
+    this.bookingId,
+    this.roomId,
+    this.discountType,
+    this.discountAmount = 0.0,
+    this.cashAmount = 0.0,
+    this.cardAmount = 0.0,
+  });
+}
 
-  const RestaurantInvoiceDialog({super.key, required this.order, this.table});
+class _PosPaymentDialog extends StatefulWidget {
+  final RestaurantOrder displayOrder;
+  final RestaurantTable table;
+  final BookingService bookingService;
+  final NumberFormat currency;
+  final double itemsTotal; // pre-discount total from all open orders
+  final double taxRate;
+  final double serviceChargeRate;
+  final int orderCount;
+  final bool isHotelProperty;
+  /// For room service orders: the room number the order came from.
+  /// When set, the Room Charge guest list is pre-filtered to that room.
+  final String? roomNumber;
+
+  const _PosPaymentDialog({
+    required this.displayOrder,
+    required this.table,
+    required this.bookingService,
+    required this.currency,
+    required this.itemsTotal,
+    required this.taxRate,
+    required this.serviceChargeRate,
+    this.orderCount = 1,
+    this.isHotelProperty = true,
+    this.roomNumber,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    final currency = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
-    final dateF = DateFormat('MMM dd, yyyy  HH:mm');
-    final isPreview = order.id == 'preview';
-    final subtotal = order.totalAmount;
-    const taxRate = 0.08; // 8%
-    final tax = subtotal * taxRate;
-    final grandTotal = subtotal + tax;
+  State<_PosPaymentDialog> createState() => _PosPaymentDialogState();
+}
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: SizedBox(
-        width: 460,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ─ Header buttons bar
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.receipt_long_rounded, size: 16, color: _kOrange),
-                  const SizedBox(width: 8),
-                  Text(isPreview ? 'Invoice Preview' : 'Invoice',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded, size: 16),
-                    label: const Text('Close'),
-                    style: TextButton.styleFrom(foregroundColor: Colors.black45),
-                  ),
-                ],
-              ),
+class _PosPaymentDialogState extends State<_PosPaymentDialog> {
+  String? _method; // 'cash' | 'card' | 'room'
+  List<Map<String, dynamic>> _checkedInGuests = [];
+  bool _loadingGuests = false;
+  Map<String, dynamic>? _selectedGuest;
+
+  String _discountType   = 'percentage';
+  double _discountAmount = 0.0;
+  final  _discountController = TextEditingController();
+
+  // Split payment
+  bool   _splitMode  = false;
+  double _splitCash  = 0.0;
+  double _splitCard  = 0.0;
+  final  _splitCashCtrl = TextEditingController();
+  final  _splitCardCtrl = TextEditingController();
+
+  static const _kPurple = Color(0xFF8B5CF6);
+  static const _kGreen = Color(0xFF22C55E);
+  static const _kGreenBg = Color(0xFFF0FFF4);
+
+  double get _discountValue {
+    if (_discountAmount <= 0) return 0.0;
+    if (_discountType == 'percentage') return widget.itemsTotal * (_discountAmount / 100);
+    return _discountAmount;
+  }
+  double get _subtotal => (widget.itemsTotal - _discountValue).clamp(0.0, double.infinity);
+  double get _tax => _subtotal * widget.taxRate;
+  double get _serviceCharge => _subtotal * widget.serviceChargeRate;
+  double get _total => _subtotal + _tax + _serviceCharge;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCheckedInGuests();
+  }
+
+  @override
+  void dispose() {
+    _discountController.dispose();
+    _splitCashCtrl.dispose();
+    _splitCardCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCheckedInGuests() async {
+    setState(() => _loadingGuests = true);
+    final enriched = await widget.bookingService.getEnrichedCheckIns();
+    if (!mounted) return;
+    final checkedIn = enriched.where((d) {
+      final booking = d['booking'] as Booking?;
+      return booking != null && booking.status == BookingStatus.checkedIn;
+    }).toList();
+
+    // For room service orders, auto-select the guest from the originating room.
+    Map<String, dynamic>? autoSelected;
+    if (widget.roomNumber != null) {
+      autoSelected = checkedIn.firstWhere(
+        (d) => (d['room'] as Room?)?.roomNumber == widget.roomNumber,
+        orElse: () => <String, dynamic>{},
+      );
+      if (autoSelected.isEmpty) autoSelected = null;
+    }
+
+    setState(() {
+      _checkedInGuests = checkedIn;
+      _loadingGuests = false;
+      if (autoSelected != null) _selectedGuest = autoSelected;
+    });
+  }
+
+  bool _canConfirmWith(double total) {
+    if (_splitMode) return (_splitCash + _splitCard - total).abs() < 0.01;
+    if (_method == null) return false;
+    if (_method == 'room' && _selectedGuest == null) return false;
+    return true;
+  }
+
+  void _confirm() {
+    PaymentStatus status;
+    String? bookingId;
+    String? roomId;
+    if (_splitMode) {
+      status = PaymentStatus.paid;
+    } else if (_method == 'room') {
+      status = PaymentStatus.chargedToRoom;
+      final b = _selectedGuest!['booking'] as Booking;
+      bookingId = b.id;
+      roomId = b.roomId;
+    } else {
+      status = PaymentStatus.paid;
+    }
+    Navigator.pop(context, _PosPaymentResult(
+      paymentStatus:  status,
+      bookingId:      bookingId,
+      roomId:         roomId,
+      discountType:   _discountAmount > 0 ? _discountType : null,
+      discountAmount: _discountAmount,
+      cashAmount:     _splitMode ? _splitCash : 0,
+      cardAmount:     _splitMode ? _splitCard : 0,
+    ));
+  }
+
+  Widget _methodTile(IconData icon, String label, String value, Color color) {
+    final selected = _method == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() {
+          _method = value;
+          if (value != 'room') _selectedGuest = null;
+        }),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: selected ? color.withOpacity(0.08) : Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? color : Colors.grey.shade200,
+              width: selected ? 2 : 1,
             ),
-
-            // ─ Invoice body (scrollable)
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Restaurant header
-                    Center(
-                      child: Column(
-                        children: [
-                          Container(
-                            width: 52, height: 52,
-                            decoration: BoxDecoration(
-                              color: _kOrangeBg,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Icon(Icons.restaurant_rounded, color: _kOrange, size: 28),
-                          ),
-                          const SizedBox(height: 10),
-                          const Text('Grand Luxe Restaurant',
-                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-                          const SizedBox(height: 4),
-                          Text('123 Luxury Ave • Tel: +1 (555) 000-1234',
-                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Invoice meta
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(child: _meta('Order #', isPreview ? '—' : order.orderNumber)),
-                          Expanded(child: _meta('Date', dateF.format(order.createdAt))),
-                          if (table != null)
-                            Expanded(child: _meta('Table', table!.tableNumber)),
-                          Expanded(child: _meta('Type', order.type == OrderType.dineIn ? 'Dine-in' : 'Takeaway')),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Items header
-                    Row(
-                      children: [
-                        Expanded(flex: 4, child: _colHdr('Item')),
-                        Expanded(child: _colHdr('Qty', align: TextAlign.center)),
-                        Expanded(child: _colHdr('Price', align: TextAlign.end)),
-                        Expanded(child: _colHdr('Total', align: TextAlign.end)),
-                      ],
-                    ),
-                    const Divider(thickness: 1.5),
-
-                    // Items (skip fully-refunded lines; show active qty only)
-                    ...order.items
-                        .where((item) => !item.isFullyRefunded)
-                        .map((item) => Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 7),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    flex: 4,
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                            item.menuItem.imageUrl.isNotEmpty
-                                                ? item.menuItem.imageUrl
-                                                : '🍽️',
-                                            style: const TextStyle(
-                                                fontSize: 18)),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(item.menuItem.name,
-                                                  style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      fontSize: 13)),
-                                              if (item.refundedQuantity > 0)
-                                                Text(
-                                                  '${item.refundedQuantity} unit(s) refunded',
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: Colors
-                                                          .orange.shade600),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                        '${item.activeQuantity}',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                            color: Colors.grey.shade600,
-                                            fontSize: 13)),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                        currency
-                                            .format(item.menuItem.price),
-                                        textAlign: TextAlign.end,
-                                        style: TextStyle(
-                                            color: Colors.grey.shade600,
-                                            fontSize: 13)),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                        currency.format(item.subtotal),
-                                        textAlign: TextAlign.end,
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 13)),
-                                  ),
-                                ],
-                              ),
-                            )),
-
-                    const Divider(thickness: 1.5),
-                    const SizedBox(height: 8),
-
-                    // Totals
-                    _totalRow('Subtotal', currency.format(subtotal)),
-                    const SizedBox(height: 4),
-                    _totalRow('Tax (8%)', currency.format(tax), muted: true),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _kOrangeBg,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('GRAND TOTAL',
-                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-                          Text(currency.format(grandTotal),
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: _kOrange)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    // Payment status
-                    if (!isPreview)
-                      Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _paymentColor(order.paymentStatus).withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(_paymentLabel(order.paymentStatus),
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: _paymentColor(order.paymentStatus),
-                                  fontSize: 13)),
-                        ),
-                      ),
-                    const SizedBox(height: 16),
-                    const Center(
-                      child: Text('Thank you for dining with us!',
-                          style: TextStyle(color: Colors.black38, fontSize: 12, fontStyle: FontStyle.italic)),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // ─ Footer action
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                border: Border(top: BorderSide(color: Colors.grey.shade200)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (!isPreview)
-                    Text('Order #${order.orderNumber}',
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
-                  const Spacer(),
-                  ElevatedButton.icon(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.check_rounded, size: 16),
-                    label: const Text('Done'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _kOrange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: selected ? color : Colors.black38, size: 22),
+              const SizedBox(height: 6),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? color : Colors.black45)),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _meta(String label, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.black38, fontWeight: FontWeight.w500)),
-        Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-      ],
+  @override
+  Widget build(BuildContext context) {
+    return ResponsiveDialog(
+      maxWidth: 480,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+              // Title
+              Row(
+                children: [
+                  const Icon(Icons.payment_rounded, color: _kPurple, size: 22),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Collect Payment',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                      Text(
+                          widget.orderCount > 1
+                              ? 'Table ${widget.table.tableNumber}  ·  ${widget.orderCount} orders'
+                              : 'Table ${widget.table.tableNumber}  ·  Order #${widget.displayOrder.orderNumber}',
+                          style: const TextStyle(fontSize: 12, color: Colors.black38)),
+                    ],
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                    style: IconButton.styleFrom(foregroundColor: Colors.black38),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // ── Discount row ──────────────────────────────────────────────
+              Row(
+                children: [
+                  _DiscountTypeToggle(
+                    selected: _discountType,
+                    onChanged: (t) => setState(() {
+                      _discountType   = t;
+                      final raw = double.tryParse(_discountController.text.trim()) ?? 0.0;
+                      _discountAmount = t == 'percentage'
+                          ? raw.clamp(0.0, 100.0)
+                          : raw.clamp(0.0, widget.itemsTotal);
+                    }),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _discountController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: _discountType == 'percentage' ? 'Discount %' : 'Discount amount',
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        isDense: true,
+                        suffixText: _discountType == 'percentage' ? '%' : null,
+                      ),
+                      onChanged: (v) => setState(() {
+                        final raw = double.tryParse(v.trim()) ?? 0.0;
+                        _discountAmount = _discountType == 'percentage'
+                            ? raw.clamp(0.0, 100.0)
+                            : raw.clamp(0.0, widget.itemsTotal);
+                      }),
+                    ),
+                  ),
+                  if (_discountAmount > 0) ...[
+                    const SizedBox(width: 6),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 18, color: Colors.red),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                      onPressed: () => setState(() {
+                        _discountAmount = 0.0;
+                        _discountController.clear();
+                      }),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Amount summary
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F3FF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Items   ${widget.currency.format(widget.itemsTotal)}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                        if (_discountAmount > 0)
+                          Text(
+                            _discountType == 'percentage'
+                                ? 'Discount (${_discountAmount.toStringAsFixed(0)}%)   − ${widget.currency.format(_discountValue)}'
+                                : 'Discount   − ${widget.currency.format(_discountValue)}',
+                            style: const TextStyle(fontSize: 12, color: Colors.green),
+                          ),
+                        Text(
+                          'Tax (${(widget.taxRate * 100).toStringAsFixed(0)}%)   ${widget.currency.format(_tax)}',
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                        ),
+                        if (widget.serviceChargeRate > 0)
+                          Text(
+                            'Service (${(widget.serviceChargeRate * 100).toStringAsFixed(0)}%)   ${widget.currency.format(_serviceCharge)}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                          ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text('TOTAL DUE',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.black38)),
+                        Text(widget.currency.format(_total),
+                            style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: _kPurple)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Payment method
+              Row(
+                children: [
+                  const Text('Select payment method',
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black45)),
+                  const Spacer(),
+                  SplitPaymentToggle(
+                    active: _splitMode,
+                    onTap: () => setState(() {
+                      _splitMode = !_splitMode;
+                      if (_splitMode) {
+                        _method = null;
+                        _selectedGuest = null;
+                        _splitCash = 0;
+                        _splitCard = 0;
+                        _splitCashCtrl.clear();
+                        _splitCardCtrl.clear();
+                      }
+                    }),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (!_splitMode) Row(
+                children: [
+                  _methodTile(Icons.money_rounded, 'Cash', 'cash', Colors.green.shade600),
+                  const SizedBox(width: 10),
+                  _methodTile(Icons.credit_card_rounded, 'Card', 'card', Colors.blue.shade600),
+                  if (widget.isHotelProperty) ...[
+                    const SizedBox(width: 10),
+                    _methodTile(Icons.hotel_rounded, 'Room Charge', 'room', _kOrange),
+                  ],
+                ],
+              ),
+
+              // Split payment inputs
+              if (_splitMode) ...[
+                const SizedBox(height: 14),
+                SplitPaymentInputs(
+                  total: _total,
+                  currency: widget.currency,
+                  cashCtrl: _splitCashCtrl,
+                  cardCtrl: _splitCardCtrl,
+                  cashAmount: _splitCash,
+                  cardAmount: _splitCard,
+                  onChanged: (cash, card) => setState(() {
+                    _splitCash = cash;
+                    _splitCard = card;
+                  }),
+                ),
+              ],
+
+              // Room charge — checked-in guest list
+              if (_method == 'room') ...[
+                const SizedBox(height: 16),
+                // Room service origin banner
+                if (widget.roomNumber != null) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _selectedGuest != null
+                          ? const Color(0xFFF0FFF4)
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _selectedGuest != null
+                            ? Colors.green.shade200
+                            : Colors.orange.shade200,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _selectedGuest != null
+                              ? Icons.check_circle_rounded
+                              : Icons.info_outline_rounded,
+                          size: 14,
+                          color: _selectedGuest != null
+                              ? Colors.green.shade600
+                              : Colors.orange.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _selectedGuest != null
+                              ? 'Order from Room ${widget.roomNumber} — guest auto-selected'
+                              : 'Order from Room ${widget.roomNumber} — no guest checked in to this room',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: _selectedGuest != null
+                                ? Colors.green.shade700
+                                : Colors.orange.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                const Text('Select checked-in guest',
+                    style: TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black45)),
+                const SizedBox(height: 8),
+                Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: _loadingGuests
+                      ? const Center(child: CircularProgressIndicator())
+                      : _checkedInGuests.isEmpty
+                          ? const Center(
+                              child: Text('No guests currently checked in',
+                                  style: TextStyle(color: Colors.black38, fontSize: 13)))
+                          : ListView.separated(
+                              padding: const EdgeInsets.all(6),
+                              itemCount: _checkedInGuests.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (_, i) {
+                                final d = _checkedInGuests[i];
+                                final booking = d['booking'] as Booking;
+                                final guest = d['guest'] as Guest;
+                                final room = d['room'] as Room?;
+                                final isSelected = _selectedGuest == d;
+                                return ListTile(
+                                  dense: true,
+                                  selected: isSelected,
+                                  selectedColor: _kOrange,
+                                  selectedTileColor: _kOrange.withOpacity(0.06),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8)),
+                                  leading: CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: _kOrange.withOpacity(0.1),
+                                    child: const Icon(Icons.person_rounded,
+                                        size: 16, color: _kOrange),
+                                  ),
+                                  title: Text(guest.fullName,
+                                      style: const TextStyle(
+                                          fontSize: 13, fontWeight: FontWeight.w600)),
+                                  subtitle: Text(
+                                      'Room ${room?.roomNumber ?? "N/A"}  ·  Ref: ${booking.bookingRef}',
+                                      style: TextStyle(
+                                          fontSize: 11, color: Colors.grey.shade500)),
+                                  trailing: isSelected
+                                      ? const Icon(Icons.check_circle_rounded,
+                                          color: _kOrange, size: 18)
+                                      : null,
+                                  onTap: () => setState(() => _selectedGuest = d),
+                                );
+                              },
+                            ),
+                ),
+                if (_selectedGuest != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _kGreenBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle_rounded, size: 15, color: _kGreen),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Charging to: ${(_selectedGuest!['guest'] as Guest).fullName}'
+                          '  ·  Room ${(_selectedGuest!['room'] as Room?)?.roomNumber ?? "—"}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+
+              const SizedBox(height: 20),
+
+              // Confirm
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _canConfirmWith(_total) ? _confirm : null,
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: const Text('Confirm Payment & Close Table',
+                      style: TextStyle(fontSize: 14)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _kGreen,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade100,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+    );
+  }
+}
+
+// ── Discount type toggle (%  /  flat) ────────────────────────────────────────
+
+class _DiscountTypeToggle extends StatelessWidget {
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  const _DiscountTypeToggle({required this.selected, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 38,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        _btn('%',    'percentage'),
+        _btn('Flat', 'flat'),
+      ]),
     );
   }
 
-  Widget _colHdr(String text, {TextAlign align = TextAlign.start}) {
-    return Text(text,
-        textAlign: align,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black45, letterSpacing: 0.5));
-  }
-
-  Widget _totalRow(String label, String value, {bool muted = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(fontSize: 13, color: muted ? Colors.black38 : Colors.black54)),
-        Text(value,
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: muted ? FontWeight.w400 : FontWeight.w600,
-                color: muted ? Colors.black38 : Colors.black87)),
-      ],
+  Widget _btn(String label, String value) {
+    final active = selected == value;
+    return GestureDetector(
+      onTap: () => onChanged(value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: active ? _kOrange : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: active ? Colors.white : Colors.grey.shade600,
+          ),
+        ),
+      ),
     );
-  }
-
-  Color _paymentColor(PaymentStatus s) {
-    switch (s) {
-      case PaymentStatus.paid: return const Color(0xFF22C55E);
-      case PaymentStatus.chargedToRoom: return const Color(0xFFF59E0B);
-      case PaymentStatus.unpaid: return const Color(0xFFEF4444);
-    }
-  }
-
-  String _paymentLabel(PaymentStatus s) {
-    switch (s) {
-      case PaymentStatus.paid: return 'PAID';
-      case PaymentStatus.chargedToRoom: return 'CHARGED TO ROOM';
-      case PaymentStatus.unpaid: return 'UNPAID';
-    }
   }
 }

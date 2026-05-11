@@ -1,0 +1,534 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../app_theme.dart';
+import '../providers/hotel_session.dart';
+import '../domain/entities/menu_item.dart';
+import '../domain/entities/restaurant_order.dart';
+import '../domain/entities/restaurant_table.dart';
+import 'widgets/responsive_dialog.dart';
+
+/// Full-page invoice dialog.
+///
+/// Pass [allOrders] when there are multiple tickets (parent + add-ons) to
+/// render each ticket's items under a sub-header and combined totals.
+class RestaurantInvoiceDialog extends StatelessWidget {
+  final RestaurantOrder order;
+  final RestaurantTable? table;
+
+  /// When the session has add-on tickets, pass ALL settled orders here.
+  /// The invoice will show every ticket's items combined with sub-headers.
+  final List<RestaurantOrder>? allOrders;
+
+  const RestaurantInvoiceDialog({
+    super.key,
+    required this.order,
+    this.table,
+    this.allOrders,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = Provider.of<HotelSession>(context, listen: false).settings;
+    final accent   = settings?.primaryColor ?? AppTheme.restaurantAccent;
+    final accentBg = accent.withAlpha(30);
+    final sym = settings?.currencySymbol ?? '\$';
+    final currency = NumberFormat.currency(symbol: sym, decimalDigits: 2);
+    final dateF = DateFormat('MMM dd, yyyy  HH:mm');
+    final isPreview = order.id == 'preview';
+    // When allOrders is supplied, aggregate across all tickets; otherwise single order.
+    final ordersToRender = allOrders != null && allOrders!.isNotEmpty
+        ? allOrders!
+        : [order];
+    final isMultiTicket = ordersToRender.length > 1;
+
+    // Items subtotal (before any discounts)
+    final itemsTotal = ordersToRender.fold(0.0, (s, o) => s + o.itemsTotal);
+
+    // Aggregate discounts across all tickets
+    final totalDiscount = ordersToRender.fold(0.0, (s, o) => s + o.discountValue);
+    final subtotal = itemsTotal - totalDiscount; // post-discount subtotal
+
+    // Tax & service charge from property settings
+    // Service charge applies only to the dine-in / room-service portion (not takeaway)
+    final dineInItemsTotal = ordersToRender
+        .where((o) => o.type == OrderType.dineIn || o.type == OrderType.roomService)
+        .fold(0.0, (s, o) => s + o.itemsTotal);
+    final dineInFraction = itemsTotal > 0 ? dineInItemsTotal / itemsTotal : 0.0;
+    final hasTakeaway = ordersToRender.any(
+        (o) => o.type == OrderType.takeaway || o.type == OrderType.delivery);
+    final taxRate           = settings?.taxRate           ?? 0.0;
+    final serviceChargeRate = settings?.serviceChargeRate ?? 0.0;
+    final tax           = subtotal * taxRate;
+    final serviceCharge = (dineInFraction * subtotal) * serviceChargeRate;
+    final grandTotal = subtotal + tax + serviceCharge;
+
+    return ResponsiveDialogNoScroll(
+      maxWidth: 460,
+      child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ─ Header buttons bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.receipt_long_rounded, size: 16, color: accent),
+                  const SizedBox(width: 8),
+                  Text(isPreview ? 'Invoice Preview' : 'Invoice',
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded, size: 16),
+                    label: const Text('Close'),
+                    style: TextButton.styleFrom(foregroundColor: Colors.black45),
+                  ),
+                ],
+              ),
+            ),
+
+            // ─ Invoice body (scrollable)
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Restaurant header
+                    Center(
+                      child: Column(
+                        children: [
+                          if (settings?.logoUrl.isNotEmpty == true)
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.network(
+                                settings!.logoUrl,
+                                height: 64,
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, __, ___) => _DefaultLogoIcon(accent: accent),
+                              ),
+                            )
+                          else
+                            _DefaultLogoIcon(accent: accent),
+                          const SizedBox(height: 10),
+                          Text(
+                              settings?.displayName.isNotEmpty == true
+                                  ? settings!.displayName
+                                  : 'Restaurant',
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                          const SizedBox(height: 4),
+                          if (settings?.address.isNotEmpty == true || settings?.phone.isNotEmpty == true)
+                            Text(
+                              [
+                                if (settings?.address.isNotEmpty == true) settings!.address,
+                                if (settings?.phone.isNotEmpty == true) 'Tel: ${settings!.phone}',
+                              ].join(' • '),
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                              textAlign: TextAlign.center,
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Invoice meta
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _meta(
+                              isMultiTicket ? 'Orders' : 'Order #',
+                              isPreview
+                                  ? '—'
+                                  : isMultiTicket
+                                      ? ordersToRender
+                                          .map((o) => '#${o.orderNumber}')
+                                          .join(', ')
+                                      : order.orderNumber,
+                            ),
+                          ),
+                          Expanded(child: _meta('Date', dateF.format(order.createdAt))),
+                          if (table != null)
+                            Expanded(child: _meta('Table', table!.tableNumber)),
+                          Expanded(child: _meta('Type', switch (order.type) {
+                            OrderType.dineIn      => 'Dine-in',
+                            OrderType.roomService => 'Room Service',
+                            OrderType.takeaway    => 'Takeaway',
+                            OrderType.delivery    => 'Delivery',
+                          })),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Items header
+                    Row(
+                      children: [
+                        Expanded(flex: 4, child: _colHdr('Item')),
+                        Expanded(child: _colHdr('Qty', align: TextAlign.center)),
+                        Expanded(child: _colHdr('Price', align: TextAlign.end)),
+                        Expanded(child: _colHdr('Total', align: TextAlign.end)),
+                      ],
+                    ),
+                    const Divider(thickness: 1.5),
+
+                    // Items — one section per ticket when multi-order, else flat list
+                    ...ordersToRender.expand((o) {
+                      final visibleItems =
+                          o.items.where((i) => !i.isFullyRefunded).toList();
+                      return [
+                        if (isMultiTicket)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8, bottom: 4),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: o.parentOrderId != null
+                                        ? Colors.teal.shade50
+                                        : Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Text(
+                                    o.parentOrderId != null
+                                        ? 'Add-On #${o.orderNumber}'
+                                        : 'Ticket #${o.orderNumber}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: o.parentOrderId != null
+                                          ? Colors.teal.shade700
+                                          : Colors.blue.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ...visibleItems.expand(
+                              (item) => _buildItemRows(item, currency)),
+                      ]; // end per-ticket item list
+                    }), // end expand
+
+                    const Divider(thickness: 1.5),
+                    const SizedBox(height: 8),
+
+                    // Totals
+                    _totalRow('Items Total', currency.format(itemsTotal)),
+                    if (totalDiscount > 0) ...[
+                      const SizedBox(height: 4),
+                      _totalRow('Discount', '− ${currency.format(totalDiscount)}',
+                          color: Colors.green.shade700),
+                      const SizedBox(height: 4),
+                      _totalRow('Subtotal', currency.format(subtotal)),
+                    ],
+                    if (taxRate > 0) ...[
+                      const SizedBox(height: 4),
+                      _totalRow(
+                        'Tax (${(taxRate * 100).toStringAsFixed(0)}%)',
+                        currency.format(tax),
+                        muted: true,
+                      ),
+                    ],
+                    if (serviceChargeRate > 0 && serviceCharge > 0) ...[
+                      const SizedBox(height: 4),
+                      _totalRow(
+                        hasTakeaway
+                            ? 'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(0)}%) — dine-in only'
+                            : 'Service Charge (${(serviceChargeRate * 100).toStringAsFixed(0)}%)',
+                        currency.format(serviceCharge),
+                        muted: true,
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: accentBg,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('GRAND TOTAL',
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                          Text(currency.format(grandTotal),
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: accent)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    // Payment status
+                    if (!isPreview)
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _paymentColor(ordersToRender.first.paymentStatus).withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(_paymentLabel(ordersToRender.first.paymentStatus),
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: _paymentColor(ordersToRender.first.paymentStatus),
+                                  fontSize: 13)),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    const Center(
+                      child: Text('Thank you for dining with us!',
+                          style: TextStyle(color: Colors.black38, fontSize: 12, fontStyle: FontStyle.italic)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ─ Footer action
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  if (!isPreview)
+                    Text('Order #${order.orderNumber}',
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                  const Spacer(),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.check_rounded, size: 16),
+                    label: const Text('Done'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+    );
+  }
+
+  Widget _meta(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.black38, fontWeight: FontWeight.w500)),
+        Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+      ],
+    );
+  }
+
+  Widget _colHdr(String text, {TextAlign align = TextAlign.start}) {
+    return Text(text,
+        textAlign: align,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black45, letterSpacing: 0.5));
+  }
+
+  Widget _totalRow(String label, String value, {bool muted = false, Color? color}) {
+    final textColor = color ?? (muted ? Colors.black38 : Colors.black87);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(fontSize: 13, color: muted ? Colors.black38 : Colors.black54)),
+        Text(value,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: muted ? FontWeight.w400 : FontWeight.w600,
+                color: textColor)),
+      ],
+    );
+  }
+
+  Color _paymentColor(PaymentStatus s) {
+    switch (s) {
+      case PaymentStatus.paid: return const Color(0xFF22C55E);
+      case PaymentStatus.chargedToRoom: return const Color(0xFFF59E0B);
+      case PaymentStatus.unpaid: return const Color(0xFFEF4444);
+    }
+  }
+
+  String _paymentLabel(PaymentStatus s) {
+    switch (s) {
+      case PaymentStatus.paid: return 'PAID';
+      case PaymentStatus.chargedToRoom: return 'CHARGED TO ROOM';
+      case PaymentStatus.unpaid: return 'UNPAID';
+    }
+  }
+}
+
+/// Expands one OrderItem into one or more invoice row widgets.
+/// allowMultiple modifiers with >1 selection each become their own row.
+List<Widget> _buildItemRows(OrderItem item, NumberFormat currency) {
+  if (item.isFullyRefunded) return [];
+
+  final qty       = item.activeQuantity;
+  final basePrice = item.menuItem.price;
+  final emoji     = item.menuItem.imageUrl.isNotEmpty ? item.menuItem.imageUrl : '🍽️';
+
+  // Partition into multi-select (allowMultiple + >1 chosen) vs single-select
+  final multiEntries  = <MapEntry<MenuModifier, List<String>>>[];
+  double singleAdj    = 0.0;
+  final singleLabels  = <MapEntry<String, String>>[];  // (modName, optName)
+
+  for (final mod in item.menuItem.modifiers) {
+    final selected = item.selectedModifiers[mod.name] ?? [];
+    if (selected.isEmpty) continue;
+    if (mod.allowMultiple && selected.length > 1) {
+      multiEntries.add(MapEntry(mod, selected));
+    } else {
+      final optName = selected.first;
+      final opt = mod.options.firstWhere(
+        (o) => o.name == optName,
+        orElse: () => MenuModifierOption(name: optName),
+      );
+      singleAdj += opt.priceAdjustment;
+      singleLabels.add(MapEntry(mod.name, optName));
+    }
+  }
+
+  Widget buildRow({
+    required List<MapEntry<String, String>> modLabels,
+    required double price,
+    required double total,
+    bool showEmoji = true,
+    bool showRefund = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 4,
+            child: Row(
+              children: [
+                Text(showEmoji ? emoji : '', style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.menuItem.name,
+                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+                      ...modLabels.map((e) => Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
+                              children: [
+                                Text('${e.key}: ',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey.shade500,
+                                        fontWeight: FontWeight.w600)),
+                                Text(e.value,
+                                    style: TextStyle(
+                                        fontSize: 10, color: Colors.grey.shade600)),
+                              ],
+                            ),
+                          )),
+                      if (showRefund && item.refundedQuantity > 0)
+                        Text('${item.refundedQuantity} unit(s) refunded',
+                            style: TextStyle(fontSize: 10, color: Colors.orange.shade600)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Text('$qty',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+          ),
+          Expanded(
+            child: Text(currency.format(price),
+                textAlign: TextAlign.end,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+          ),
+          Expanded(
+            child: Text(currency.format(total),
+                textAlign: TextAlign.end,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  if (multiEntries.isEmpty) {
+    // No expansion — show all modifiers on one row
+    final allMods = item.selectedModifiers.entries
+        .where((e) => e.value.isNotEmpty)
+        .map((e) => MapEntry(e.key, e.value.join(', ')))
+        .toList();
+    return [buildRow(
+      modLabels: allMods,
+      price: item.unitPrice,
+      total: item.subtotal,
+      showRefund: true,
+    )];
+  }
+
+  // Expand: one row per selected option in each allowMultiple modifier
+  final rows = <Widget>[];
+  bool isFirst = true;
+  for (final entry in multiEntries) {
+    final mod = entry.key;
+    for (final optName in entry.value) {
+      final opt = mod.options.firstWhere(
+        (o) => o.name == optName,
+        orElse: () => MenuModifierOption(name: optName),
+      );
+      final variantPrice = basePrice + singleAdj + opt.priceAdjustment;
+      final modLabels = [MapEntry(mod.name, optName), ...singleLabels];
+      rows.add(buildRow(
+        modLabels: modLabels,
+        price: variantPrice,
+        total: variantPrice * qty,
+        showEmoji: isFirst,
+        showRefund: isFirst,
+      ));
+      isFirst = false;
+    }
+  }
+  return rows;
+}
+
+class _DefaultLogoIcon extends StatelessWidget {
+  final Color accent;
+  const _DefaultLogoIcon({required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 52, height: 52,
+      decoration: BoxDecoration(
+        color: accent.withAlpha(30),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Icon(Icons.restaurant_rounded, color: accent, size: 28),
+    );
+  }
+}

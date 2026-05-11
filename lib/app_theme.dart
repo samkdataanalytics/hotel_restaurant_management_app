@@ -1,5 +1,5 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // ─── Mobile Theme (Luxury Hotel) ─────────────────────────
@@ -26,25 +26,23 @@ class AppTheme {
         onSecondary: _darkBg,
         onSurface: _textLight,
       ),
-      textTheme: GoogleFonts.outfitTextTheme(
-        const TextTheme(
-          displayLarge: TextStyle(fontSize: 36, fontWeight: FontWeight.w700, color: _textLight, letterSpacing: -0.5),
-          displayMedium: TextStyle(fontSize: 28, fontWeight: FontWeight.w600, color: _textLight),
-          headlineLarge: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: _textLight),
-          headlineMedium: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: _textLight),
-          titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: _textLight),
-          titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: _textLight),
-          bodyLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: _textLight),
-          bodyMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w400, color: _textMuted),
-          labelLarge: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _goldPrimary, letterSpacing: 1.2),
-        ),
+      textTheme: const TextTheme(
+        displayLarge:   TextStyle(fontFamily: 'Outfit', fontSize: 36, fontWeight: FontWeight.w700, color: _textLight, letterSpacing: -0.5),
+        displayMedium:  TextStyle(fontFamily: 'Outfit', fontSize: 28, fontWeight: FontWeight.w600, color: _textLight),
+        headlineLarge:  TextStyle(fontFamily: 'Outfit', fontSize: 24, fontWeight: FontWeight.w600, color: _textLight),
+        headlineMedium: TextStyle(fontFamily: 'Outfit', fontSize: 20, fontWeight: FontWeight.w600, color: _textLight),
+        titleLarge:     TextStyle(fontFamily: 'Outfit', fontSize: 18, fontWeight: FontWeight.w500, color: _textLight),
+        titleMedium:    TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.w500, color: _textLight),
+        bodyLarge:      TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.w400, color: _textLight),
+        bodyMedium:     TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w400, color: _textMuted),
+        labelLarge:     TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w600, color: _goldPrimary, letterSpacing: 1.2),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: _goldPrimary,
           foregroundColor: _darkBg,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-          textStyle: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 0.8),
+          textStyle: const TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 0.8),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           elevation: 4,
         ),
@@ -79,27 +77,28 @@ class AppTheme {
         shadowColor: Colors.black38,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
-      appBarTheme: AppBarTheme(
+      appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.outfit(
+        titleTextStyle: TextStyle(
+          fontFamily: 'Outfit',
           fontSize: 20,
           fontWeight: FontWeight.w600,
           color: _goldPrimary,
         ),
-        iconTheme: const IconThemeData(color: _goldPrimary),
+        iconTheme: IconThemeData(color: _goldPrimary),
       ),
     );
   }
 
   // ─── Web Admin Theme ─────────────────────────────────────
 
-  static const _adminPrimary = Color(0xFF3B82F6);
-  static const _adminPrimaryLight = Color(0xFF60A5FA);
+  static const _adminPrimary = Color(0xFFE65100);       // Elevate: Burnt Orange
+  static const _adminPrimaryLight = Color(0xFFFF9800);  // Elevate: Lighter Orange
   static const _adminBgDark = Color(0xFF0F172A);
-  static const _adminSidebar = Color(0xFF1E293B);
-  static const _adminContent = Color(0xFFF8FAFC);
+  static const _adminSidebar = Color(0xFF101828);       // Elevate: Deeper Midnight
+  static const _adminContent = Color(0xFFF8FAFC);       // Elevate: Soft Slate 50
   static const _adminCard = Colors.white;
   static const _adminTextDark = Color(0xFF1E293B);
   static const _adminTextMuted = Color(0xFF64748B);
@@ -112,7 +111,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       scaffoldBackgroundColor: _adminContent,
-      colorScheme: ColorScheme.light(
+      colorScheme: const ColorScheme.light(
         primary: _adminPrimary,
         secondary: _adminPrimaryLight,
         surface: _adminCard,
@@ -120,18 +119,16 @@ class AppTheme {
         onSecondary: Colors.white,
         onSurface: _adminTextDark,
       ),
-      textTheme: GoogleFonts.interTextTheme(
-        TextTheme(
-          displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: _adminTextDark),
-          displayMedium: TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: _adminTextDark),
-          headlineLarge: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: _adminTextDark),
-          headlineMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: _adminTextDark),
-          titleLarge: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: _adminTextDark),
-          titleMedium: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: _adminTextDark),
-          bodyLarge: TextStyle(fontSize: 15, fontWeight: FontWeight.w400, color: _adminTextDark),
-          bodyMedium: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: _adminTextMuted),
-          labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _adminPrimary),
-        ),
+      textTheme: const TextTheme(
+        displayLarge:   TextStyle(fontFamily: 'DMSerifDisplay', fontSize: 32, fontWeight: FontWeight.w400, color: _adminTextDark, letterSpacing: -0.3),
+        displayMedium:  TextStyle(fontFamily: 'DMSerifDisplay', fontSize: 24, fontWeight: FontWeight.w400, color: _adminTextDark),
+        headlineLarge:  TextStyle(fontFamily: 'Outfit', fontSize: 22, fontWeight: FontWeight.w600, color: _adminTextDark),
+        headlineMedium: TextStyle(fontFamily: 'Outfit', fontSize: 18, fontWeight: FontWeight.w600, color: _adminTextDark),
+        titleLarge:     TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.w600, color: _adminTextDark),
+        titleMedium:    TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w500, color: _adminTextDark),
+        bodyLarge:      TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w400, color: _adminTextDark, fontFeatures: [FontFeature.tabularFigures()]),
+        bodyMedium:     TextStyle(fontFamily: 'Outfit', fontSize: 13, fontWeight: FontWeight.w400, color: _adminTextMuted, fontFeatures: [FontFeature.tabularFigures()]),
+        labelLarge:     TextStyle(fontFamily: 'Outfit', fontSize: 13, fontWeight: FontWeight.w600, color: _adminPrimary),
       ),
       cardTheme: CardThemeData(
         color: _adminCard,
@@ -139,7 +136,7 @@ class AppTheme {
         shadowColor: Colors.black12,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          side: const BorderSide(color: Color(0xFFE8EDF3)),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -153,25 +150,36 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.grey.shade50,
+        fillColor: const Color(0xFFF8FAFC), // soft grey-blue instead of hard white
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: _adminPrimary, width: 2),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      ),
+      dialogTheme: DialogThemeData(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        elevation: 24,
+        shadowColor: Colors.black26,
       ),
       dataTableTheme: DataTableThemeData(
         headingRowColor: WidgetStateProperty.all(Colors.grey.shade50),
-        headingTextStyle: GoogleFonts.inter(
+        headingTextStyle: const TextStyle(
+          fontFamily: 'Inter',
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: _adminTextMuted,
         ),
-        dataTextStyle: GoogleFonts.inter(
+        dataTextStyle: const TextStyle(
+          fontFamily: 'Inter',
           fontSize: 14,
           fontWeight: FontWeight.w400,
           color: _adminTextDark,
@@ -179,6 +187,47 @@ class AppTheme {
       ),
     );
   }
+
+  // ─── DM Serif Display helpers ────────────────────────────────────────────────
+
+  /// H1 — large page display titles (32 px).
+  static const TextStyle serifDisplayLarge = TextStyle(
+    fontFamily: 'DMSerifDisplay',
+    fontSize: 32,
+    fontWeight: FontWeight.w400,
+    color: _adminTextDark,
+    letterSpacing: -0.3,
+  );
+
+  /// H2 — page-level section titles and prominent dialog headings (24 px).
+  static const TextStyle serifDisplayMedium = TextStyle(
+    fontFamily: 'DMSerifDisplay',
+    fontSize: 24,
+    fontWeight: FontWeight.w400,
+    color: _adminTextDark,
+  );
+
+  /// H3 — card headings and secondary dialog titles (20 px).
+  static const TextStyle serifHeadingLarge = TextStyle(
+    fontFamily: 'DMSerifDisplay',
+    fontSize: 20,
+    fontWeight: FontWeight.w400,
+    color: _adminTextDark,
+  );
+
+  /// Utility — DM Serif at any size / color, for one-off uses.
+  static TextStyle dmSerif({
+    double fontSize = 18,
+    Color? color,
+    double? letterSpacing,
+  }) =>
+      TextStyle(
+        fontFamily: 'DMSerifDisplay',
+        fontSize: fontSize,
+        fontWeight: FontWeight.w400,
+        color: color ?? _adminTextDark,
+        letterSpacing: letterSpacing,
+      );
 
   // ─── Shared Design Tokens (used by all web screens) ─────────────────────────
 
@@ -197,22 +246,43 @@ class AppTheme {
   static BoxDecoration get cardDecoration => BoxDecoration(
     color: Colors.white,
     borderRadius: BorderRadius.circular(cardRadius),
-    border: Border.all(color: const Color(0xFFE2E8F0)),
+    border: Border.all(color: const Color(0xFFE8EDF3)),
     boxShadow: cardShadow,
   );
 
-  /// KPI card with coloured left accent bar.
+  /// KPI card base decoration (uniform border — safe with borderRadius).
+  /// Use [kpiCard] to get the full left-accent card widget.
   static BoxDecoration kpiDecoration(Color accent) => BoxDecoration(
     color: Colors.white,
     borderRadius: BorderRadius.circular(cardRadius),
-    border: Border(
-      left: BorderSide(color: accent, width: 4),
-      top: const BorderSide(color: Color(0xFFE2E8F0)),
-      right: const BorderSide(color: Color(0xFFE2E8F0)),
-      bottom: const BorderSide(color: Color(0xFFE2E8F0)),
-    ),
+    border: Border.all(color: const Color(0xFFE8EDF3)),
     boxShadow: cardShadow,
   );
+
+  /// Wraps [child] in a KPI card with a coloured left accent strip.
+  static Widget kpiCard({required Color accent, required Widget child}) {
+    // Outer box: uniform border + borderRadius + shadow (flutter requires
+    // uniform colors when borderRadius is set).
+    // ClipRRect clips the inner content to the same radius.
+    // Inner DecoratedBox: left accent strip only — no borderRadius, so valid.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(cardRadius),
+        border: Border.all(color: const Color(0xFFE8EDF3)),
+        boxShadow: cardShadow,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(cardRadius - 1),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: accent, width: 4)),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
 
   // ─── Restaurant Section (const — safe in const expressions) ─────────────────
 
@@ -225,12 +295,28 @@ class AppTheme {
   static const Color statusGreen  = Color(0xFF22C55E);   // success / available
   static const Color statusAmber  = Color(0xFFF59E0B);   // warning / preparing
   static const Color statusRed    = Color(0xFFEF4444);   // danger / occupied
-  static const Color statusBlue   = Color(0xFF3B82F6);   // info / hotel accent
+  static const Color statusBlue   = Color(0xFF2563EB);   // info / hotel accent
   static const Color statusPurple = Color(0xFF8B5CF6);   // payment due
 
   // ─── Page Background ─────────────────────────────────────────────────────────
 
-  static const Color pageBg = Color(0xFFF8FAFC);
+  static const Color pageBg = Color(0xFFF5F7FA);
+
+  // ─── Responsive helpers ───────────────────────────────────────────────────
+
+  /// True when viewport width < 600 px (phone portrait).
+  static bool isMobile(BuildContext context) =>
+      MediaQuery.sizeOf(context).width < 600;
+
+  /// True when viewport width is between 600 and 1024 px.
+  static bool isTablet(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
+    return w >= 600 && w < 1024;
+  }
+
+  /// Standard scrollable-content padding: 16 on mobile, 32 on desktop.
+  static EdgeInsets screenPad(BuildContext context) =>
+      EdgeInsets.all(isMobile(context) ? 16.0 : 32.0);
 
   // ─── Helper Colors for Web Admin ─────────────────────────
 
