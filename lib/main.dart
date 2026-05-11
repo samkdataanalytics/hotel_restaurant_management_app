@@ -19,9 +19,14 @@ void main() async {
   // All fonts are bundled locally — disable GoogleFonts HTTP fetching entirely.
   GoogleFonts.config.allowRuntimeFetching = false;
 
+  const supabaseUrl     = String.fromEnvironment('SUPABASE_URL');
+  const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  assert(supabaseUrl.isNotEmpty,     'SUPABASE_URL is not set — pass --dart-define=SUPABASE_URL=...');
+  assert(supabaseAnonKey.isNotEmpty, 'SUPABASE_ANON_KEY is not set — pass --dart-define=SUPABASE_ANON_KEY=...');
+
   await Supabase.initialize(
-    url: 'https://voiumrqxbsdayqmmgpew.supabase.co',
-    anonKey: 'REMOVED_ANON_KEY',
+    url:     supabaseUrl,
+    anonKey: supabaseAnonKey,
   );
   await initDependencies();
 
