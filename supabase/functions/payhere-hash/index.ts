@@ -31,11 +31,45 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl    = Deno.env.get('SUPABASE_URL')!
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const anonKey        = Deno.env.get('SUPABASE_ANON_KEY')!
-    const merchantId     = Deno.env.get('PAYHERE_MERCHANT_ID')!
-    const merchantSecret = Deno.env.get('PAYHERE_MERCHANT_SECRET')!
+
+    // Strict origin allowlist — each registered PayHere domain has its own secret.
+    // Reject any origin not in this list to prevent credential misuse.
+    const origin = req.headers.get('Origin') ?? ''
+
+    type EnvConfig = {
+      merchantIdKey:     string
+      merchantSecretKey: string
+      checkoutUrl:       string
+    }
+
+    const ALLOWED_ORIGINS: Record<string, EnvConfig> = {
+      'http://localhost':        { merchantIdKey: 'PAYHERE_SANDBOX_MERCHANT_ID', merchantSecretKey: 'PAYHERE_SECRET_LOCALHOST', checkoutUrl: 'https://sandbox.payhere.lk/pay/checkout' },
+      'https://www.hotrest.app': { merchantIdKey: 'PAYHERE_MERCHANT_ID',         merchantSecretKey: 'PAYHERE_MERCHANT_SECRET',  checkoutUrl: 'https://www.payhere.lk/pay/checkout'         },
+      'https://hotrest.app':     { merchantIdKey: 'PAYHERE_MERCHANT_ID',         merchantSecretKey: 'PAYHERE_MERCHANT_SECRET',  checkoutUrl: 'https://www.payhere.lk/pay/checkout'         },
+    }
+
+    // Allow any origin whose host ends with the dev Vercel project slug
+    const DEV_ORIGIN_SUFFIX = Deno.env.get('PAYHERE_DEV_ORIGIN_SUFFIX') ?? ''
+    if (DEV_ORIGIN_SUFFIX && origin.endsWith(DEV_ORIGIN_SUFFIX)) {
+      ALLOWED_ORIGINS[origin] = {
+        merchantIdKey:     'PAYHERE_SANDBOX_MERCHANT_ID',
+        merchantSecretKey: 'PAYHERE_SECRET_DEV',
+        checkoutUrl:       'https://sandbox.payhere.lk/pay/checkout',
+      }
+    }
+
+    const config = ALLOWED_ORIGINS[origin]
+    if (!config) {
+      console.error('payhere-hash: rejected request from unlisted origin:', origin)
+      return json({ error: 'Origin not allowed' }, 403)
+    }
+
+    const merchantId     = Deno.env.get(config.merchantIdKey)!
+    const merchantSecret = Deno.env.get(config.merchantSecretKey)!
+    const checkoutUrl    = config.checkoutUrl
 
     if (!merchantId || !merchantSecret) {
-      console.error('PAYHERE_MERCHANT_ID or PAYHERE_MERCHANT_SECRET env vars not set')
+      console.error('PayHere credentials not configured for origin:', origin)
       return json({ error: 'Payment gateway not configured' }, 503)
     }
 
@@ -158,7 +192,7 @@ Deno.serve(async (req: Request) => {
     // Return the notify URL so Flutter never needs to know the Supabase project URL
     const notifyUrl = `${supabaseUrl}/functions/v1/payhere-notify`
 
-    return json({ hash, merchantId, notifyUrl }, 200)
+    return json({ hash, merchantId, notifyUrl, checkoutUrl }, 200)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('payhere-hash error:', msg)
