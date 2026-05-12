@@ -3,8 +3,6 @@ import 'package:uuid/uuid.dart';
 import 'package:web/web.dart' as webpkg;
 
 class PayHereService {
-  // Switch to 'https://www.payhere.lk/pay/checkout' for production.
-  static const checkoutUrl = 'https://sandbox.payhere.lk/pay/checkout';
 
   /// Initiates a PayHere checkout session.
   ///
@@ -49,10 +47,11 @@ class PayHereService {
       throw Exception(msg);
     }
 
-    final data       = response.data as Map<String, dynamic>;
-    final hash       = data['hash']       as String;
-    final merchantId = data['merchantId'] as String;
-    final notifyUrl  = data['notifyUrl']  as String;
+    final data        = response.data as Map<String, dynamic>;
+    final hash        = data['hash']        as String;
+    final merchantId  = data['merchantId']  as String;
+    final notifyUrl   = data['notifyUrl']   as String;
+    final checkoutUrl = data['checkoutUrl'] as String;
 
     final origin = webpkg.window.location.origin;
 
@@ -77,7 +76,7 @@ class PayHereService {
 
     final form = webpkg.document.createElement('form') as webpkg.HTMLFormElement;
     form.method = 'post';
-    form.action = checkoutUrl;
+    form.action = checkoutUrl; // sandbox or production — decided server-side
     for (final e in fields.entries) {
       final input = webpkg.document.createElement('input') as webpkg.HTMLInputElement;
       input.type  = 'hidden';

@@ -126,7 +126,7 @@ GRANT EXECUTE ON FUNCTION resolve_staff_username(TEXT) TO anon, authenticated;
 CREATE OR REPLACE FUNCTION get_email_by_username(p_username TEXT)
 RETURNS TEXT
 LANGUAGE sql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path = public
 AS $$
