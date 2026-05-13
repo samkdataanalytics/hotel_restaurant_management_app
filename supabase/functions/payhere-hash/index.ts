@@ -58,7 +58,23 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const config = ALLOWED_ORIGINS[origin]
+    // Allow ngrok tunnel URLs used for local PayHere testing
+    // (PayHere rejects localhost URLs — ngrok gives localhost a public URL)
+    const NGROK_ORIGIN_SUFFIX = Deno.env.get('PAYHERE_NGROK_ORIGIN_SUFFIX') ?? ''
+    if (NGROK_ORIGIN_SUFFIX && origin.endsWith(NGROK_ORIGIN_SUFFIX)) {
+      ALLOWED_ORIGINS[origin] = {
+        merchantIdKey:     'PAYHERE_SANDBOX_MERCHANT_ID',
+        merchantSecretKey: 'PAYHERE_SECRET_NGROK',
+        checkoutUrl:       'https://sandbox.payhere.lk/pay/checkout',
+      }
+    }
+
+    // Normalize localhost with any port (e.g. http://localhost:54575 → http://localhost)
+    const lookupOrigin = origin.startsWith('http://localhost')
+      ? 'http://localhost'
+      : origin
+
+    const config = ALLOWED_ORIGINS[lookupOrigin]
     if (!config) {
       console.error('payhere-hash: rejected request from unlisted origin:', origin)
       return json({ error: 'Origin not allowed' }, 403)

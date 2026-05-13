@@ -25,9 +25,9 @@ Deno.serve(async (req: Request) => {
     return new Response('Method Not Allowed', { status: 405 })
   }
 
-  const supabaseUrl    = Deno.env.get('SUPABASE_URL')!
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const merchantSecret = Deno.env.get('PAYHERE_MERCHANT_SECRET')!
+  const supabaseUrl       = Deno.env.get('SUPABASE_URL')!
+  const serviceRoleKey    = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const sandboxMerchantId = Deno.env.get('PAYHERE_SANDBOX_MERCHANT_ID') ?? ''
 
   try {
     const rawBody = await req.text()
@@ -45,6 +45,12 @@ Deno.serve(async (req: Request) => {
       console.error('payhere-notify: missing required fields in payload')
       return ok()
     }
+
+    // Select the correct secret based on which merchant account received the payment.
+    // Sandbox (localhost/dev) and production have different merchant IDs and secrets.
+    const merchantSecret = merchantId === sandboxMerchantId
+      ? (Deno.env.get('PAYHERE_SECRET_LOCALHOST') ?? Deno.env.get('PAYHERE_MERCHANT_SECRET')!)
+      : Deno.env.get('PAYHERE_MERCHANT_SECRET')!
 
     // Verify PayHere signature:
     // MD5(merchant_id + order_id + payhere_amount + payhere_currency + status_code + MD5(secret).toUpper).toUpper
