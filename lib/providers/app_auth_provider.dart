@@ -19,6 +19,10 @@ class AppAuthState {
   final String? userId;
   final String? email;
   final Organization? organization;
+  /// Role in the org ('owner' | 'admin' | 'member'). Null when not in an org.
+  final String? orgRole;
+  /// Whether this user has been granted billing management access by an owner.
+  final bool canManageBilling;
   final List<OrgProperty> properties;
   final String? error;
 
@@ -29,12 +33,17 @@ class AppAuthState {
     this.userId,
     this.email,
     this.organization,
+    this.orgRole,
+    this.canManageBilling = false,
     this.properties = const [],
     this.error,
   });
 
   bool get hasOrganization => organization != null;
   bool get hasProperties   => properties.isNotEmpty;
+  bool get isOrgOwner      => orgRole == 'owner';
+  /// True if the user can initiate plan upgrades (owner or explicitly granted).
+  bool get canUpgradePlan  => isOrgOwner || canManageBilling;
   /// True for staff accounts created via the admin panel (username-based).
   bool get isStaffAccount  => email?.endsWith('@staff.internal') ?? false;
 
@@ -45,17 +54,21 @@ class AppAuthState {
     String? userId,
     String? email,
     Organization? organization,
+    String? orgRole,
+    bool? canManageBilling,
     List<OrgProperty>? properties,
     String? error,
   }) => AppAuthState(
-    isLoading:    isLoading    ?? this.isLoading,
-    isLoggedIn:   isLoggedIn   ?? this.isLoggedIn,
-    isSuperadmin: isSuperadmin ?? this.isSuperadmin,
-    userId:       userId       ?? this.userId,
-    email:        email        ?? this.email,
-    organization: organization ?? this.organization,
-    properties:   properties   ?? this.properties,
-    error:        error        ?? this.error,
+    isLoading:          isLoading          ?? this.isLoading,
+    isLoggedIn:         isLoggedIn         ?? this.isLoggedIn,
+    isSuperadmin:       isSuperadmin       ?? this.isSuperadmin,
+    userId:             userId             ?? this.userId,
+    email:              email              ?? this.email,
+    organization:       organization       ?? this.organization,
+    orgRole:            orgRole            ?? this.orgRole,
+    canManageBilling:   canManageBilling   ?? this.canManageBilling,
+    properties:         properties         ?? this.properties,
+    error:              error              ?? this.error,
   );
 }
 
@@ -92,6 +105,8 @@ class AuthNotifier extends AsyncNotifier<AppAuthState> {
 
       // Load org + properties (skip for superadmin — they see everything)
       Organization? org;
+      String? orgRole;
+      bool canManageBilling = false;
       List<OrgProperty> properties = [];
 
       if (!isSuperadmin) {
@@ -103,16 +118,33 @@ class AuthNotifier extends AsyncNotifier<AppAuthState> {
         try {
           properties = await OrganizationService().getMyProperties();
         } catch (_) {}
+        if (org != null) {
+          try {
+            final rows = await _db
+                .from('organization_members')
+                .select('role, can_manage_billing')
+                .eq('org_id', org.id)
+                .eq('user_id', user.id)
+                .eq('is_deleted', false)
+                .limit(1);
+            if (rows.isNotEmpty) {
+              orgRole           = rows.first['role'] as String?;
+              canManageBilling  = rows.first['can_manage_billing'] as bool? ?? false;
+            }
+          } catch (_) {}
+        }
       }
 
       return AppAuthState(
-        isLoading:    false,
-        isLoggedIn:   true,
-        isSuperadmin: isSuperadmin,
-        userId:       user.id,
-        email:        user.email,
-        organization: org,
-        properties:   properties,
+        isLoading:        false,
+        isLoggedIn:       true,
+        isSuperadmin:     isSuperadmin,
+        userId:           user.id,
+        email:            user.email,
+        organization:     org,
+        orgRole:          orgRole,
+        canManageBilling: canManageBilling,
+        properties:       properties,
       );
     } catch (e) {
       return AppAuthState(
@@ -164,30 +196,10 @@ class AuthNotifier extends AsyncNotifier<AppAuthState> {
     final user = _db.auth.currentUser;
     if (user?.email != null) {
       try {
-        final rows = await _db
-            .from('pending_provisions')
-            .select()
-            .eq('email', user!.email!.toLowerCase())
-            .limit(1);
-
-        if (rows.isNotEmpty) {
-          final row = rows.first;
-          await OrganizationService().provisionCustomAccessByUserId(
-            userId:        user.id,
-            maxProperties: row['max_properties'] as int,
-            maxUsers:      row['max_users']      as int,
-            maxRooms:      row['max_rooms']      as int,
-            maxTables:     row['max_tables']     as int,
-            priceMonthly:  (row['price_monthly']  as num?)?.toDouble(),
-            priceAnnually: (row['price_annually'] as num?)?.toDouble(),
-            billingCycle:  row['billing_cycle']  as String? ?? 'monthly',
-          );
-          // Clean up the pending row now that it's applied
-          await _db
-              .from('pending_provisions')
-              .delete()
-              .eq('email', user.email!.toLowerCase());
-        }
+        // apply_pending_provision is a SECURITY DEFINER RPC that looks up the
+        // caller's email in pending_provisions and applies the enterprise limits
+        // server-side. It's a no-op when no provision exists.
+        await _db.rpc('apply_pending_provision');
       } catch (e) {
         // Non-fatal — continue with normal reload even if auto-apply fails
         debugPrint('refreshAfterOnboarding: pending provision apply failed: $e');

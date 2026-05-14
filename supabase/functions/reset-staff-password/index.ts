@@ -1,14 +1,31 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+function buildCors(req: Request): Record<string, string> {
+  const origin    = req.headers.get('Origin') ?? ''
+  const devSuffix = Deno.env.get('PAYHERE_DEV_ORIGIN_SUFFIX') ?? ''
+  const allowed =
+    origin === 'https://www.hotrest.app' ||
+    origin === 'https://hotrest.app'     ||
+    origin.startsWith('http://localhost')  ||
+    (devSuffix && origin.endsWith(devSuffix))
+  return {
+    'Access-Control-Allow-Origin':  allowed ? origin : 'https://www.hotrest.app',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
 }
 
 Deno.serve(async (req: Request) => {
+  const cors = buildCors(req)
+  const json = (body: unknown, status: number) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: cors })
   }
 
   try {
@@ -17,8 +34,8 @@ Deno.serve(async (req: Request) => {
     if (!userId || !newPassword) {
       return json({ error: 'Missing userId or newPassword' }, 400)
     }
-    if (newPassword.length < 6) {
-      return json({ error: 'Password must be at least 6 characters' }, 400)
+    if (newPassword.length < 8) {
+      return json({ error: 'Password must be at least 8 characters' }, 400)
     }
 
     const authHeader = req.headers.get('Authorization')
@@ -38,7 +55,7 @@ Deno.serve(async (req: Request) => {
     const { data: { user: caller } } = await userClient.auth.getUser()
     if (!caller) return json({ error: 'Not authenticated' }, 401)
 
-    // Collect property IDs where caller is a manager
+    // Collect property IDs where caller is an owner or manager
     const { data: callerStaff } = await userClient
       .from('property_staff')
       .select('property_id, role')
@@ -50,7 +67,7 @@ Deno.serve(async (req: Request) => {
       .eq('user_id', caller.id)
 
     const managerPropertyIds = new Set<string>([
-      ...(callerStaff  ?? []).filter((r: any) => r.role === 'manager').map((r: any) => r.property_id),
+      ...(callerStaff  ?? []).filter((r: any) => ['owner', 'manager'].includes(r.role)).map((r: any) => r.property_id),
       ...(callerHotels ?? []).filter((r: any) => ['owner', 'manager'].includes(r.role)).map((r: any) => r.hotel_id),
     ])
 
@@ -74,18 +91,15 @@ Deno.serve(async (req: Request) => {
       password: newPassword,
     })
 
-    if (resetError) return json({ error: resetError.message }, 400)
+    if (resetError) {
+      console.error('reset-staff-password: updateUserById error:', resetError.message)
+      return json({ error: 'Failed to reset password' }, 400)
+    }
 
     return json({ success: true }, 200)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    return json({ error: `Unexpected error: ${msg}` }, 500)
+    console.error('reset-staff-password error:', msg)
+    return json({ error: 'Unexpected error' }, 500)
   }
 })
-
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
-}

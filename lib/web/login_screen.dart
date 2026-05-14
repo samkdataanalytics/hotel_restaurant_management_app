@@ -60,18 +60,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       _error = null;
     });
 
-    // If the input has no '@' it's a username — look up the synthetic email
+    // If the input has no '@' it's a staff username — construct the synthetic
+    // email directly without an RPC lookup (staff emails = {username}@staff.internal).
+    // Wrong usernames are handled by Supabase auth returning invalid-credentials.
     String email = input;
     if (!input.contains('@')) {
-      final resolved = await ref.read(staffServiceProvider).getEmailByUsername(input);
-      if (resolved == null || resolved.isEmpty) {
-        setState(() {
-          _isLoading = false;
-          _error = 'Username not found. Please check and try again.';
-        });
-        return;
-      }
-      email = resolved;
+      email = '$input@staff.internal';
     }
 
     // Sign in via Riverpod auth notifier — GoRouter redirect handles navigation

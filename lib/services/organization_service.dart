@@ -155,6 +155,7 @@ class OrgMember {
   final String role;
   final String fullName;
   final String email;
+  final bool canManageBilling;
 
   const OrgMember({
     required this.id,
@@ -163,15 +164,17 @@ class OrgMember {
     required this.role,
     required this.fullName,
     required this.email,
+    this.canManageBilling = false,
   });
 
   factory OrgMember.fromRow(Map<String, dynamic> r) => OrgMember(
-        id:       r['id']        as String,
-        orgId:    r['org_id']    as String,
-        userId:   r['user_id']   as String,
-        role:     r['role']      as String? ?? 'member',
-        fullName: (r['profiles'] as Map<String, dynamic>?)?['full_name'] as String? ?? '',
-        email:    (r['profiles'] as Map<String, dynamic>?)?['email']     as String? ?? '',
+        id:               r['id']                 as String,
+        orgId:            r['org_id']             as String,
+        userId:           r['user_id']            as String,
+        role:             r['role']               as String? ?? 'member',
+        fullName:         (r['profiles'] as Map<String, dynamic>?)?['full_name'] as String? ?? '',
+        email:            (r['profiles'] as Map<String, dynamic>?)?['email']     as String? ?? '',
+        canManageBilling: r['can_manage_billing'] as bool? ?? false,
       );
 }
 
@@ -464,9 +467,26 @@ class OrganizationService {
     final rows = await _db
         .from('organization_members')
         .select('*, profiles(full_name, email)')
-        .eq('org_id', orgId);
+        .eq('org_id', orgId)
+        .eq('is_deleted', false);
 
     return rows.map((r) => OrgMember.fromRow(r)).toList();
+  }
+
+  Future<void> setMemberBillingPermission(String memberId, bool canManage) async {
+    await _db
+        .from('organization_members')
+        .update({'can_manage_billing': canManage})
+        .eq('id', memberId);
+  }
+
+  Future<void> setMemberBillingPermissionByUserId(
+      String orgId, String userId, bool canManage) async {
+    await _db
+        .from('organization_members')
+        .update({'can_manage_billing': canManage})
+        .eq('org_id', orgId)
+        .eq('user_id', userId);
   }
 
   Future<void> inviteMember(String orgId, String email, String role) async {
@@ -479,7 +499,9 @@ class OrganizationService {
         .limit(1);
 
     if (userRows.isEmpty) {
-      throw Exception('No user found with that email. Ask them to sign up first.');
+      // Don't reveal whether the email is registered — return silently so the
+      // caller's success message is shown regardless (prevents email enumeration).
+      return;
     }
 
     await _db.from('organization_members').insert({
@@ -493,15 +515,6 @@ class OrganizationService {
 
   Future<void> deleteOrganization(String orgId) async {
     await _db.rpc('delete_organization_cascade', params: {'p_org_id': orgId});
-  }
-
-  // ── Plan management ──────────────────────────────────────────────────────────
-
-  Future<void> updateOrgPlan(String orgId, String planSlug) async {
-    await _db
-        .from('organizations')
-        .update({'plan': planSlug})
-        .eq('id', orgId);
   }
 
   // ── Plan limits ──────────────────────────────────────────────────────────────
