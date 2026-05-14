@@ -246,6 +246,25 @@ CREATE POLICY hotels_org_select ON hotels
 
 -- ============================================================
 -- Done.
+-- Helper: is the current user a member of the org that owns this property?
+-- Used in RLS policies on property_staff_permissions, staff_invites, etc.
+CREATE OR REPLACE FUNCTION is_hotel_member(p_hotel_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM   organization_members om
+    WHERE  om.user_id = auth.uid()
+      AND  om.org_id  = (SELECT org_id FROM hotels WHERE id = p_hotel_id)
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION is_hotel_member(UUID) TO authenticated;
+
 -- Next steps:
 --   1. Run promote_to_superadmin('your@email.com') to set up the first superadmin
 --   2. New users sign up → auto profile created via trigger
