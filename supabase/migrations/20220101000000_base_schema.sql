@@ -3,6 +3,41 @@
 --
 -- Creates the original operational tables that existed before
 -- the migration system was introduced.  All statements use
+-- CREATE TABLE IF NOT EXISTS so this is safe on production.
+--
+-- Also defines helper functions needed by later migrations.
+-- is_hotel_member uses plpgsql (lazy compilation) so it can be
+-- defined here before the tables it references are created.
+-- ============================================================
+
+-- Needed by migration 003+ RLS policies.
+-- Real implementation: organization_members lookup via hotel.org_id.
+-- Defined early with plpgsql so the body is validated at call-time,
+-- not at creation-time (tables may not exist yet when this runs).
+CREATE OR REPLACE FUNCTION is_hotel_member(p_hotel_id UUID)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1
+    FROM   organization_members om
+    WHERE  om.user_id = auth.uid()
+      AND  om.org_id  = (SELECT org_id FROM hotels WHERE id = p_hotel_id)
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION is_hotel_member(UUID) TO authenticated;
+
+-- ============================================================
+-- Migration 000: Base schema
+--
+-- Creates the original operational tables that existed before
+-- the migration system was introduced.  All statements use
 -- CREATE TABLE IF NOT EXISTS so this is safe to run on the
 -- production database (which already has these tables).
 -- ============================================================
