@@ -105,14 +105,21 @@ CREATE OR REPLACE FUNCTION create_profile_on_signup()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 BEGIN
-  INSERT INTO profiles (id, email)
-  VALUES (NEW.id, NEW.email)
+  INSERT INTO public.profiles (id, email)
+  VALUES (NEW.id, COALESCE(NEW.email, ''))
   ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email;
   RETURN NEW;
 END;
 $$;
+
+-- Wire the trigger to use this updated function
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION create_profile_on_signup();
 
 
 -- ─── 8. SECURITY DEFINER function: look up a user's UUID by email ─────────────

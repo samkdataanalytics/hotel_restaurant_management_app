@@ -40,9 +40,7 @@ REVOKE EXECUTE ON FUNCTION resolve_staff_username(TEXT) FROM anon;
 -- ── M-1: Fix is_hotel_member to exclude soft-deleted members ──
 -- Previously did not filter is_deleted, so removed org members
 -- retained RLS access to property_staff_permissions etc.
--- Parameter name must match the production function (h_id) to allow
--- CREATE OR REPLACE without drop — renaming parameters is not permitted.
-CREATE OR REPLACE FUNCTION is_hotel_member(h_id UUID)
+CREATE OR REPLACE FUNCTION is_hotel_member(p_hotel_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 STABLE
@@ -54,7 +52,7 @@ BEGIN
     SELECT 1
     FROM   organization_members om
     WHERE  om.user_id = auth.uid()
-      AND  om.org_id  = (SELECT org_id FROM hotels WHERE id = h_id)
+      AND  om.org_id  = (SELECT org_id FROM hotels WHERE id = p_hotel_id)
       AND  (om.is_deleted = FALSE OR om.is_deleted IS NULL)
   );
 END;

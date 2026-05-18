@@ -32,10 +32,13 @@ COMMENT ON TABLE profiles IS 'One row per auth user. is_superadmin grants platfo
 
 -- Auto-create profile on signup
 CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS TRIGGER LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
-  INSERT INTO profiles (id)
-  VALUES (NEW.id)
+  INSERT INTO public.profiles (id, email)
+  VALUES (NEW.id, COALESCE(NEW.email, ''))
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
 END;

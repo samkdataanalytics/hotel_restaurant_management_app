@@ -4,8 +4,9 @@
 -- Run this in the Supabase SQL editor.
 -- ============================================================
 
-
 -- ─── 1. staff_invites table ──────────────────────────────────────────────────
+-- Token default uses two concatenated UUIDs (no dashes) = 64 hex chars,
+-- same entropy as encode(gen_random_bytes(32),'hex') but requires no extension.
 
 CREATE TABLE IF NOT EXISTS staff_invites (
   id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -14,7 +15,7 @@ CREATE TABLE IF NOT EXISTS staff_invites (
   invited_email  TEXT        NOT NULL,
   permissions    JSONB       NOT NULL DEFAULT '{}',
   invited_by     UUID        REFERENCES auth.users(id),
-  token          TEXT        NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex'),
+  token          TEXT        NOT NULL UNIQUE DEFAULT replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''),
   status         TEXT        NOT NULL DEFAULT 'pending'
                  CHECK (status IN ('pending', 'accepted', 'expired')),
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
