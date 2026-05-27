@@ -1,0 +1,79 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - dev_v1
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set environment (prod vs dev)
+        id: env
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "env_name=production"                                          >> $GITHUB_OUTPUT
+            echo "project_ref=${{ secrets.PROD_SUPABASE_PROJECT_REF }}"       >> $GITHUB_OUTPUT
+            echo "db_password=${{ secrets.PROD_SUPABASE_DB_PASSWORD }}"       >> $GITHUB_OUTPUT
+            echo "deploy_hook=${{ secrets.VERCEL_PROD_DEPLOY_HOOK }}"         >> $GITHUB_OUTPUT
+          else
+            echo "env_name=development"                                        >> $GITHUB_OUTPUT
+            echo "project_ref=${{ secrets.DEV_SUPABASE_PROJECT_REF }}"        >> $GITHUB_OUTPUT
+            echo "db_password=${{ secrets.DEV_SUPABASE_DB_PASSWORD }}"        >> $GITHUB_OUTPUT
+            echo "deploy_hook=${{ secrets.VERCEL_DEV_DEPLOY_HOOK }}"          >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify required secrets are present
+        run: |
+          missing=()
+          [ -z "${{ secrets.SUPABASE_ACCESS_TOKEN }}" ]       && missing+=("SUPABASE_ACCESS_TOKEN")
+          [ -z "${{ steps.env.outputs.project_ref }}" ]       && missing+=("project_ref (PROD_ or DEV_SUPABASE_PROJECT_REF)")
+          [ -z "${{ steps.env.outputs.db_password }}" ]       && missing+=("db_password (PROD_ or DEV_SUPABASE_DB_PASSWORD)")
+          [ -z "${{ steps.env.outputs.deploy_hook }}" ]       && missing+=("deploy_hook (VERCEL_PROD_ or VERCEL_DEV_DEPLOY_HOOK)")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "ERROR: The following required secrets are not set: ${missing[*]}"
+            echo "Go to: Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
+          echo "All required secrets are present for ${{ steps.env.outputs.env_name }} deployment."
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.1.0
+
+      - name: Push database migrations
+        run: |
+          supabase link --project-ref ${{ steps.env.outputs.project_ref }}
+          supabase db push --linked --password ${{ steps.env.outputs.db_password }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy Edge Functions
+        run: |
+          supabase functions deploy payhere-hash           --project-ref ${{ steps.env.outputs.project_ref }}
+          supabase functions deploy payhere-notify         --project-ref ${{ steps.env.outputs.project_ref }}
+          supabase functions deploy create-staff-account   --project-ref ${{ steps.env.outputs.project_ref }}
+          supabase functions deploy reset-staff-password   --project-ref ${{ steps.env.outputs.project_ref }}
+          supabase functions deploy invite-enterprise-user --project-ref ${{ steps.env.outputs.project_ref }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Trigger Vercel deploy
+        run: |
+          response=$(curl -sf -X POST "${{ steps.env.outputs.deploy_hook }}" -w "\n%{http_code}")
+          status=$(echo "$response" | tail -1)
+          if [ "$status" -lt 200 ] || [ "$status" -gt 299 ]; then
+            echo "ERROR: Vercel deploy hook returned HTTP $status"
+            exit 1
+          fi
+          echo "Vercel deploy triggered successfully (HTTP $status) for ${{ steps.env.outputs.env_name }}"

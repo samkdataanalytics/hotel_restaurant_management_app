@@ -141,22 +141,24 @@ CREATE POLICY restaurant_orders_guest_read ON restaurant_orders
   );
 
 -- ── guest_feedback — tightened INSERT ────────────────────────────────────────
--- guest_feedback uses property_id (TEXT), not hotel_id.
--- Old policy was WITH CHECK (true) — completely open.
--- New policy: the order_id must reference a real restaurant_order that belongs
--- to an active hotel. Guests can only submit feedback for orders they just saw.
-DROP POLICY IF EXISTS guest_feedback_guest_insert ON guest_feedback;
-CREATE POLICY guest_feedback_guest_insert ON guest_feedback
-  FOR INSERT TO anon
-  WITH CHECK (
-    order_id IN (
-      SELECT ro.id::text FROM restaurant_orders ro
-      JOIN hotels h ON h.id = ro.hotel_id
-      WHERE h.status = 'active'
-        AND (h.is_deleted = FALSE OR h.is_deleted IS NULL)
-        AND ro.type IN ('dineIn', 'roomService')
-    )
-  );
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables WHERE table_name = 'guest_feedback'
+  ) THEN
+    DROP POLICY IF EXISTS guest_feedback_guest_insert ON guest_feedback;
+    CREATE POLICY guest_feedback_guest_insert ON guest_feedback
+      FOR INSERT TO anon
+      WITH CHECK (
+        order_id IN (
+          SELECT ro.id::text FROM restaurant_orders ro
+          JOIN hotels h ON h.id = ro.hotel_id
+          WHERE h.status = 'active'
+            AND (h.is_deleted = FALSE OR h.is_deleted IS NULL)
+            AND ro.type IN ('dineIn', 'roomService')
+        )
+      );
+  END IF;
+END $$;
 
 -- ── hotels_guest_read — make TO anon explicit ────────────────────────────────
 -- 030 already scoped this to active + non-deleted; add TO anon so authenticated

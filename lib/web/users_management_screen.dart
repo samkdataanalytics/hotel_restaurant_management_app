@@ -23,6 +23,8 @@ class _UsersManagementScreenState
     extends ConsumerState<UsersManagementScreen> {
   StaffService get _staffService => ref.read(staffServiceProvider);
   List<PropertyStaffMember> _staff = [];
+  // userId → OrgMember (only users who are also org members)
+  Map<String, OrgMember> _orgMemberByUserId = {};
   bool _isLoading = true;
   bool _isHotel = true;
   bool _isRestaurant = false;
@@ -35,7 +37,10 @@ class _UsersManagementScreenState
 
   Future<void> _loadData() async {
     final property = ref.read(activePropertyProvider);
-    if (property == null) return;
+    if (property == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
 
     if (!mounted) return;
     setState(() {
@@ -44,10 +49,24 @@ class _UsersManagementScreenState
       _isRestaurant = property.isRestaurant;
     });
 
+    final auth  = ref.read(authProvider).valueOrNull;
+    final orgId = auth?.organization?.id;
+
+    // Staff list is the critical load — show it even if org members fail.
     final staff = await _staffService.getPropertyStaff(property.id);
+
+    List<OrgMember> orgMembers = [];
+    if (orgId != null) {
+      try {
+        orgMembers = await ref.read(organizationServiceProvider)
+            .getOrganizationMembers(orgId);
+      } catch (_) {}
+    }
+
     if (!mounted) return;
     setState(() {
       _staff = staff;
+      _orgMemberByUserId = { for (final m in orgMembers) m.userId: m };
       _isLoading = false;
     });
   }
@@ -111,7 +130,7 @@ class _UsersManagementScreenState
 
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: const Text('Remove Member',
             style: TextStyle(fontWeight: FontWeight.w700)),
         content: Text(
@@ -119,12 +138,12 @@ class _UsersManagementScreenState
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogCtx, false),
             child: const Text('Cancel',
                 style: TextStyle(color: Colors.black54)),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogCtx, true),
             style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.danger,
                 foregroundColor: Colors.white),
@@ -138,6 +157,7 @@ class _UsersManagementScreenState
 
     try {
       await _staffService.removeStaffMember(property.id, member.userId);
+      if (!mounted) return;
       _loadData();
     } catch (e) {
       if (!mounted) return;
@@ -156,7 +176,7 @@ class _UsersManagementScreenState
     final newRole = member.isManager ? 'staff' : 'manager';
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: Text(
           member.isManager ? 'Demote to Staff?' : 'Promote to Manager?',
           style: const TextStyle(fontWeight: FontWeight.w700),
@@ -169,11 +189,11 @@ class _UsersManagementScreenState
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogCtx, false),
             child: const Text('Cancel', style: TextStyle(color: Colors.black54)),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogCtx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: member.isManager ? AppTheme.warning : AppTheme.adminPrimary,
               foregroundColor: Colors.white,
@@ -187,6 +207,7 @@ class _UsersManagementScreenState
     if (confirm != true) return;
     try {
       await _staffService.setStaffRole(property.id, member.userId, newRole);
+      if (!mounted) return;
       _loadData();
     } catch (e) {
       if (!mounted) return;
@@ -232,7 +253,7 @@ class _UsersManagementScreenState
 
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: const Text('Revoke All Access',
             style: TextStyle(fontWeight: FontWeight.w700)),
         content: Text(
@@ -241,12 +262,12 @@ class _UsersManagementScreenState
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogCtx, false),
             child: const Text('Cancel',
                 style: TextStyle(color: Colors.black54)),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogCtx, true),
             style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.warning,
                 foregroundColor: Colors.white),
@@ -268,6 +289,7 @@ class _UsersManagementScreenState
       };
       await _staffService.updateStaffPermissions(
           property.id, member.userId, nonePerms);
+      if (!mounted) return;
       _loadData();
     } catch (e) {
       if (!mounted) return;
@@ -275,6 +297,39 @@ class _UsersManagementScreenState
         SnackBar(
             content: Text('Failed to revoke access: $e'),
             backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _toggleManagerBilling(PropertyStaffMember member) async {
+    final auth = ref.read(authProvider).valueOrNull;
+    final orgId = auth?.organization?.id;
+    if (orgId == null) return;
+
+    final orgMember = _orgMemberByUserId[member.userId];
+    if (orgMember == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This manager does not have an organisation account — billing access cannot be granted.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final newValue = !orgMember.canManageBilling;
+    try {
+      await ref.read(organizationServiceProvider)
+          .setMemberBillingPermissionByUserId(orgId, member.userId, newValue);
+      if (!mounted) return;
+      _loadData();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update billing access: $e'),
+          backgroundColor: AppTheme.danger,
+        ),
       );
     }
   }
@@ -398,7 +453,11 @@ class _UsersManagementScreenState
                         ),
                       )
                     else
-                      ...visibleStaff.map((m) => _buildMemberRow(m, isOwner: isOwner)),
+                      ...visibleStaff.map((m) => _buildMemberRow(
+                            m,
+                            isOwner: isOwner,
+                            orgMember: _orgMemberByUserId[m.userId],
+                          )),
                   ],
                 ),
               ),
@@ -409,7 +468,8 @@ class _UsersManagementScreenState
     );
   }
 
-  Widget _buildMemberRow(PropertyStaffMember member, {required bool isOwner}) {
+  Widget _buildMemberRow(PropertyStaffMember member,
+      {required bool isOwner, OrgMember? orgMember}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
       decoration: BoxDecoration(
@@ -457,10 +517,21 @@ class _UsersManagementScreenState
           Expanded(
             flex: 2,
             child: member.isManager
-                ? _Chip(
-                    label: 'Full Access',
-                    color: AppTheme.adminPrimary,
-                    icon: Icons.shield_rounded)
+                ? Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _Chip(
+                          label: 'Full Access',
+                          color: AppTheme.adminPrimary,
+                          icon: Icons.shield_rounded),
+                      if (orgMember?.canManageBilling == true)
+                        _Chip(
+                            label: 'Billing',
+                            color: const Color(0xFF059669),
+                            icon: Icons.credit_card_rounded),
+                    ],
+                  )
                 : member.accessCount == 0
                     ? _Chip(
                         label: 'No Access',
@@ -542,6 +613,9 @@ class _UsersManagementScreenState
                   case 'assign':
                     _assignToProperty(member);
                     break;
+                  case 'billing':
+                    _toggleManagerBilling(member);
+                    break;
                   case 'remove':
                     _removeMember(member);
                     break;
@@ -608,6 +682,35 @@ class _UsersManagementScreenState
                     const Text('Reset Password'),
                   ]),
                 ),
+                // Billing access — owner only, managers only
+                if (isOwner && member.isManager && orgMember != null) ...[
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: 'billing',
+                    child: Row(children: [
+                      Icon(
+                        orgMember.canManageBilling
+                            ? Icons.credit_card_off_rounded
+                            : Icons.credit_card_rounded,
+                        size: 17,
+                        color: orgMember.canManageBilling
+                            ? AppTheme.warning
+                            : const Color(0xFF059669),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        orgMember.canManageBilling
+                            ? 'Revoke Billing Access'
+                            : 'Grant Billing Access',
+                        style: TextStyle(
+                          color: orgMember.canManageBilling
+                              ? AppTheme.warning
+                              : const Color(0xFF059669),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ],
                 // Assign / Transfer to another property — owner only
                 if (isOwner) ...[
                   const PopupMenuDivider(),
@@ -1195,8 +1298,8 @@ class _AddStaffDialogState extends ConsumerState<_AddStaffDialog> {
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(10)),
                           ),
-                          validator: (v) => v == null || v.length < 6
-                              ? 'At least 6 characters'
+                          validator: (v) => v == null || v.length < 8
+                              ? 'At least 8 characters'
                               : null,
                         ),
                         const SizedBox(height: 16),
@@ -1588,8 +1691,8 @@ class _ResetPasswordDialogState extends ConsumerState<_ResetPasswordDialog> {
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10)),
             ),
-            validator: (v) => v == null || v.length < 6
-                ? 'At least 6 characters'
+            validator: (v) => v == null || v.length < 8
+                ? 'At least 8 characters'
                 : null,
           ),
           const SizedBox(height: 14),

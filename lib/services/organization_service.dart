@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uuid/uuid.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -155,6 +154,7 @@ class OrgMember {
   final String role;
   final String fullName;
   final String email;
+  final bool canManageBilling;
 
   const OrgMember({
     required this.id,
@@ -163,15 +163,17 @@ class OrgMember {
     required this.role,
     required this.fullName,
     required this.email,
+    this.canManageBilling = false,
   });
 
   factory OrgMember.fromRow(Map<String, dynamic> r) => OrgMember(
-        id:       r['id']        as String,
-        orgId:    r['org_id']    as String,
-        userId:   r['user_id']   as String,
-        role:     r['role']      as String? ?? 'member',
-        fullName: (r['profiles'] as Map<String, dynamic>?)?['full_name'] as String? ?? '',
-        email:    (r['profiles'] as Map<String, dynamic>?)?['email']     as String? ?? '',
+        id:               r['id']                 as String,
+        orgId:            r['org_id']             as String,
+        userId:           r['user_id']            as String,
+        role:             r['role']               as String? ?? 'member',
+        fullName:         (r['profiles'] as Map<String, dynamic>?)?['full_name'] as String? ?? '',
+        email:            (r['profiles'] as Map<String, dynamic>?)?['email']     as String? ?? '',
+        canManageBilling: r['can_manage_billing'] as bool? ?? false,
       );
 }
 
@@ -261,37 +263,18 @@ class OrganizationService {
     required String phone,
     String logoUrl = '',
   }) async {
-    final userId = _db.auth.currentUser!.id;
-
-    // Generate UUID client-side so we never need to SELECT the org before
-    // adding the membership row. The SELECT policy requires org membership,
-    // so we insert org + member atomically (same id), then fetch.
-    final orgId = const Uuid().v4();
-
-    await _db.from('organizations').insert({
-      'id':       orgId,
-      'name':     name,
-      'slug':     slug,
-      'country':  country,
-      'phone':    phone,
-      'logo_url': logoUrl,
+    // SECURITY DEFINER RPC handles org + membership atomically and recovers
+    // orphaned orgs (org row created but membership INSERT failed previously).
+    final rows = await _db.rpc('create_or_recover_organization', params: {
+      'p_name':     name,
+      'p_slug':     slug,
+      'p_country':  country,
+      'p_phone':    phone,
+      'p_logo_url': logoUrl,
     });
 
-    // Add membership immediately — now current_org_id() returns orgId
-    await _db.from('organization_members').insert({
-      'org_id':  orgId,
-      'user_id': userId,
-      'role':    'owner',
-    });
-
-    // SELECT policy now passes (user is a member)
-    final orgRow = await _db
-        .from('organizations')
-        .select()
-        .eq('id', orgId)
-        .single();
-
-    return Organization.fromRow(orgRow);
+    final row = (rows as List).first as Map<String, dynamic>;
+    return Organization.fromRow(row);
   }
 
   // ── Properties ──────────────────────────────────────────────────────────────
@@ -464,9 +447,26 @@ class OrganizationService {
     final rows = await _db
         .from('organization_members')
         .select('*, profiles(full_name, email)')
-        .eq('org_id', orgId);
+        .eq('org_id', orgId)
+        .eq('is_deleted', false);
 
     return rows.map((r) => OrgMember.fromRow(r)).toList();
+  }
+
+  Future<void> setMemberBillingPermission(String memberId, bool canManage) async {
+    await _db
+        .from('organization_members')
+        .update({'can_manage_billing': canManage})
+        .eq('id', memberId);
+  }
+
+  Future<void> setMemberBillingPermissionByUserId(
+      String orgId, String userId, bool canManage) async {
+    await _db
+        .from('organization_members')
+        .update({'can_manage_billing': canManage})
+        .eq('org_id', orgId)
+        .eq('user_id', userId);
   }
 
   Future<void> inviteMember(String orgId, String email, String role) async {
@@ -479,7 +479,9 @@ class OrganizationService {
         .limit(1);
 
     if (userRows.isEmpty) {
-      throw Exception('No user found with that email. Ask them to sign up first.');
+      // Don't reveal whether the email is registered — return silently so the
+      // caller's success message is shown regardless (prevents email enumeration).
+      return;
     }
 
     await _db.from('organization_members').insert({
@@ -493,15 +495,6 @@ class OrganizationService {
 
   Future<void> deleteOrganization(String orgId) async {
     await _db.rpc('delete_organization_cascade', params: {'p_org_id': orgId});
-  }
-
-  // ── Plan management ──────────────────────────────────────────────────────────
-
-  Future<void> updateOrgPlan(String orgId, String planSlug) async {
-    await _db
-        .from('organizations')
-        .update({'plan': planSlug})
-        .eq('id', orgId);
   }
 
   // ── Plan limits ──────────────────────────────────────────────────────────────

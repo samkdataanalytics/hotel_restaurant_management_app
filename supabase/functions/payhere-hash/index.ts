@@ -1,12 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createHash } from 'node:crypto'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
-
 // Plan rank — higher = more expensive. Used to reject downgrades.
 const PLAN_RANK: Record<string, number> = {
   free:       0,
@@ -19,9 +13,34 @@ function md5Upper(s: string): string {
   return createHash('md5').update(s).digest('hex').toUpperCase()
 }
 
+function buildCors(req: Request): Record<string, string> {
+  const origin      = req.headers.get('Origin') ?? ''
+  const devSuffix   = Deno.env.get('PAYHERE_DEV_ORIGIN_SUFFIX')   ?? ''
+  const ngrokSuffix = Deno.env.get('PAYHERE_NGROK_ORIGIN_SUFFIX') ?? ''
+  const allowed =
+    origin === 'https://www.hotrest.app' ||
+    origin === 'https://hotrest.app'     ||
+    origin.startsWith('http://localhost')  ||
+    (devSuffix   && origin.endsWith(devSuffix))   ||
+    (ngrokSuffix && origin.endsWith(ngrokSuffix))
+  return {
+    'Access-Control-Allow-Origin':  allowed ? origin : 'https://www.hotrest.app',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
+}
+
 Deno.serve(async (req: Request) => {
+  const cors = buildCors(req)
+  const json = (body: unknown, status: number) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+
   if (req.method === 'OPTIONS') {
-    return json('ok', 200)
+    return new Response('ok', { headers: cors })
   }
 
   try {
@@ -99,16 +118,15 @@ Deno.serve(async (req: Request) => {
     if (!user || authErr) return json({ error: 'Not authenticated' }, 401)
 
     const body = await req.json()
-    const { orderId, amount, currency, orgId, planSlug, billingCycle } = body as {
+    const { orderId, currency, orgId, planSlug, billingCycle } = body as {
       orderId:      string
-      amount:       string
       currency:     string
       orgId:        string
       planSlug:     string
       billingCycle: string
     }
 
-    if (!orderId || !amount || !currency || !orgId || !planSlug || !billingCycle) {
+    if (!orderId || !currency || !orgId || !planSlug || !billingCycle) {
       return json({ error: 'Missing required fields' }, 400)
     }
 
@@ -128,14 +146,14 @@ Deno.serve(async (req: Request) => {
 
     const { data: plan, error: planErr } = await adminClient
       .from('plans')
-      .select('slug, is_active')
+      .select('slug, is_active, price_monthly')
       .eq('slug', planSlug)
       .eq('is_active', true)
       .maybeSingle()
 
     if (planErr) {
       console.error('payhere-hash: plan lookup error:', planErr.message, planErr.code)
-      return json({ error: `Plan lookup failed: ${planErr.message} (${planErr.code})` }, 500)
+      return json({ error: 'Payment gateway error. Please try again.' }, 500)
     }
 
     if (!plan) {
@@ -143,16 +161,25 @@ Deno.serve(async (req: Request) => {
       return json({ error: `Invalid or inactive plan: '${planSlug}'` }, 400)
     }
 
-    // Confirm caller is owner or admin of the org
+    // Compute amount server-side — never trust the client-supplied value.
+    // This prevents a malicious org admin from paying LKR 1 for any plan.
+    const priceMonthly = Number(plan.price_monthly)
+    const amount = billingCycle === 'annually'
+      ? (priceMonthly * 12).toFixed(2)
+      : priceMonthly.toFixed(2)
+
+    // Only org owners (or members explicitly granted billing access) can upgrade
     const { data: member } = await userClient
       .from('organization_members')
-      .select('role')
+      .select('role, can_manage_billing')
       .eq('org_id', orgId)
       .eq('user_id', user.id)
-      .in('role', ['owner', 'admin'])
       .maybeSingle()
 
     if (!member) return json({ error: 'Permission denied' }, 403)
+    if (member.role !== 'owner' && !member.can_manage_billing) {
+      return json({ error: 'Only org owners can upgrade the plan.' }, 403)
+    }
 
     // Reject downgrades — user must contact support to downgrade
     const { data: org } = await adminClient
@@ -197,7 +224,7 @@ Deno.serve(async (req: Request) => {
 
       if (insertErr) {
         console.error('payhere-hash: failed to store order:', insertErr.message, insertErr.code)
-        return json({ error: 'Failed to create order' }, 500)
+        return json({ error: 'Payment gateway error. Please try again.' }, 500)
       }
     }
 
@@ -215,10 +242,3 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Unexpected error' }, 500)
   }
 })
-
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
-}

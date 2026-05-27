@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../app_theme.dart';
 import '../providers/app_auth_provider.dart';
 import '../services/plan_service.dart';
+import '../services/organization_service.dart';
 import '../providers/service_providers.dart';
 
 class AccountSettingsScreen extends ConsumerStatefulWidget {
@@ -384,9 +385,14 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
 
 // ─── Plan & Billing card ──────────────────────────────────────────────────────
 
-class _PlanBillingCard extends ConsumerWidget {
+class _PlanBillingCard extends ConsumerStatefulWidget {
   const _PlanBillingCard();
 
+  @override
+  ConsumerState<_PlanBillingCard> createState() => _PlanBillingCardState();
+}
+
+class _PlanBillingCardState extends ConsumerState<_PlanBillingCard> {
   static const _planColors = {
     'free':       Color(0xFF64748B),
     'starter':    Color(0xFF2563EB),
@@ -394,11 +400,74 @@ class _PlanBillingCard extends ConsumerWidget {
     'enterprise': Color(0xFFD97706),
   };
 
+  List<OrgMember> _members = [];
+  bool _loadingMembers = false;
+  final _orgService = OrganizationService();
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final org      = ref.watch(authProvider).valueOrNull?.organization;
+  void initState() {
+    super.initState();
+    // Best-effort: load immediately if auth is already settled.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMembers());
+  }
+
+  Future<void> _loadMembers() async {
+    final auth = ref.read(authProvider).valueOrNull;
+    // Auth still loading or user is not an owner — skip.
+    if (auth == null || auth.organization == null || !auth.isOrgOwner) return;
+    setState(() => _loadingMembers = true);
+    try {
+      final members = await _orgService.getOrganizationMembers(auth.organization!.id);
+      if (mounted) setState(() => _members = members);
+    } finally {
+      if (mounted) setState(() => _loadingMembers = false);
+    }
+  }
+
+  Future<void> _toggleBilling(OrgMember member, bool value) async {
+    try {
+      await _orgService.setMemberBillingPermission(member.id, value);
+      await _loadMembers();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update billing permission: $e'),
+              backgroundColor: AppTheme.danger),
+        );
+      }
+    }
+  }
+
+  Widget _limitChip(IconData icon, String label) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF1F5F9),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 13, color: Colors.black38),
+      const SizedBox(width: 5),
+      Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+    ]),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    // If auth was still loading during initState, load members once it settles.
+    ref.listen<AsyncValue<AppAuthState>>(authProvider, (prev, next) {
+      if ((prev?.isLoading ?? true) && !next.isLoading) {
+        _loadMembers();
+      }
+    });
+
+    final auth     = ref.watch(authProvider).valueOrNull;
+    final org      = auth?.organization;
     final planSlug = org?.plan ?? 'free';
     final accent   = _planColors[planSlug] ?? const Color(0xFF64748B);
+    final isOwner  = auth?.isOrgOwner ?? false;
+
+    // Members who can be granted billing access (exclude owners — they always have it)
+    final grantableMembers = _members.where((m) => m.role != 'owner').toList();
 
     return _SectionCard(
       title: 'Plan & Billing',
@@ -424,9 +493,8 @@ class _PlanBillingCard extends ConsumerWidget {
             ),
           );
 
-          final canUpgrade = plans.any(
-            (p) => p.sortOrder > current.sortOrder && !p.isCustomPrice,
-          );
+          final canUpgrade   = (auth?.canUpgradePlan ?? false) &&
+              plans.any((p) => p.sortOrder > current.sortOrder && !p.isCustomPrice);
           final isEnterprise = current.isCustomPrice;
 
           String lim(int v) => v == -1 ? 'Unlimited' : '$v';
@@ -474,7 +542,7 @@ class _PlanBillingCard extends ConsumerWidget {
               ]),
               const SizedBox(height: 20),
 
-              // Action row
+              // Upgrade action row — visible only to owners & billing-permitted members
               if (isEnterprise)
                 const Text(
                   'You\'re on an Enterprise plan. Contact support to make changes.',
@@ -498,30 +566,105 @@ class _PlanBillingCard extends ConsumerWidget {
                   const Text('Unlock more properties, rooms & staff.',
                       style: TextStyle(fontSize: 12, color: Colors.black38)),
                 ])
-              else
+              else if (auth?.canUpgradePlan ?? false)
                 const Text(
                   'You\'re on the highest available plan.',
                   style: TextStyle(fontSize: 13, color: Colors.black45),
                 ),
+
+              // ── Billing Access section (owners only) ──────────────────────
+              if (isOwner) ...[
+                const SizedBox(height: 28),
+                const Divider(height: 1),
+                const SizedBox(height: 20),
+                Row(children: [
+                  const Icon(Icons.credit_card_rounded, size: 16, color: Colors.black45),
+                  const SizedBox(width: 8),
+                  Text('Billing Access',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700)),
+                ]),
+                const SizedBox(height: 6),
+                Text(
+                  'Choose who can upgrade the plan. Only you (owner) have access by default.',
+                  style: TextStyle(fontSize: 12, color: AppTheme.adminTextMuted),
+                ),
+                const SizedBox(height: 14),
+                if (_loadingMembers)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                else if (grantableMembers.isEmpty)
+                  Text(
+                    'No other members in your organisation yet.',
+                    style: TextStyle(fontSize: 13, color: AppTheme.adminTextMuted),
+                  )
+                else
+                  ...grantableMembers.map((m) => _BillingMemberRow(
+                        member: m,
+                        onToggle: (v) => _toggleBilling(m, v),
+                      )),
+              ],
             ],
           );
         },
       ),
     );
   }
+}
 
-  Widget _limitChip(IconData icon, String label) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF1F5F9),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 13, color: Colors.black38),
-      const SizedBox(width: 5),
-      Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-    ]),
-  );
+class _BillingMemberRow extends StatelessWidget {
+  final OrgMember member;
+  final ValueChanged<bool> onToggle;
+
+  const _BillingMemberRow({required this.member, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = member.fullName.isNotEmpty
+        ? member.fullName.trim().split(' ').take(2).map((w) => w[0].toUpperCase()).join()
+        : '?';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: AppTheme.adminPrimary.withValues(alpha: 0.12),
+            child: Text(initials,
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.adminPrimary)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(member.fullName.isNotEmpty ? member.fullName : member.email,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(_roleLabel(member.role),
+                    style: TextStyle(fontSize: 11, color: AppTheme.adminTextMuted)),
+              ],
+            ),
+          ),
+          Switch(
+            value: member.canManageBilling,
+            onChanged: onToggle,
+            activeColor: AppTheme.adminPrimary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _roleLabel(String role) => switch (role) {
+    'admin'  => 'Admin',
+    'member' => 'Member',
+    _        => role,
+  };
 }
 
 // ─── Reusable section card ────────────────────────────────────────────────────

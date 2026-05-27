@@ -1,19 +1,36 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
-
 interface PropertyAssignment {
   propertyId: string
   permissions: Record<string, string> // sectionKey → privilege ('none'|'view'|'edit')
 }
 
+function buildCors(req: Request): Record<string, string> {
+  const origin    = req.headers.get('Origin') ?? ''
+  const devSuffix = Deno.env.get('PAYHERE_DEV_ORIGIN_SUFFIX') ?? ''
+  const allowed =
+    origin === 'https://www.hotrest.app' ||
+    origin === 'https://hotrest.app'     ||
+    origin.startsWith('http://localhost')  ||
+    (devSuffix && origin.endsWith(devSuffix))
+  return {
+    'Access-Control-Allow-Origin':  allowed ? origin : 'https://www.hotrest.app',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
+}
+
 Deno.serve(async (req: Request) => {
+  const cors = buildCors(req)
+  const json = (body: unknown, status: number) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: cors })
   }
 
   try {
@@ -37,8 +54,8 @@ Deno.serve(async (req: Request) => {
     if (!username || !password || !primaryPropertyId || !orgId) {
       return json({ error: 'Missing required fields: username, password, primaryPropertyId, orgId' }, 400)
     }
-    if (password.length < 6) {
-      return json({ error: 'Password must be at least 6 characters' }, 400)
+    if (password.length < 8) {
+      return json({ error: 'Password must be at least 8 characters' }, 400)
     }
     const validRoles = ['staff', 'manager']
     if (!validRoles.includes(role)) {
@@ -86,7 +103,7 @@ Deno.serve(async (req: Request) => {
       { p_username: username },
     )
     if (resolveErr || !finalUsername) {
-      return json({ error: `Could not resolve username: ${resolveErr?.message ?? 'unknown error'}` }, 500)
+      return json({ error: 'Could not resolve username' }, 500)
     }
 
     const syntheticEmail = `${finalUsername}@staff.internal`
@@ -126,7 +143,7 @@ Deno.serve(async (req: Request) => {
     if (setupErr) {
       await adminClient.auth.admin.deleteUser(userId)
       console.error('create_staff_member rpc error:', setupErr.message)
-      return json({ error: `Failed to set up staff member: ${setupErr.message}` }, 500)
+      return json({ error: 'Failed to set up staff member' }, 500)
     }
 
     // ── Step 4: Assign to additional properties ────────────────────────────────
@@ -148,13 +165,7 @@ Deno.serve(async (req: Request) => {
     return json({ userId, username: confirmedUsername ?? finalUsername }, 200)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    return json({ error: `Unexpected error: ${msg}` }, 500)
+    console.error('create-staff-account error:', msg)
+    return json({ error: 'Unexpected error' }, 500)
   }
 })
-
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
-}

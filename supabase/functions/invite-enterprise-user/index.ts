@@ -1,19 +1,29 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  })
+function buildCors(req: Request): Record<string, string> {
+  const origin    = req.headers.get('Origin') ?? ''
+  const devSuffix = Deno.env.get('PAYHERE_DEV_ORIGIN_SUFFIX') ?? ''
+  const allowed =
+    origin === 'https://www.hotrest.app' ||
+    origin === 'https://hotrest.app'     ||
+    origin.startsWith('http://localhost')  ||
+    (devSuffix && origin.endsWith(devSuffix))
+  return {
+    'Access-Control-Allow-Origin':  allowed ? origin : 'https://www.hotrest.app',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
 }
 
 Deno.serve(async (req: Request) => {
+  const cors = buildCors(req)
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    })
+
   if (req.method === 'OPTIONS') return json('ok')
 
   try {

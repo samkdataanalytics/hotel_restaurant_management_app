@@ -1,5 +1,25 @@
-[functions.create-staff-account]
+# Local project identifier — used by Supabase CLI v2 to name containers and
+# distinguish projects. Not the same as the remote project ref.
+project_id = "hotrest"
+
+# payhere-hash: does its own getUser() check but gateway-level JWT
+# rejection is a free extra layer — blocks unauthenticated callers before
+# the function body even starts.
+[functions.payhere-hash]
+verify_jwt = true
+
+# payhere-notify: receives POST callbacks from PayHere's servers which do
+# not send a Supabase JWT. Must be false — verified by MD5 signature instead.
+[functions.payhere-notify]
 verify_jwt = false
 
+[functions.create-staff-account]
+verify_jwt = true
+
 [functions.reset-staff-password]
-verify_jwt = false
+verify_jwt = true
+
+# invite-enterprise-user: superadmin-only — gateway JWT check + manual
+# is_superadmin check inside the function body.
+[functions.invite-enterprise-user]
+verify_jwt = true

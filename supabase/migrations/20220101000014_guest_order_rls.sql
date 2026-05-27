@@ -61,7 +61,13 @@ CREATE POLICY restaurant_orders_guest_read ON restaurant_orders
 
 
 -- ── 6. guest_feedback — guest INSERT ──────────────────────────
-DROP POLICY IF EXISTS guest_feedback_guest_insert ON guest_feedback;
-CREATE POLICY guest_feedback_guest_insert ON guest_feedback
-  FOR INSERT
-  WITH CHECK (true);
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables WHERE table_name = 'guest_feedback'
+  ) THEN
+    DROP POLICY IF EXISTS guest_feedback_guest_insert ON guest_feedback;
+    CREATE POLICY guest_feedback_guest_insert ON guest_feedback
+      FOR INSERT
+      WITH CHECK (true);
+  END IF;
+END $$;
