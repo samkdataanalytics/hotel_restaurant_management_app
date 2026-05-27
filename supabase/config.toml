@@ -1,3 +1,7 @@
+# Local project identifier — used by Supabase CLI v2 to name containers and
+# distinguish projects. Not the same as the remote project ref.
+project_id = "hotrest"
+
 # payhere-hash: does its own getUser() check but gateway-level JWT
 # rejection is a free extra layer — blocks unauthenticated callers before
 # the function body even starts.
