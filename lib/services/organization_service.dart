@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uuid/uuid.dart';
 
 SupabaseClient get _db => Supabase.instance.client;
 
@@ -264,37 +263,18 @@ class OrganizationService {
     required String phone,
     String logoUrl = '',
   }) async {
-    final userId = _db.auth.currentUser!.id;
-
-    // Generate UUID client-side so we never need to SELECT the org before
-    // adding the membership row. The SELECT policy requires org membership,
-    // so we insert org + member atomically (same id), then fetch.
-    final orgId = const Uuid().v4();
-
-    await _db.from('organizations').insert({
-      'id':       orgId,
-      'name':     name,
-      'slug':     slug,
-      'country':  country,
-      'phone':    phone,
-      'logo_url': logoUrl,
+    // SECURITY DEFINER RPC handles org + membership atomically and recovers
+    // orphaned orgs (org row created but membership INSERT failed previously).
+    final rows = await _db.rpc('create_or_recover_organization', params: {
+      'p_name':     name,
+      'p_slug':     slug,
+      'p_country':  country,
+      'p_phone':    phone,
+      'p_logo_url': logoUrl,
     });
 
-    // Add membership immediately — now current_org_id() returns orgId
-    await _db.from('organization_members').insert({
-      'org_id':  orgId,
-      'user_id': userId,
-      'role':    'owner',
-    });
-
-    // SELECT policy now passes (user is a member)
-    final orgRow = await _db
-        .from('organizations')
-        .select()
-        .eq('id', orgId)
-        .single();
-
-    return Organization.fromRow(orgRow);
+    final row = (rows as List).first as Map<String, dynamic>;
+    return Organization.fromRow(row);
   }
 
   // ── Properties ──────────────────────────────────────────────────────────────

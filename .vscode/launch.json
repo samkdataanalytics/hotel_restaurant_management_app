@@ -2,13 +2,17 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Production (Web)",
+      "name": "HotRest Mobile (dev)",
       "request": "launch",
       "type": "dart",
-      "args": [
-        "--dart-define=SUPABASE_URL=https://voiumrqxbsdayqmmgpew.supabase.co",
-        "--dart-define=SUPABASE_ANON_KEY=sb_publishable_qExeD_agCm3sHVRdAj1JlA_ZISacB6E"
-      ]
+      "args": ["--dart-define-from-file=.dart_define.json"]
+    },
+    {
+      "name": "HotRest Web (dev)",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "chrome",
+      "args": ["--dart-define-from-file=.dart_define.json"]
     }
   ]
 }

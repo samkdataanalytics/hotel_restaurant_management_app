@@ -4,6 +4,8 @@
 *.env
 secrets.json
 **/supabase/.env
+supabase/.temp/
+.dart_define.json
 
 # Miscellaneous
 *.class
