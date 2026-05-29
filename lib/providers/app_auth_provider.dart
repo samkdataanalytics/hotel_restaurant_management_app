@@ -48,6 +48,9 @@ class AppAuthState {
   bool get canUpgradePlan  => isOrgOwner || canManageBilling;
   /// True for staff accounts created via the admin panel (username-based).
   bool get isStaffAccount  => email?.endsWith('@staff.internal') ?? false;
+  /// True when an enterprise org has a custom price configured but hasn't paid yet.
+  bool get needsSubscriptionPayment =>
+      isLoggedIn && !isStaffAccount && (organization?.needsSubscriptionPayment ?? false);
 
   AppAuthState copyWith({
     bool? isLoading,

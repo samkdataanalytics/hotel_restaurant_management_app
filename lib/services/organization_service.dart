@@ -22,6 +22,8 @@ class Organization {
   final double? customPriceMonthly;
   final double? customPriceAnnually;
   final String? billingCycle; // 'monthly' | 'annually'
+  // Set by payhere-notify on first successful enterprise payment. null = unpaid.
+  final DateTime? subscriptionPaidAt;
 
   Organization({
     required this.id,
@@ -36,21 +38,25 @@ class Organization {
     this.customPriceMonthly,
     this.customPriceAnnually,
     this.billingCycle,
+    this.subscriptionPaidAt,
   });
 
   factory Organization.fromRow(Map<String, dynamic> r) => Organization(
-        id:                  r['id']                    as String,
-        name:                r['name']                  as String,
-        slug:                r['slug']                  as String,
-        country:             r['country']               as String? ?? '',
-        phone:               r['phone']                 as String? ?? '',
-        logoUrl:             r['logo_url']              as String? ?? '',
-        plan:                r['plan']                  as String? ?? 'free',
-        status:              r['status']                as String? ?? 'active',
-        createdAt:           DateTime.parse(r['created_at'] as String),
-        customPriceMonthly:  (r['custom_price_monthly']  as num?)?.toDouble(),
-        customPriceAnnually: (r['custom_price_annually'] as num?)?.toDouble(),
-        billingCycle:        r['billing_cycle']          as String?,
+        id:                   r['id']                    as String,
+        name:                 r['name']                  as String,
+        slug:                 r['slug']                  as String,
+        country:              r['country']               as String? ?? '',
+        phone:                r['phone']                 as String? ?? '',
+        logoUrl:              r['logo_url']              as String? ?? '',
+        plan:                 r['plan']                  as String? ?? 'free',
+        status:               r['status']                as String? ?? 'active',
+        createdAt:            DateTime.parse(r['created_at'] as String),
+        customPriceMonthly:   (r['custom_price_monthly']  as num?)?.toDouble(),
+        customPriceAnnually:  (r['custom_price_annually'] as num?)?.toDouble(),
+        billingCycle:         r['billing_cycle']          as String?,
+        subscriptionPaidAt:   r['subscription_paid_at'] != null
+            ? DateTime.parse(r['subscription_paid_at'] as String)
+            : null,
       );
 
   // For superadmin usage: property + member counts attached
@@ -69,6 +75,11 @@ class Organization {
   bool get hasCustomSubscription =>
       plan == 'enterprise' && (effectiveCustomPrice ?? 0) > 0;
 
+  /// True when the org needs to pay before accessing the app:
+  /// enterprise with custom price set, but no successful payment recorded yet.
+  bool get needsSubscriptionPayment =>
+      hasCustomSubscription && subscriptionPaidAt == null;
+
   Organization copyWithCounts({int? propertyCount, int? memberCount}) {
     final copy = Organization(
       id: id, name: name, slug: slug, country: country, phone: phone,
@@ -76,6 +87,7 @@ class Organization {
       customPriceMonthly: customPriceMonthly,
       customPriceAnnually: customPriceAnnually,
       billingCycle: billingCycle,
+      subscriptionPaidAt: subscriptionPaidAt,
     );
     copy._propertyCount = propertyCount ?? _propertyCount;
     copy._memberCount   = memberCount   ?? _memberCount;

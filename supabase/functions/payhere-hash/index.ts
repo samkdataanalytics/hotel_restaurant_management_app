@@ -146,7 +146,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: plan, error: planErr } = await adminClient
       .from('plans')
-      .select('slug, is_active, price_monthly')
+      .select('slug, is_active, price_monthly, is_custom_price')
       .eq('slug', planSlug)
       .eq('is_active', true)
       .maybeSingle()
@@ -162,11 +162,36 @@ Deno.serve(async (req: Request) => {
     }
 
     // Compute amount server-side — never trust the client-supplied value.
-    // This prevents a malicious org admin from paying LKR 1 for any plan.
-    const priceMonthly = Number(plan.price_monthly)
-    const amount = billingCycle === 'annually'
-      ? (priceMonthly * 12).toFixed(2)
-      : priceMonthly.toFixed(2)
+    // Custom-priced plans (enterprise) use the org's negotiated price, not the plans table.
+    let amount: string
+    if (plan.is_custom_price) {
+      const { data: orgPricing, error: orgErr } = await adminClient
+        .from('organizations')
+        .select('custom_price_monthly, custom_price_annually')
+        .eq('id', orgId)
+        .maybeSingle()
+
+      if (orgErr || !orgPricing) {
+        console.error('payhere-hash: failed to fetch org custom pricing for org', orgId, orgErr?.message)
+        return json({ error: 'Payment gateway error. Please try again.' }, 500)
+      }
+
+      const customPrice = billingCycle === 'annually'
+        ? Number(orgPricing.custom_price_annually ?? orgPricing.custom_price_monthly ?? 0)
+        : Number(orgPricing.custom_price_monthly ?? orgPricing.custom_price_annually ?? 0)
+
+      if (!customPrice || customPrice <= 0) {
+        console.error(`payhere-hash: no valid custom price for org ${orgId}`)
+        return json({ error: 'Custom pricing not configured. Please contact support.' }, 400)
+      }
+
+      amount = customPrice.toFixed(2)
+    } else {
+      const priceMonthly = Number(plan.price_monthly)
+      amount = billingCycle === 'annually'
+        ? (priceMonthly * 12).toFixed(2)
+        : priceMonthly.toFixed(2)
+    }
 
     // Only org owners (or members explicitly granted billing access) can upgrade
     const { data: member } = await userClient

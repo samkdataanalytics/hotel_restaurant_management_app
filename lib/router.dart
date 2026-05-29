@@ -123,6 +123,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         return AppRoutes.propertySetup;
       }
 
+      // Enterprise payment wall: custom price set by superadmin but not yet paid.
+      if (auth.needsSubscriptionPayment) {
+        if (loc == '/app/pay-subscription') return null;
+        return '/app/pay-subscription';
+      }
+
       // Has org + properties → main app
       // propertySetup is intentionally NOT listed here — users can navigate
       // there from the app shell to add more properties.
