@@ -97,7 +97,6 @@ Deno.serve(async (req: Request) => {
 
     // Activate the plan only on confirmed successful payment
     if (statusCode === STATUS.SUCCESS) {
-      // Idempotency: skip if org is already on this plan
       const { data: org } = await adminClient
         .from('organizations')
         .select('plan')
@@ -105,7 +104,7 @@ Deno.serve(async (req: Request) => {
         .maybeSingle()
 
       if (org && org.plan === order.plan_slug) {
-        console.log(`payhere-notify: org ${order.org_id} already on plan "${order.plan_slug}", skipping update`)
+        console.log(`payhere-notify: org ${order.org_id} already on plan "${order.plan_slug}"`)
       } else {
         const { error: planErr } = await adminClient
           .from('organizations')
@@ -120,6 +119,17 @@ Deno.serve(async (req: Request) => {
         } else {
           console.log(`payhere-notify: org ${order.org_id} upgraded to plan "${order.plan_slug}" (${order.billing_cycle})`)
         }
+      }
+
+      // For enterprise orgs: always stamp subscription_paid_at on every successful
+      // payment. Enterprise orgs are pre-set to 'enterprise' by the superadmin, so
+      // the plan change above may be skipped — but we still need to clear the payment wall.
+      if (order.plan_slug === 'enterprise') {
+        await adminClient
+          .from('organizations')
+          .update({ subscription_paid_at: new Date().toISOString() })
+          .eq('id', order.org_id)
+        console.log(`payhere-notify: subscription_paid_at stamped for org ${order.org_id}`)
       }
     }
 

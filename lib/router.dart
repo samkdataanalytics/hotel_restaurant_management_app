@@ -35,6 +35,7 @@ import 'web/guest/guest_checkin_screen.dart';
 import 'web/guest/guest_room_service_screen.dart';
 import 'web/legal_screen.dart';
 import 'web/help_screen.dart';
+import 'web/verify_email_screen.dart';
 
 // ─── Route names ─────────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ class AppRoutes {
   static const propertySetup = '/property-setup';
   static const app           = '/app';
   static const appDashboard  = '/app/dashboard';
+  static const verifyEmail   = '/verify-email';
   static const acceptInvite  = '/accept-invite';
   static const guestMenu     = '/menu';
   static const roomService   = '/room-service';
@@ -86,7 +88,14 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (!auth.isLoggedIn) {
         if (loc == AppRoutes.login || loc == AppRoutes.signup) return null;
+        if (loc == AppRoutes.verifyEmail) return null;
         return AppRoutes.landing;
+      }
+
+      // Logged in but email not yet verified (safety net for edge cases)
+      if (!auth.emailVerified && !auth.isStaffAccount) {
+        if (loc == AppRoutes.verifyEmail) return null;
+        return AppRoutes.verifyEmail;
       }
 
       // Logged in
@@ -114,6 +123,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         return AppRoutes.propertySetup;
       }
 
+      // Enterprise payment wall: custom price set by superadmin but not yet paid.
+      if (auth.needsSubscriptionPayment) {
+        if (loc == '/app/pay-subscription') return null;
+        return '/app/pay-subscription';
+      }
+
       // Has org + properties → main app
       // propertySetup is intentionally NOT listed here — users can navigate
       // there from the app shell to add more properties.
@@ -138,6 +153,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.signup,
         builder: (_, state) => SignupScreen(
           plan: state.uri.queryParameters['plan'],
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.verifyEmail,
+        builder: (_, state) => VerifyEmailScreen(
+          email: state.uri.queryParameters['email'],
         ),
       ),
       GoRoute(

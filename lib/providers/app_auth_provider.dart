@@ -16,6 +16,7 @@ class AppAuthState {
   final bool isLoading;
   final bool isLoggedIn;
   final bool isSuperadmin;
+  final bool emailVerified;
   final String? userId;
   final String? email;
   final Organization? organization;
@@ -30,6 +31,7 @@ class AppAuthState {
     this.isLoading  = true,
     this.isLoggedIn = false,
     this.isSuperadmin = false,
+    this.emailVerified = true,
     this.userId,
     this.email,
     this.organization,
@@ -46,11 +48,15 @@ class AppAuthState {
   bool get canUpgradePlan  => isOrgOwner || canManageBilling;
   /// True for staff accounts created via the admin panel (username-based).
   bool get isStaffAccount  => email?.endsWith('@staff.internal') ?? false;
+  /// True when an enterprise org has a custom price configured but hasn't paid yet.
+  bool get needsSubscriptionPayment =>
+      isLoggedIn && !isStaffAccount && (organization?.needsSubscriptionPayment ?? false);
 
   AppAuthState copyWith({
     bool? isLoading,
     bool? isLoggedIn,
     bool? isSuperadmin,
+    bool? emailVerified,
     String? userId,
     String? email,
     Organization? organization,
@@ -62,6 +68,7 @@ class AppAuthState {
     isLoading:          isLoading          ?? this.isLoading,
     isLoggedIn:         isLoggedIn         ?? this.isLoggedIn,
     isSuperadmin:       isSuperadmin       ?? this.isSuperadmin,
+    emailVerified:      emailVerified      ?? this.emailVerified,
     userId:             userId             ?? this.userId,
     email:              email              ?? this.email,
     organization:       organization       ?? this.organization,
@@ -139,6 +146,7 @@ class AuthNotifier extends AsyncNotifier<AppAuthState> {
         isLoading:        false,
         isLoggedIn:       true,
         isSuperadmin:     isSuperadmin,
+        emailVerified:    user.emailConfirmedAt != null,
         userId:           user.id,
         email:            user.email,
         organization:     org,
@@ -148,11 +156,12 @@ class AuthNotifier extends AsyncNotifier<AppAuthState> {
       );
     } catch (e) {
       return AppAuthState(
-        isLoading: false,
-        isLoggedIn: true,
-        userId: user.id,
-        email:  user.email,
-        error:  e.toString(),
+        isLoading:     false,
+        isLoggedIn:    true,
+        emailVerified: user.emailConfirmedAt != null,
+        userId:        user.id,
+        email:         user.email,
+        error:         e.toString(),
       );
     }
   }
@@ -177,6 +186,10 @@ class AuthNotifier extends AsyncNotifier<AppAuthState> {
       return null;
     } on AuthException catch (e) {
       state = const AsyncValue.data(AppAuthState(isLoading: false));
+      if (e.message.toLowerCase().contains('email_not_confirmed') ||
+          e.message.toLowerCase().contains('email not confirmed')) {
+        return 'EMAIL_NOT_CONFIRMED';
+      }
       return e.message;
     } catch (e) {
       state = const AsyncValue.data(AppAuthState(isLoading: false));

@@ -2,6 +2,9 @@
 # distinguish projects. Not the same as the remote project ref.
 project_id = "hotrest"
 
+[auth.email]
+enable_confirmations = true
+
 # payhere-hash: does its own getUser() check but gateway-level JWT
 # rejection is a free extra layer — blocks unauthenticated callers before
 # the function body even starts.
