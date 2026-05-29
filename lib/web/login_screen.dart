@@ -76,8 +76,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     if (err != null) {
       setState(() {
         _isLoading = false;
-        _error = null; // clear any old inline error
+        _error = null;
       });
+      if (err == 'EMAIL_NOT_CONFIRMED') {
+        context.go('${AppRoutes.verifyEmail}?email=${Uri.encodeComponent(email)}');
+        return;
+      }
       _showAuthError(err);
     }
     // On success: GoRouter listens to authProvider and redirects automatically
