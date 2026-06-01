@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvi
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:web/web.dart' as webpkg;
 import '../app_theme.dart';
 import '../providers/app_auth_provider.dart';
 import '../router.dart';
@@ -82,9 +83,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
     });
 
     try {
+      final origin = webpkg.window.location.origin;
       final res = await Supabase.instance.client.auth.signUp(
-        email:    email,
-        password: password,
+        email:          email,
+        password:       password,
+        emailRedirectTo: '$origin${AppRoutes.emailVerified}',
       );
 
       if (!mounted) return;
