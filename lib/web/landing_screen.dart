@@ -447,15 +447,45 @@ class _HeroSection extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.lock_outline_rounded, size: 13, color: _C.muted),
-              SizedBox(width: 5),
-              Text('No credit card required � 45-day free trial with full access',
-                  style: TextStyle(color: _C.muted, fontSize: 12.5)),
-            ],
+          const SizedBox(height: 20),
+          // Prominent free-trial badge
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [_C.goldLight, _C.gold],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(40),
+                boxShadow: [
+                  BoxShadow(
+                    color: _C.gold.withAlpha(110),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.celebration_rounded, size: 19, color: _C.dark),
+                  SizedBox(width: 9),
+                  Flexible(
+                    child: Text(
+                      '45-Day Free Trial  -  Full Access  -  No Credit Card',
+                      style: TextStyle(
+                        color: _C.dark,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 64),
           _DashboardMockup(isMobile: isMobile),
@@ -1316,9 +1346,49 @@ class _PricingSectionState extends ConsumerState<_PricingSection> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Start with a 45-day free trial — full access to every feature, no credit card required. Upgrade anytime.',
+            'Every plan starts with a 45-day free trial — full access to every feature, no credit card required. Upgrade anytime.',
             textAlign: TextAlign.center,
             style: TextStyle(color: _C.subtext, fontSize: 15.5),
+          ),
+          const SizedBox(height: 18),
+          // Prominent free-trial badge
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [_C.goldLight, _C.gold],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(40),
+                boxShadow: [
+                  BoxShadow(
+                    color: _C.gold.withAlpha(110),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.celebration_rounded, size: 19, color: _C.dark),
+                  SizedBox(width: 9),
+                  Flexible(
+                    child: Text(
+                      '45-Day Free Trial on Every Plan  -  No Credit Card Required',
+                      style: TextStyle(
+                        color: _C.dark,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 14),
           Container(
