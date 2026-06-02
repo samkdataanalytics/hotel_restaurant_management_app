@@ -210,6 +210,24 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
           'Register your company on HotRest',
           style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.5)),
         ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.verified_rounded, size: 15, color: Color(0xFFD4A853)),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                '45-day free trial — full access, no credit card required',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withOpacity(0.75),
+                ),
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 32),
 
         // Email
