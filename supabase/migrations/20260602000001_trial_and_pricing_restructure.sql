@@ -28,6 +28,14 @@ ALTER TABLE organizations
 -- Deliberately NOT added to the authenticated column GRANT (migration 024),
 -- and additionally blocked in guard_org_sensitive_columns() below.
 
+-- -- 2b. Relax plan CHECK FIRST so the free->growth migration validates ------
+-- Interim constraint allows both 'free' (existing rows) and 'growth' (target).
+-- Step 5 tightens it to drop 'free' once no rows reference it.
+ALTER TABLE organizations DROP CONSTRAINT IF EXISTS organizations_plan_check;
+ALTER TABLE organizations
+  ADD CONSTRAINT organizations_plan_check
+    CHECK (plan IN ('free', 'growth', 'starter', 'pro', 'enterprise'));
+
 -- -- 3. Migrate existing plan='free' orgs -> fresh 45-day trial --------------
 -- (runs as postgres in migration context -> bypasses the guard trigger)
 UPDATE organizations
