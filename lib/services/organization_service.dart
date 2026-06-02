@@ -13,9 +13,12 @@ class Organization {
   final String country;
   final String phone;
   final String logoUrl;
-  final String plan;   // free | starter | pro | enterprise
-  final String status; // active | suspended
+  final String plan;   // growth | starter | pro | enterprise
+  final String status; // active | suspended | trialing | trial_expired
   final DateTime createdAt;
+  // End of the 45-day trial. Non-null only while a trial was started; the org
+  // has full hero access until this instant, then becomes read-only.
+  final DateTime? trialEndsAt;
 
   // Custom pricing — set by superadmin for enterprise customers.
   // null = not yet agreed / not applicable.
@@ -35,6 +38,7 @@ class Organization {
     required this.plan,
     required this.status,
     required this.createdAt,
+    this.trialEndsAt,
     this.customPriceMonthly,
     this.customPriceAnnually,
     this.billingCycle,
@@ -48,9 +52,12 @@ class Organization {
         country:              r['country']               as String? ?? '',
         phone:                r['phone']                 as String? ?? '',
         logoUrl:              r['logo_url']              as String? ?? '',
-        plan:                 r['plan']                  as String? ?? 'free',
+        plan:                 r['plan']                  as String? ?? 'starter',
         status:               r['status']                as String? ?? 'active',
         createdAt:            DateTime.parse(r['created_at'] as String),
+        trialEndsAt:          r['trial_ends_at'] != null
+            ? DateTime.parse(r['trial_ends_at'] as String)
+            : null,
         customPriceMonthly:   (r['custom_price_monthly']  as num?)?.toDouble(),
         customPriceAnnually:  (r['custom_price_annually'] as num?)?.toDouble(),
         billingCycle:         r['billing_cycle']          as String?,
@@ -80,10 +87,48 @@ class Organization {
   bool get needsSubscriptionPayment =>
       hasCustomSubscription && subscriptionPaidAt == null;
 
+  // ── Trial lifecycle ─────────────────────────────────────────────────────────
+  // The stored status can lag reality for idle orgs (it only flips to
+  // 'trial_expired' on next login via enforce_my_trial_expiry()). So everything
+  // below derives the *effective* state from trial_ends_at and never trusts a
+  // stale 'trialing' status past the deadline.
+
+  /// True while inside a still-valid trial window.
+  bool get isTrialing =>
+      status == 'trialing' &&
+      trialEndsAt != null &&
+      trialEndsAt!.isAfter(DateTime.now());
+
+  /// Whole days left in the trial (0 once elapsed). Null when not trialing.
+  int? get trialDaysLeft {
+    if (status != 'trialing' || trialEndsAt == null) return null;
+    final diff = trialEndsAt!.difference(DateTime.now()).inSeconds;
+    return diff <= 0 ? 0 : (diff / 86400).ceil();
+  }
+
+  /// True when the trial has lapsed unpaid — either the status was already
+  /// flipped, or it still reads 'trialing' but the deadline has passed.
+  bool get isTrialExpired =>
+      status == 'trial_expired' ||
+      (status == 'trialing' &&
+          trialEndsAt != null &&
+          !trialEndsAt!.isAfter(DateTime.now()));
+
+  /// True when the org may view but not create/modify records (expired trial).
+  bool get isReadOnly => isTrialExpired;
+
+  /// Status corrected for an elapsed-but-not-yet-flipped trial. Reporting and
+  /// admin displays should use this instead of the raw [status] column, because
+  /// an idle org keeps a stale 'trialing' value until its owner next logs in
+  /// (the flip is lazy / on-access via enforce_my_trial_expiry()).
+  String get effectiveStatus =>
+      (status == 'trialing' && isTrialExpired) ? 'trial_expired' : status;
+
   Organization copyWithCounts({int? propertyCount, int? memberCount}) {
     final copy = Organization(
       id: id, name: name, slug: slug, country: country, phone: phone,
       logoUrl: logoUrl, plan: plan, status: status, createdAt: createdAt,
+      trialEndsAt: trialEndsAt,
       customPriceMonthly: customPriceMonthly,
       customPriceAnnually: customPriceAnnually,
       billingCycle: billingCycle,
@@ -534,7 +579,7 @@ class OrganizationService {
       final custom = orgRow[customCol] as int?;
       if (custom != null) return custom;
 
-      final slug = orgRow['plan'] as String? ?? 'free';
+      final slug = orgRow['plan'] as String? ?? 'starter';
       final planRows = await _db
           .from('plans')
           .select(planField)
@@ -632,31 +677,84 @@ class OrganizationService {
     }).eq('id', orgId);
   }
 
+  /// True when the org's trial has lapsed unpaid — creation must be blocked.
+  /// Derived from trial_ends_at so an idle org whose stored status still reads
+  /// 'trialing' past the deadline is still treated as expired.
+  Future<bool> _isOrgReadOnly(String orgId) async {
+    try {
+      final row = await _db
+          .from('organizations')
+          .select('status, trial_ends_at')
+          .eq('id', orgId)
+          .single();
+      final status = row['status'] as String? ?? 'active';
+      if (status == 'trial_expired') return true;
+      if (status == 'trialing') {
+        final ends = row['trial_ends_at'] != null
+            ? DateTime.parse(row['trial_ends_at'] as String)
+            : null;
+        return ends != null && !ends.isAfter(DateTime.now());
+      }
+      return false;
+    } catch (_) {
+      return false; // fail open: a read error must not block paying customers
+    }
+  }
+
   Future<bool> canAddProperty(String orgId) async {
+    if (await _isOrgReadOnly(orgId)) return false;
     final limit = await _getPlanLimit(orgId, 'max_properties');
     if (limit == -1) return true;
-    final count = await _db.from('hotels').select('id').eq('org_id', orgId).count();
+    // Properties = non-deleted hotels in the org.
+    final count = await _db
+        .from('hotels')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('is_deleted', false)
+        .count();
     return count.count < limit;
   }
 
   Future<bool> canAddStaff(String orgId) async {
+    if (await _isOrgReadOnly(orgId)) return false;
     final limit = await _getPlanLimit(orgId, 'max_users');
     if (limit == -1) return true;
-    final count = await _db.from('organization_members').select('id').eq('org_id', orgId).count();
+    // Users = non-deleted org members.
+    final count = await _db
+        .from('organization_members')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('is_deleted', false)
+        .count();
     return count.count < limit;
   }
 
   Future<bool> canAddRoom(String orgId, String propertyId) async {
+    if (await _isOrgReadOnly(orgId)) return false;
     final limit = await _getPlanLimit(orgId, 'max_rooms');
     if (limit == -1) return true;
-    final count = await _db.from('rooms').select('id').eq('hotel_id', propertyId).count();
+    // Rooms = count across all the org's non-deleted hotels (rooms has no
+    // soft-delete; the !inner join scopes to org + live hotels).
+    final count = await _db
+        .from('rooms')
+        .select('id, hotels!inner(org_id, is_deleted)')
+        .eq('hotels.org_id', orgId)
+        .eq('hotels.is_deleted', false)
+        .count();
     return count.count < limit;
   }
 
   Future<bool> canAddTable(String orgId, String propertyId) async {
+    if (await _isOrgReadOnly(orgId)) return false;
     final limit = await _getPlanLimit(orgId, 'max_tables');
     if (limit == -1) return true;
-    final count = await _db.from('restaurant_tables').select('id').eq('hotel_id', propertyId).count();
+    // Tables = count across all the org's non-deleted hotels (same shape as rooms).
+    final count = await _db
+        .from('restaurant_tables')
+        .select('id, hotels!inner(org_id, is_deleted)')
+        .eq('hotels.org_id', orgId)
+        .eq('hotels.is_deleted', false)
+        .count();
     return count.count < limit;
   }
 

@@ -91,9 +91,16 @@ class _DashboardContent extends StatelessWidget {
     for (final org in orgs) {
       planCounts[org.plan] = (planCounts[org.plan] ?? 0) + 1;
     }
-    final freePlan = planCounts['free'] ?? 0;
+    final growthPlan = planCounts['growth'] ?? 0;
     final proPlan = planCounts['pro'] ?? 0;
     final enterprisePlan = planCounts['enterprise'] ?? 0;
+
+    // Trial breakdown derived from trial_ends_at, NOT the stored status column:
+    // an idle org keeps a stale 'trialing' value until its owner next logs in
+    // (lazy/on-access flip), so we count from the effective state instead.
+    final trialActive = orgs.where((o) => o.isTrialing).length;
+    final trialExpired =
+        orgs.where((o) => o.effectiveStatus == 'trial_expired').length;
 
     final recentOrgs = [...orgs]
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -137,9 +144,11 @@ class _DashboardContent extends StatelessWidget {
               SizedBox(
                 width: 280,
                 child: _PlanBreakdownCard(
-                  freePlan: freePlan,
+                  growthPlan: growthPlan,
                   proPlan: proPlan,
                   enterprisePlan: enterprisePlan,
+                  trialActive: trialActive,
+                  trialExpired: trialExpired,
                   total: totalCompanies,
                 ),
               ),
@@ -292,15 +301,19 @@ class _KpiCard extends StatelessWidget {
 
 class _PlanBreakdownCard extends StatelessWidget {
   const _PlanBreakdownCard({
-    required this.freePlan,
+    required this.growthPlan,
     required this.proPlan,
     required this.enterprisePlan,
+    required this.trialActive,
+    required this.trialExpired,
     required this.total,
   });
 
-  final int freePlan;
+  final int growthPlan;
   final int proPlan;
   final int enterprisePlan;
+  final int trialActive;
+  final int trialExpired;
   final int total;
 
   @override
@@ -321,8 +334,8 @@ class _PlanBreakdownCard extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           _PlanRow(
-            label: 'Free',
-            count: freePlan,
+            label: 'Growth',
+            count: growthPlan,
             total: total,
             color: Colors.grey.shade400,
           ),
@@ -339,6 +352,23 @@ class _PlanBreakdownCard extends StatelessWidget {
             count: enterprisePlan,
             total: total,
             color: AppTheme.goldPrimary,
+          ),
+          const SizedBox(height: 16),
+          const Divider(),
+          const SizedBox(height: 12),
+          // Trial state — computed from trial_ends_at, not the raw status column.
+          _PlanRow(
+            label: 'Trials active',
+            count: trialActive,
+            total: total,
+            color: const Color(0xFFF59E0B),
+          ),
+          const SizedBox(height: 12),
+          _PlanRow(
+            label: 'Trials expired',
+            count: trialExpired,
+            total: total,
+            color: const Color(0xFFEF4444),
           ),
           const SizedBox(height: 16),
           const Divider(),
@@ -506,7 +536,7 @@ class _RecentCompaniesCard extends StatelessWidget {
                         _tableCell(org.propertyCount.toString()),
                         _tableCell(org.memberCount.toString()),
                         _tablePlanCell(org.plan),
-                        _tableStatusCell(org.status),
+                        _tableStatusCell(org.effectiveStatus),
                       ],
                     )),
               ],
@@ -560,13 +590,28 @@ class _RecentCompaniesCard extends StatelessWidget {
   }
 
   Widget _tableStatusCell(String status) {
-    final isActive = status.toLowerCase() == 'active';
+    final Color color;
+    final String label;
+    switch (status.toLowerCase()) {
+      case 'active':
+        color = AppTheme.success;
+        label = 'Active';
+        break;
+      case 'trialing':
+        color = const Color(0xFFF59E0B);
+        label = 'Trialing';
+        break;
+      case 'trial_expired':
+        color = const Color(0xFFEF4444);
+        label = 'Trial expired';
+        break;
+      default: // suspended
+        color = AppTheme.danger;
+        label = status;
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      child: _StatusChip(
-        label: status,
-        color: isActive ? AppTheme.success : AppTheme.danger,
-      ),
+      child: _StatusChip(label: label, color: color),
     );
   }
 }

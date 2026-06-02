@@ -52,6 +52,13 @@ class AppAuthState {
   bool get needsSubscriptionPayment =>
       isLoggedIn && !isStaffAccount && (organization?.needsSubscriptionPayment ?? false);
 
+  /// True while inside a still-valid 45-day trial.
+  bool get isTrialing => organization?.isTrialing ?? false;
+  /// Whole days left in the trial, or null when not trialing.
+  int? get trialDaysLeft => organization?.trialDaysLeft;
+  /// True when the trial has lapsed unpaid — app is read-only, creation blocked.
+  bool get isTrialExpired => organization?.isTrialExpired ?? false;
+
   AppAuthState copyWith({
     bool? isLoading,
     bool? isLoggedIn,
@@ -117,6 +124,14 @@ class AuthNotifier extends AsyncNotifier<AppAuthState> {
       List<OrgProperty> properties = [];
 
       if (!isSuperadmin) {
+        // Lazy trial expiry: flip status to 'trial_expired' if the deadline has
+        // passed before we read the org, so the loaded org reflects reality.
+        // SECURITY DEFINER RPC, no-op unless the caller's org is trialing & due.
+        try {
+          await _db.rpc('enforce_my_trial_expiry');
+        } catch (e) {
+          debugPrint('enforce_my_trial_expiry failed: $e'); // non-fatal
+        }
         // Run independently so a properties error never hides the org (and
         // vice-versa), which would wrongly redirect the user to /onboarding.
         try {

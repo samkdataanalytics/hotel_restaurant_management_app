@@ -394,7 +394,7 @@ class _PlanBillingCard extends ConsumerStatefulWidget {
 
 class _PlanBillingCardState extends ConsumerState<_PlanBillingCard> {
   static const _planColors = {
-    'free':       Color(0xFF64748B),
+    'growth':     Color(0xFF64748B),
     'starter':    Color(0xFF2563EB),
     'pro':        Color(0xFF7C3AED),
     'enterprise': Color(0xFFD97706),
@@ -462,7 +462,7 @@ class _PlanBillingCardState extends ConsumerState<_PlanBillingCard> {
 
     final auth     = ref.watch(authProvider).valueOrNull;
     final org      = auth?.organization;
-    final planSlug = org?.plan ?? 'free';
+    final planSlug = org?.plan ?? 'starter';
     final accent   = _planColors[planSlug] ?? const Color(0xFF64748B);
     final isOwner  = auth?.isOrgOwner ?? false;
 
@@ -486,7 +486,10 @@ class _PlanBillingCardState extends ConsumerState<_PlanBillingCard> {
           final current = plans.firstWhere(
             (p) => p.slug == planSlug,
             orElse: () => PlanModel(
-              id: '', name: planSlug == 'free' ? 'Free' : planSlug,
+              id: '',
+              name: planSlug.isEmpty
+                  ? planSlug
+                  : planSlug[0].toUpperCase() + planSlug.substring(1),
               slug: planSlug, priceMonthly: 0, isCustomPrice: false,
               maxProperties: 1, maxUsers: 3, maxRooms: 10, maxTables: 5,
               isHighlighted: false, isActive: true, sortOrder: 0,

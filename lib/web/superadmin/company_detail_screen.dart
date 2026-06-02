@@ -25,7 +25,9 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _currentStatus = widget.org.status;
+    // Use effectiveStatus so an elapsed-but-not-yet-flipped trial reads
+    // 'trial_expired' rather than a stale 'trialing'.
+    _currentStatus = widget.org.effectiveStatus;
     _loadData();
   }
 

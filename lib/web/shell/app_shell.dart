@@ -530,6 +530,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             child: Column(
               children: [
                 _buildTopBar(activeProperty, authState, isMobile),
+                _buildTrialBanner(authState),
                 Expanded(
                   key: ValueKey(activeProperty?.id ?? 'none'),
                   child: activeProperty?.status == 'inactive'
@@ -553,6 +554,60 @@ class _AppShellState extends ConsumerState<AppShell> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ─── Trial banner ─────────────────────────────────────────────────────────
+
+  /// Non-blocking banner across the top of the content area:
+  ///  • trial active   → days remaining + Upgrade link
+  ///  • trial expired  → read-only warning + Upgrade call to action
+  /// Staff accounts never see it (they don't manage billing).
+  Widget _buildTrialBanner(AppAuthState? authState) {
+    if (authState == null || (authState.isStaffAccount)) {
+      return const SizedBox.shrink();
+    }
+
+    final expired   = authState.isTrialExpired;
+    final trialing  = authState.isTrialing;
+    if (!expired && !trialing) return const SizedBox.shrink();
+
+    final bg      = expired ? const Color(0xFFFEF2F2) : const Color(0xFFFFFBEB);
+    final fg      = expired ? const Color(0xFFB91C1C) : const Color(0xFF92400E);
+    final icon    = expired ? Icons.lock_clock_rounded : Icons.timelapse_rounded;
+    final days    = authState.trialDaysLeft ?? 0;
+    final message = expired
+        ? 'Your free trial has ended. Your data is safe and viewable, but creating '
+          'new records is paused. Upgrade to continue.'
+        : 'You\'re on a free trial — $days ${days == 1 ? 'day' : 'days'} left. '
+          'Upgrade any time to keep full access.';
+
+    return Material(
+      color: bg,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: fg),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(message,
+                  style: TextStyle(fontSize: 13, color: fg, fontWeight: FontWeight.w500)),
+            ),
+            const SizedBox(width: 12),
+            if (authState.canUpgradePlan)
+              TextButton(
+                onPressed: () => context.go('/app/upgrade'),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  backgroundColor: fg,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                child: const Text('Upgrade', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1279,7 +1334,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                                 : authState!.email!,
                             style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
                           ),
-                          _PlanBadge(plan: authState?.organization?.plan ?? 'free'),
+                          _PlanBadge(plan: authState?.organization?.plan ?? 'starter'),
                         ],
                       ),
                       const SizedBox(width: 4),
@@ -1737,7 +1792,7 @@ class _PlanBadge extends StatelessWidget {
       case 'starter':    return const Color(0xFF10B981);
       case 'pro':        return const Color(0xFFD4A853);
       case 'enterprise': return const Color(0xFF8B5CF6);
-      default:           return const Color(0xFF94A3B8); // free
+      default:           return const Color(0xFF94A3B8); // growth / fallback
     }
   }
 
