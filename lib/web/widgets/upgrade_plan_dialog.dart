@@ -43,7 +43,7 @@ class _UpgradePlanDialogState extends State<UpgradePlanDialog> {
   String? _error;
 
   String get _currentSlug =>
-      widget.ref.read(authProvider).valueOrNull?.organization?.plan ?? 'free';
+      widget.ref.read(authProvider).valueOrNull?.organization?.plan ?? 'starter';
 
   @override
   void initState() {
@@ -233,7 +233,7 @@ class _PlanCard extends StatelessWidget {
 
   Color get _accent {
     switch (plan.slug) {
-      case 'free':       return _accentBlue;
+      case 'growth':     return _accentBlue;
       case 'starter':    return _accentGreen;
       case 'pro':        return _accentGold;
       case 'enterprise': return _accentPurple;

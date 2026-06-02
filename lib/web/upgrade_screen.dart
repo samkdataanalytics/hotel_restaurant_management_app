@@ -124,11 +124,17 @@ class _UpgradeScreenState extends ConsumerState<UpgradeScreen> {
             );
           }
           final allPlans    = snapshot.data ?? [];
-          final currentSlug = ref.watch(authProvider).valueOrNull?.organization?.plan ?? 'free';
+          final currentSlug = ref.watch(authProvider).valueOrNull?.organization?.plan ?? 'starter';
           final currentPlan = allPlans.firstWhere(
             (p) => p.slug == currentSlug,
+            // Fallback only if the current plan isn't in the active list
+            // (e.g. a retired slug); sortOrder 0 keeps every active plan an upgrade.
             orElse: () => PlanModel(
-              id: '', name: 'Free', slug: 'free', priceMonthly: 0,
+              id: '',
+              name: currentSlug.isEmpty
+                  ? currentSlug
+                  : currentSlug[0].toUpperCase() + currentSlug.substring(1),
+              slug: currentSlug, priceMonthly: 0,
               isCustomPrice: false, maxProperties: 1, maxUsers: 3,
               maxRooms: 10, maxTables: 5, isHighlighted: false,
               isActive: true, sortOrder: 0,

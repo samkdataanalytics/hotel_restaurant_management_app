@@ -104,20 +104,35 @@ Deno.serve(async (req: Request) => {
         .maybeSingle()
 
       if (org && org.plan === order.plan_slug) {
-        console.log(`payhere-notify: org ${order.org_id} already on plan "${order.plan_slug}"`)
+        // Plan unchanged (e.g. enterprise pre-set by superadmin, or paying again
+        // mid-trial on the same hero plan). Still flip to active so a trial /
+        // trial_expired org has its read-only state lifted.
+        const { error: statusErr } = await adminClient
+          .from('organizations')
+          .update({ status: 'active' })
+          .eq('id', order.org_id)
+
+        if (statusErr) {
+          console.error(`payhere-notify: failed to activate org ${order.org_id}:`, statusErr.message)
+        } else {
+          console.log(`payhere-notify: org ${order.org_id} already on plan "${order.plan_slug}", status set active`)
+        }
       } else {
         const { error: planErr } = await adminClient
           .from('organizations')
           .update({
             plan:          order.plan_slug,
             billing_cycle: order.billing_cycle,
+            // Paid -> active. Also clears 'trialing' / 'trial_expired' so a
+            // trial->paid conversion lifts the read-only state immediately.
+            status:        'active',
           })
           .eq('id', order.org_id)
 
         if (planErr) {
           console.error(`payhere-notify: failed to upgrade org ${order.org_id} to ${order.plan_slug}:`, planErr.message)
         } else {
-          console.log(`payhere-notify: org ${order.org_id} upgraded to plan "${order.plan_slug}" (${order.billing_cycle})`)
+          console.log(`payhere-notify: org ${order.org_id} upgraded to plan "${order.plan_slug}" (${order.billing_cycle}), status active`)
         }
       }
 

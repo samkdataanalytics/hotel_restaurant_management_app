@@ -324,7 +324,7 @@ class _CompaniesListScreenState extends State<CompaniesListScreen> {
           style:
               TextStyle(fontSize: 13, color: AppTheme.adminTextMuted),
         )),
-        DataCell(_StatusChip(status: org.status)),
+        DataCell(_StatusChip(status: org.effectiveStatus)),
       ],
     );
   }
@@ -388,9 +388,25 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isActive = status.toLowerCase() == 'active';
-    final color = isActive ? AppTheme.success : AppTheme.danger;
-    final label = isActive ? 'Active' : 'Suspended';
+    final Color color;
+    final String label;
+    switch (status.toLowerCase()) {
+      case 'active':
+        color = AppTheme.success;
+        label = 'Active';
+        break;
+      case 'trialing':
+        color = const Color(0xFFF59E0B);
+        label = 'Trialing';
+        break;
+      case 'trial_expired':
+        color = const Color(0xFFEF4444);
+        label = 'Trial expired';
+        break;
+      default: // suspended
+        color = AppTheme.danger;
+        label = 'Suspended';
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
