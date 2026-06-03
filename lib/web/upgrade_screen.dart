@@ -33,7 +33,13 @@ class _UpgradeScreenState extends ConsumerState<UpgradeScreen> {
   @override
   void initState() {
     super.initState();
-    _plansFuture = ref.read(planServiceProvider).getActivePlans().then((plans) {
+    // Use the org's rate-locked prices when available so the displayed (and
+    // charged) amount matches the org's locked book; falls back to live prices.
+    final orgId = ref.read(authProvider).valueOrNull?.organization?.id;
+    final plansFetch = orgId != null
+        ? ref.read(planServiceProvider).getActivePlansForOrg(orgId)
+        : ref.read(planServiceProvider).getActivePlans();
+    _plansFuture = plansFetch.then((plans) {
       // currentSlug is read here via a one-time ref.read inside initState is
       // not available — we re-filter in build() using the live auth state.
       final paid = plans

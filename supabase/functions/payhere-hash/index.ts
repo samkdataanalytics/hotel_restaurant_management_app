@@ -1,13 +1,19 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { createHash } from 'node:crypto'
 
-// Plan rank — higher = more expensive. Used to reject downgrades.
+// Plan rank — higher tier = harder to downgrade from. Used to reject downgrades.
+// 'free' kept for any legacy rows; 'growth' is the post-restructure hero tier.
 const PLAN_RANK: Record<string, number> = {
   free:       0,
   starter:    1,
-  pro:        2,
-  enterprise: 3,
+  growth:     2,
+  pro:        3,
+  enterprise: 4,
 }
+
+// Annual billing discount shown in the UI (priceMonthly * (1 - ANNUAL_DISCOUNT),
+// rounded per month, x12). Kept here so the charged amount matches the displayed price.
+const ANNUAL_DISCOUNT = 0.20
 
 function md5Upper(s: string): string {
   return createHash('md5').update(s).digest('hex').toUpperCase()
@@ -187,9 +193,22 @@ Deno.serve(async (req: Request) => {
 
       amount = customPrice.toFixed(2)
     } else {
-      const priceMonthly = Number(plan.price_monthly)
+      // Rate locking: prefer the org's locked price for this plan, else the live
+      // plans price. Only orgs created after the rate-locking migration have a
+      // locked book; everyone else falls back to current pricing.
+      const { data: locked } = await adminClient
+        .from('org_locked_prices')
+        .select('price_monthly')
+        .eq('org_id', orgId)
+        .eq('plan_slug', planSlug)
+        .maybeSingle()
+
+      const priceMonthly = Number(locked?.price_monthly ?? plan.price_monthly)
+      // Annual: apply the same per-month discount the UI shows, then x12, so the
+      // charge matches the displayed price (previously billed full price x12).
+      const monthlyEffective = Math.round(priceMonthly * (1 - ANNUAL_DISCOUNT))
       amount = billingCycle === 'annually'
-        ? (priceMonthly * 12).toFixed(2)
+        ? (monthlyEffective * 12).toFixed(2)
         : priceMonthly.toFixed(2)
     }
 
@@ -209,15 +228,19 @@ Deno.serve(async (req: Request) => {
     // Reject downgrades — user must contact support to downgrade
     const { data: org } = await adminClient
       .from('organizations')
-      .select('plan')
+      .select('plan, status')
       .eq('id', orgId)
       .maybeSingle()
 
     if (org) {
+      // Trial orgs sit on the 'growth' hero plan but haven't subscribed yet, so
+      // picking ANY paid tier (even a cheaper one) is a first subscription, not a
+      // downgrade. Only enforce the downgrade guard for already-active orgs.
+      const inTrial = org.status === 'trialing' || org.status === 'trial_expired'
       const currentRank   = PLAN_RANK[org.plan]  ?? 0
       const requestedRank = PLAN_RANK[planSlug]  ?? 0
       // Block genuine downgrades but allow same-plan renewal (enterprise customers paying their custom invoice).
-      if (requestedRank < currentRank) {
+      if (!inTrial && requestedRank < currentRank) {
         return json({ error: 'Cannot downgrade to a lower plan. Contact support if you need to change your plan.' }, 400)
       }
     }

@@ -473,7 +473,9 @@ class _PlanBillingCardState extends ConsumerState<_PlanBillingCard> {
       title: 'Plan & Billing',
       icon: Icons.workspace_premium_rounded,
       child: FutureBuilder<List<PlanModel>>(
-        future: ref.read(planServiceProvider).getActivePlans(),
+        future: org != null
+            ? ref.read(planServiceProvider).getActivePlansForOrg(org.id)
+            : ref.read(planServiceProvider).getActivePlans(),
         builder: (context, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Padding(
