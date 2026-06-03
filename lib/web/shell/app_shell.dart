@@ -8,6 +8,7 @@ import '../../providers/app_auth_provider.dart';
 import '../../providers/hotel_session.dart';
 import '../../services/organization_service.dart';
 import '../../di/injection_container.dart';
+import '../../data/datasources/supabase_data_source.dart';
 import '../../data/repositories/menu_item_repository_impl.dart';
 import '../../data/repositories/restaurant_table_repository_impl.dart';
 import '../../data/repositories/order_repository_impl.dart';
@@ -263,6 +264,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     (sl<RestaurantTableRepository>() as RestaurantTableRepositoryImpl).hotelId = property.id;
     (sl<OrderRepository>() as OrderRepositoryImpl).hotelId = property.id;
     (sl<IngredientRepository>() as IngredientRepositoryImpl).hotelId = property.id;
+    // Shared data source backs rooms, guests, bookings, check-ins, expenses.
+    // Without this its hotelId stays null -> inserts omit hotel_id -> the row
+    // fails the hotel-scoped RLS WITH CHECK (42501). (Bug surfaced on Add Room.)
+    sl<SupabaseDataSource>().hotelId = property.id;
 
     // Run session sync (fetches hotel_settings) and permission load in parallel
     // — they are independent DB calls, no ordering required.

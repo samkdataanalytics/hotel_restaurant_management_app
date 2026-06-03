@@ -91,6 +91,29 @@ class PlanService {
     return rows.map((r) => PlanModel.fromRow(r)).toList();
   }
 
+  /// Active plans with each price overridden by the org's locked-in rate when
+  /// one exists (rate-locked-for-life). Plans without a lock keep the live
+  /// price. Use this on org-scoped screens (upgrade, billing) so customers see —
+  /// and are charged — their locked rate. The charged amount is recomputed
+  /// server-side in payhere-hash from the same locked book, so they stay in sync.
+  Future<List<PlanModel>> getActivePlansForOrg(String orgId) async {
+    final plans = await getActivePlans();
+    final locked = await _db
+        .from('org_locked_prices')
+        .select('plan_slug, price_monthly')
+        .eq('org_id', orgId);
+    if ((locked as List).isEmpty) return plans;
+    final lockedBySlug = <String, double>{
+      for (final r in locked)
+        r['plan_slug'] as String: (r['price_monthly'] as num).toDouble(),
+    };
+    return plans
+        .map((p) => lockedBySlug.containsKey(p.slug)
+            ? p.copyWith(priceMonthly: lockedBySlug[p.slug])
+            : p)
+        .toList();
+  }
+
   /// Fetch ALL plans including inactive (superadmin only).
   Future<List<PlanModel>> getAllPlans() async {
     final rows = await _db
