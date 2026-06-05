@@ -221,23 +221,33 @@ class _MenuTabState extends ConsumerState<_MenuTab> {
   Future<void> _delete(MenuItem item) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete Menu Item'),
         content: Text('Delete "${item.name}"? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
-    if (ok == true) {
+    if (ok != true) return;
+    try {
       await _menuItemRepo.deleteMenuItem(item.id);
-      _load();
+      if (!mounted) return;
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete "${item.name}": $e'),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
     }
   }
 
@@ -1099,7 +1109,10 @@ class _ModifierDialogState extends State<_ModifierDialog> {
     _nameCtrl = TextEditingController(text: widget.initial?.name ?? '');
     _isRequired = widget.initial?.isRequired ?? false;
     _allowMultiple = widget.initial?.allowMultiple ?? false;
-    _options = List.from(widget.initial?.options ?? [MenuModifierOption(name: '', priceAdjustment: 0.0)]);
+    // Seed a $0 base option for new modifiers so staff are reminded to include
+    // the standard/regular variant — without it, "Required" modifiers block
+    // ordering the base-price item on every ordering surface (POS, QR, etc.).
+    _options = List.from(widget.initial?.options ?? [MenuModifierOption(name: 'Regular', priceAdjustment: 0.0)]);
   }
 
   void _save() {
@@ -1217,6 +1230,33 @@ class _ModifierDialogState extends State<_ModifierDialog> {
                           ),
                         ],
                       ),
+                      if (_isRequired)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF7ED),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFFED7AA)),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFFD97706)),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _allowMultiple
+                                        ? 'Required + Multiple: always include your base option (e.g. "Regular" at +\$0) so customers can order the standard version without a surcharge.'
+                                        : 'Required: always include your base option (e.g. "Regular" at +\$0) so customers can order the standard version.',
+                                    style: const TextStyle(fontSize: 11, color: Color(0xFF92400E), height: 1.4),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 24),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1261,10 +1301,10 @@ class _ModifierDialogState extends State<_ModifierDialog> {
                                 flex: 2,
                                 child: TextFormField(
                                   initialValue: opt.name,
-                                  decoration: const InputDecoration(
-                                    hintText: 'Option (e.g. Large)',
+                                  decoration: InputDecoration(
+                                    hintText: idx == 0 ? 'Base option (e.g. Regular)' : 'Option (e.g. Large)',
                                     isDense: true,
-                                    border: OutlineInputBorder(),
+                                    border: const OutlineInputBorder(),
                                   ),
                                   onChanged: (v) => setState(() => _options[idx] = _options[idx].copyWith(name: v)),
                                 ),
