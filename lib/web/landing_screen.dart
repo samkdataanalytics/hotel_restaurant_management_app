@@ -386,7 +386,7 @@ class _HeroSection extends StatelessWidget {
               children: [
                 Icon(Icons.verified_rounded, color: _C.gold, size: 14),
                 SizedBox(width: 7),
-                Text('Trusted by 500+ Properties Worldwide',
+                Text('Be Among the First Properties on HotRest',
                     style: TextStyle(color: _C.gold, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
               ],
             ),
@@ -512,10 +512,10 @@ class _StatsStripState extends State<_StatsStrip> with SingleTickerProviderState
   ScrollController? _sc;
 
   static const _stats = [
-    (target: 500.0, decimals: 0, suffix: '+',  label: 'Properties'),
-    (target: 50.0,  decimals: 0, suffix: 'K+', label: 'Bookings Managed'),
-    (target: 99.9,  decimals: 1, suffix: '%',  label: 'Uptime SLA'),
-    (target: 4.9,   decimals: 1, suffix: '?', label: 'Average Rating'),
+    (target: 45.0,  decimals: 0, suffix: '-Day', label: 'Free Trial'),
+    (target: 6.0,   decimals: 0, suffix: '+',    label: 'Core Modules'),
+    (target: 99.9,  decimals: 1, suffix: '%',    label: 'Uptime Target'),
+    (target: 20.0,  decimals: 0, suffix: ' min', label: 'Avg. Setup Time'),
   ];
 
   @override
@@ -1141,26 +1141,32 @@ class _FeatureCardState extends State<_FeatureCard> {
   }
 }
 
-// --- Testimonials section -----------------------------------------------------
+// --- Early Access Perks section -----------------------------------------------
 class _TestimonialsSection extends StatelessWidget {
   final bool isMobile;
   const _TestimonialsSection({required this.isMobile});
 
-  static const _testimonials = [
+  static const _perks = [
     (
-      quote: 'HotRest cut our front-desk workload in half. Check-in used to take 5 minutes per guest � now guests self-check in via QR. The staff scheduling alone is worth every cent.',
-      name: 'Sarah Mitchell', role: 'General Manager', hotel: 'The Riverview Boutique Hotel',
-      initials: 'SM', color: Color(0xFF3B82F6),
+      icon: Icons.lock_outline_rounded,
+      color: Color(0xFF3B82F6),
+      title: 'Price Locked for Life',
+      desc: 'Sign up during early access and your monthly rate is locked in forever — no annual price increases, ever. Early adopters get our lowest rate, guaranteed.',
+      badge: 'Founding Member Benefit',
     ),
     (
-      quote: 'We run 3 properties and the multi-property dashboard is a game-changer. I can see revenue, occupancy and active restaurant orders for all locations in one screen. Incredible.',
-      name: 'James Okonkwo', role: 'Director of Operations', hotel: 'Okonkwo Hospitality Group',
-      initials: 'JO', color: Color(0xFFD4A853),
+      icon: Icons.support_agent_rounded,
+      color: Color(0xFFD4A853),
+      title: 'Priority Onboarding Support',
+      desc: 'Every early-access property gets hands-on onboarding. We help you configure rooms, menus, staff roles, and go live — at no extra charge.',
+      badge: 'Hands-On Help',
     ),
     (
-      quote: 'Switching from our old PMS was painless. The onboarding took less than 20 minutes, and the white-label guest portal means our branding is front and center � not some software company\'s logo.',
-      name: 'Priya Ramaswamy', role: 'Owner', hotel: 'Serenity Suites & Restaurant',
-      initials: 'PR', color: Color(0xFF22C55E),
+      icon: Icons.construction_rounded,
+      color: Color(0xFF22C55E),
+      title: 'Shape the Roadmap',
+      desc: 'Early customers get direct access to the product team. Your feedback is prioritised — you help decide what we build next.',
+      badge: 'Co-build with Us',
     ),
   ];
 
@@ -1178,10 +1184,10 @@ class _TestimonialsSection extends StatelessWidget {
       ),
       child: Column(
         children: [
-          const _SectionLabel(label: 'TESTIMONIALS'),
+          const _SectionLabel(label: 'EARLY ACCESS'),
           const SizedBox(height: 16),
           Text(
-            'Loved by Hospitality\nProfessionals',
+            'Exclusive Perks for\nFounding Properties',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: _C.text,
@@ -1189,6 +1195,15 @@ class _TestimonialsSection extends StatelessWidget {
               fontWeight: FontWeight.w800,
               height: 1.15,
               letterSpacing: -0.8,
+            ),
+          ),
+          const SizedBox(height: 14),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: const Text(
+              "HotRest is launching now. Be among our first properties and unlock benefits that later customers won't get.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: _C.subtext, fontSize: 15.5, height: 1.55),
             ),
           ),
           const SizedBox(height: 56),
@@ -1199,15 +1214,14 @@ class _TestimonialsSection extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (int i = 0; i < _testimonials.length; i++) ...[
+                    for (int i = 0; i < _perks.length; i++) ...[
                       if (i > 0) const SizedBox(width: 20),
-                      Expanded(child: _TestimonialCard(
-                        quote: _testimonials[i].quote,
-                        name: _testimonials[i].name,
-                        role: _testimonials[i].role,
-                        hotel: _testimonials[i].hotel,
-                        initials: _testimonials[i].initials,
-                        color: _testimonials[i].color,
+                      Expanded(child: _EarlyAccessPerkCard(
+                        icon: _perks[i].icon,
+                        color: _perks[i].color,
+                        title: _perks[i].title,
+                        desc: _perks[i].desc,
+                        badge: _perks[i].badge,
                       )),
                     ],
                   ],
@@ -1216,15 +1230,14 @@ class _TestimonialsSection extends StatelessWidget {
             }
             return Column(
               children: [
-                for (int i = 0; i < _testimonials.length; i++) ...[
+                for (int i = 0; i < _perks.length; i++) ...[
                   if (i > 0) const SizedBox(height: 20),
-                  _TestimonialCard(
-                    quote: _testimonials[i].quote,
-                    name: _testimonials[i].name,
-                    role: _testimonials[i].role,
-                    hotel: _testimonials[i].hotel,
-                    initials: _testimonials[i].initials,
-                    color: _testimonials[i].color,
+                  _EarlyAccessPerkCard(
+                    icon: _perks[i].icon,
+                    color: _perks[i].color,
+                    title: _perks[i].title,
+                    desc: _perks[i].desc,
+                    badge: _perks[i].badge,
                   ),
                 ],
               ],
@@ -1236,12 +1249,13 @@ class _TestimonialsSection extends StatelessWidget {
   }
 }
 
-class _TestimonialCard extends StatelessWidget {
-  final String quote, name, role, hotel, initials;
+class _EarlyAccessPerkCard extends StatelessWidget {
+  final IconData icon;
   final Color color;
-  const _TestimonialCard({
-    required this.quote, required this.name, required this.role,
-    required this.hotel, required this.initials, required this.color,
+  final String title, desc, badge;
+  const _EarlyAccessPerkCard({
+    required this.icon, required this.color,
+    required this.title, required this.desc, required this.badge,
   });
 
   @override
@@ -1251,47 +1265,37 @@ class _TestimonialCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _C.card,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _C.border),
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(8), blurRadius: 20)],
+        border: Border.all(color: color.withAlpha(60)),
+        boxShadow: [BoxShadow(color: color.withAlpha(20), blurRadius: 20)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: List.generate(5, (_) => const Icon(Icons.star_rounded, color: _C.gold, size: 16))),
-          const SizedBox(height: 16),
-          Text('"$quote"',
-              style: const TextStyle(color: _C.text, fontSize: 13.5, height: 1.65, fontStyle: FontStyle.italic)),
-          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withAlpha(18),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: color.withAlpha(50)),
+            ),
+            child: Text(badge,
+                style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+          ),
           const SizedBox(height: 20),
-          const Divider(color: _C.border, height: 1),
+          Container(
+            width: 48, height: 48,
+            decoration: BoxDecoration(color: color.withAlpha(18), borderRadius: BorderRadius.circular(14)),
+            child: Icon(icon, color: color, size: 22),
+          ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(
-                  color: color.withAlpha(25),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: color.withAlpha(60), width: 1.5),
-                ),
-                alignment: Alignment.center,
-                child: Text(initials,
-                    style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w800)),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name,
-                        style: const TextStyle(color: _C.text, fontWeight: FontWeight.w700, fontSize: 13)),
-                    Text('$role � $hotel',
-                        style: const TextStyle(color: _C.subtext, fontSize: 11.5),
-                        overflow: TextOverflow.ellipsis),
-                  ],
-                ),
-              ),
-            ],
+          Text(title,
+              style: const TextStyle(color: _C.text, fontWeight: FontWeight.w800, fontSize: 16)),
+          const SizedBox(height: 10),
+          const Divider(color: _C.border, height: 1),
+          const SizedBox(height: 14),
+          Expanded(
+            child: Text(desc,
+                style: const TextStyle(color: _C.subtext, fontSize: 13.5, height: 1.65)),
           ),
         ],
       ),
@@ -1844,7 +1848,7 @@ class _CtaSection extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                'Join hundreds of hospitality teams already running smarter with HotRest.\nStart your 45-day free trial — full access, no credit card required.',
+                'Be among the first hospitality teams to run smarter with HotRest.\nStart your 45-day free trial — full access, no credit card required.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white.withAlpha(160), fontSize: 15, height: 1.6),
               ),
