@@ -559,7 +559,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                         for (final d in dayBookings) {
                           final b = d['booking'] as Booking;
                           if (b.nights > 0) {
-                            total += b.totalAmount / b.nights;
+                            total += b.netAmount / b.nights;
                           }
                         }
                         return Container(
@@ -759,7 +759,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     double dayRevenue = 0;
     for (final d in dayBookings) {
       final b = d['booking'] as Booking;
-      if (b.nights > 0) dayRevenue += b.totalAmount / b.nights;
+      if (b.nights > 0) dayRevenue += b.netAmount / b.nights;
     }
 
     // ─── Room View ───
@@ -999,12 +999,28 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                       Icon(Icons.attach_money, size: 14, color: AppTheme.success),
                       const SizedBox(width: 4),
                       Text(
-                        '$_sym${booking.totalAmount.toStringAsFixed(2)}',
+                        '$_sym${booking.netAmount.toStringAsFixed(2)}',
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.success),
                       ),
                       const SizedBox(width: 8),
-                      Text('($_sym${(booking.totalAmount / (booking.nights > 0 ? booking.nights : 1)).toStringAsFixed(0)}/night)',
+                      Text('($_sym${(booking.netAmount / (booking.nights > 0 ? booking.nights : 1)).toStringAsFixed(0)}/night)',
                         style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 11)),
+                      if (booking.discountValue > 0) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.danger.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            booking.discountType == 'percentage'
+                                ? '-${booking.discountValue.toStringAsFixed(0)}%'
+                                : '-$_sym${booking.discountValue.toStringAsFixed(0)}',
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppTheme.danger),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],
@@ -1726,83 +1742,132 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  // Total Amount (editable — auto-filled from room × nights)
-                  TextFormField(
-                    controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      labelText: 'Total Amount ($_sym)',
-                      hintText: 'Auto-calculated from room rate × nights',
-                      prefixIcon: const Icon(Icons.attach_money),
+                  const SizedBox(height: 16),
+
+                  // ─── Pricing card ──────────────────────────────
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Discount row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Type toggle
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Type', style: TextStyle(fontSize: 11, color: AppTheme.adminTextMuted, fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 6),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _discountTypeBtn('%', 'percentage'),
-                                _discountTypeBtn('$_sym', 'flat'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(width: 12),
-                      // Discount value field
-                      Expanded(
-                        child: TextFormField(
-                          controller: _discountController,
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Total Amount
+                        TextFormField(
+                          controller: _amountController,
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           onChanged: (_) => setState(() {}),
                           decoration: InputDecoration(
-                            labelText: _discountType == 'percentage' ? 'Discount (%)' : 'Discount ($_sym)',
-                            hintText: '0',
-                            prefixIcon: const Icon(Icons.local_offer_outlined),
+                            labelText: 'Total Amount ($_sym)',
+                            hintText: 'Auto-calculated from room rate × nights',
+                            prefixIcon: const Icon(Icons.attach_money),
+                            filled: true,
+                            fillColor: Colors.white,
                           ),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) return null;
-                            final val = double.tryParse(v.trim());
-                            if (val == null || val < 0) return 'Invalid';
-                            if (_discountType == 'percentage' && val > 100) return 'Max 100%';
-                            return null;
-                          },
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  // Net Amount (read-only computed)
-                  AbsorbPointer(
-                    child: TextFormField(
-                      controller: TextEditingController(text: _grossTotal > 0 ? _netAmount.toStringAsFixed(2) : ''),
-                      decoration: InputDecoration(
-                        labelText: 'Net Amount ($_sym)',
-                        prefixIcon: Icon(Icons.price_check_rounded, color: AppTheme.success),
-                        filled: true,
-                        fillColor: AppTheme.success.withOpacity(0.04),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: AppTheme.success.withOpacity(0.3)),
+                        const SizedBox(height: 10),
+
+                        // Discount row — toggle + value, perfectly center-aligned
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Segmented type toggle (fixed height matches field)
+                            Container(
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                border: Border.all(color: Colors.grey.shade300),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _discountTypeBtn('%', 'percentage'),
+                                  _discountTypeBtn(_sym, 'flat'),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            // Discount value field
+                            Expanded(
+                              child: TextFormField(
+                                controller: _discountController,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                onChanged: (_) => setState(() {}),
+                                decoration: InputDecoration(
+                                  labelText: _discountType == 'percentage' ? 'Discount (%)' : 'Discount ($_sym)',
+                                  hintText: '0',
+                                  prefixIcon: const Icon(Icons.local_offer_outlined),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty) return null;
+                                  final val = double.tryParse(v.trim());
+                                  if (val == null || val < 0) return 'Invalid';
+                                  if (_discountType == 'percentage' && val > 100) return 'Max 100%';
+                                  return null;
+                                },
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.success),
+                        const SizedBox(height: 10),
+
+                        // Net Amount summary banner
+                        Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: AppTheme.success.withOpacity(0.07),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.success.withOpacity(0.25)),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(Icons.price_check_rounded, color: AppTheme.success, size: 20),
+                              const SizedBox(width: 10),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Net Amount ($_sym)',
+                                    style: TextStyle(fontSize: 11, color: AppTheme.adminTextMuted, fontWeight: FontWeight.w500),
+                                  ),
+                                  Text(
+                                    _grossTotal > 0 ? _netAmount.toStringAsFixed(2) : '—',
+                                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppTheme.success),
+                                  ),
+                                ],
+                              ),
+                              if (_discountAmount > 0) ...[
+                                const Spacer(),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.danger.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.local_offer_outlined, size: 13, color: AppTheme.danger),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '- $_sym${_discountAmount.toStringAsFixed(2)}',
+                                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.danger),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -1880,10 +1945,11 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
       }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.adminPrimary : Colors.white,
-          borderRadius: BorderRadius.circular(7),
+          color: isSelected ? AppTheme.adminPrimary : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
           label,
