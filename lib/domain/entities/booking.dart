@@ -34,6 +34,9 @@ class Booking {
   final bool isGuestFormSubmitted;
   final bool isPaid;
   final Map<String, dynamic>? guestPreferences;
+  // 'flat' or 'percentage'
+  final String discountType;
+  final double discountValue;
 
   Booking({
     required this.id,
@@ -52,6 +55,8 @@ class Booking {
     this.isGuestFormSubmitted = false,
     this.isPaid = false,
     this.guestPreferences,
+    this.discountType = 'flat',
+    this.discountValue = 0.0,
   });
 
   Map<String, dynamic> toMap() {
@@ -72,6 +77,8 @@ class Booking {
       'isGuestFormSubmitted': isGuestFormSubmitted,
       'isPaid': isPaid,
       'guestPreferences': guestPreferences,
+      'discountType': discountType,
+      'discountValue': discountValue,
     };
   }
 
@@ -96,6 +103,8 @@ class Booking {
       isGuestFormSubmitted: map['isGuestFormSubmitted'] as bool? ?? false,
       isPaid: map['isPaid'] as bool? ?? false,
       guestPreferences: map['guestPreferences'] as Map<String, dynamic>?,
+      discountType: map['discountType'] as String? ?? 'flat',
+      discountValue: (map['discountValue'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
@@ -116,6 +125,8 @@ class Booking {
     bool? isGuestFormSubmitted,
     bool? isPaid,
     Map<String, dynamic>? guestPreferences,
+    String? discountType,
+    double? discountValue,
   }) {
     return Booking(
       id: id ?? this.id,
@@ -134,6 +145,8 @@ class Booking {
       isGuestFormSubmitted: isGuestFormSubmitted ?? this.isGuestFormSubmitted,
       isPaid: isPaid ?? this.isPaid,
       guestPreferences: guestPreferences ?? this.guestPreferences,
+      discountType: discountType ?? this.discountType,
+      discountValue: discountValue ?? this.discountValue,
     );
   }
 
@@ -161,4 +174,14 @@ class Booking {
   }
 
   int get nights => checkOutDate.difference(checkInDate).inDays;
+
+  double get discountAmount {
+    if (discountValue <= 0) return 0;
+    if (discountType == 'percentage') {
+      return totalAmount * discountValue / 100;
+    }
+    return discountValue;
+  }
+
+  double get netAmount => (totalAmount - discountAmount).clamp(0, double.infinity);
 }

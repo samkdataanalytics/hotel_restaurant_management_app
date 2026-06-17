@@ -1493,6 +1493,7 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
   Ingredient? _selected;
   List<IngredientPrice> _selectedHistory = [];
   bool _loading = true;
+  String get _sym => pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$';
   NumberFormat get _currency => NumberFormat.currency(
       symbol: pkg_provider.Provider.of<HotelSession>(context, listen: false).settings?.currencySymbol ?? '\$',
       decimalDigits: 4);
@@ -1878,7 +1879,7 @@ class _IngredientsTabState extends ConsumerState<_IngredientsTab> {
             color: isUp ? _RC.occupied : _RC.available,
           ),
           Text(
-            isFlat ? 'No change' : '${isUp ? '+' : ''}\$${delta.abs().toStringAsFixed(4)}',
+            isFlat ? 'No change' : '${isUp ? '+' : ''}$_sym${delta.abs().toStringAsFixed(4)}',
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
                 color: isFlat ? Colors.grey.shade500 : (isUp ? _RC.occupied : _RC.available)),
           ),

@@ -1003,7 +1003,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
                         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.success),
                       ),
                       const SizedBox(width: 8),
-                      Text('(\$${(booking.totalAmount / (booking.nights > 0 ? booking.nights : 1)).toStringAsFixed(0)}/night)',
+                      Text('($_sym${(booking.totalAmount / (booking.nights > 0 ? booking.nights : 1)).toStringAsFixed(0)}/night)',
                         style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 11)),
                     ],
                   ),
@@ -1300,6 +1300,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
   late final TextEditingController _guestsCountController;
   late final TextEditingController _specialRequestsController;
   late final TextEditingController _amountController;
+  late final TextEditingController _discountController;
 
   late BookingSource _selectedSource;
   late BookingStatus _selectedStatus;
@@ -1307,6 +1308,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
   DateTime? _checkInDate;
   DateTime? _checkOutDate;
   bool _isPaid = false;
+  String _discountType = 'flat'; // 'flat' or 'percentage'
 
   bool get _isEditing => widget.existingData != null;
 
@@ -1321,7 +1323,8 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     _phoneController = TextEditingController(text: existingGuest?.phone ?? '');
     _guestsCountController = TextEditingController(text: existingBooking?.numberOfGuests.toString() ?? '1');
     _specialRequestsController = TextEditingController(text: existingBooking?.specialRequests ?? '');
-    _amountController = TextEditingController(text: existingBooking?.totalAmount.toStringAsFixed(2) ?? '');
+    _amountController = TextEditingController(text: existingBooking?.totalAmount != null && existingBooking!.totalAmount > 0 ? existingBooking.totalAmount.toStringAsFixed(2) : '');
+    _discountController = TextEditingController(text: existingBooking?.discountValue != null && existingBooking!.discountValue > 0 ? existingBooking.discountValue.toStringAsFixed(2) : '');
 
     _selectedSource = existingBooking?.source ??
         (widget.enabledSources.isNotEmpty ? widget.enabledSources.first : BookingSource.direct);
@@ -1330,6 +1333,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     _checkInDate = existingBooking?.checkInDate;
     _checkOutDate = existingBooking?.checkOutDate;
     _isPaid = existingBooking?.isPaid ?? false;
+    _discountType = existingBooking?.discountType ?? 'flat';
   }
 
   @override
@@ -1340,7 +1344,33 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     _guestsCountController.dispose();
     _specialRequestsController.dispose();
     _amountController.dispose();
+    _discountController.dispose();
     super.dispose();
+  }
+
+  int get _nights {
+    if (_checkInDate == null || _checkOutDate == null) return 0;
+    return _checkOutDate!.difference(_checkInDate!).inDays;
+  }
+
+  double get _grossTotal => double.tryParse(_amountController.text.trim()) ?? 0.0;
+
+  double get _discountAmount {
+    final val = double.tryParse(_discountController.text.trim()) ?? 0.0;
+    if (_discountType == 'percentage') return _grossTotal * val / 100;
+    return val;
+  }
+
+  double get _netAmount => (_grossTotal - _discountAmount).clamp(0, double.infinity);
+
+  void _autoFillTotal() {
+    if (_selectedRoomId == null || _nights <= 0) return;
+    final room = widget.rooms.where((r) => r.id == _selectedRoomId).firstOrNull;
+    if (room == null) return;
+    final auto = room.pricePerNight * _nights;
+    setState(() {
+      _amountController.text = auto.toStringAsFixed(2);
+    });
   }
 
   /// Get rooms available for booking (exclude rooms under maintenance or already booked for selected dates)
@@ -1405,6 +1435,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
           }
         }
       });
+      _autoFillTotal();
     }
   }
 
@@ -1461,8 +1492,10 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
       numberOfGuests: int.tryParse(_guestsCountController.text.trim()) ?? 1,
       specialRequests: _specialRequestsController.text.trim(),
       source: _selectedSource,
-      totalAmount: double.tryParse(_amountController.text.trim()) ?? 0.0,
+      totalAmount: _grossTotal,
       isPaid: _isPaid,
+      discountType: _discountType,
+      discountValue: double.tryParse(_discountController.text.trim()) ?? 0.0,
     );
 
     setState(() => _saving = true);
@@ -1631,11 +1664,14 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                             return DropdownMenuItem(
                               value: room.id,
                               child: Text(
-                                '${room.roomNumber} — ${room.typeLabel} (\$${room.pricePerNight.toInt()}/night)${underMaintenance ? ' ⚠️' : ''}',
+                                '${room.roomNumber} — ${room.typeLabel} ($_sym${room.pricePerNight.toInt()}/night)${underMaintenance ? ' ⚠️' : ''}',
                               ),
                             );
                           }).toList(),
-                          onChanged: (v) => setState(() => _selectedRoomId = v),
+                          onChanged: (v) {
+                            setState(() => _selectedRoomId = v);
+                            _autoFillTotal();
+                          },
                           validator: (v) => v == null ? 'Select a room' : null,
                         ),
                       ),
@@ -1655,16 +1691,18 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  // Nights + Status row
                   Row(
                     children: [
                       Expanded(
-                        child: TextFormField(
-                          controller: _amountController,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            labelText: 'Total Amount ($_sym)',
-                            hintText: 'e.g. 450.00',
-                            prefixIcon: const Icon(Icons.attach_money),
+                        child: AbsorbPointer(
+                          child: TextFormField(
+                            controller: TextEditingController(text: _nights > 0 ? '$_nights night${_nights == 1 ? '' : 's'}' : ''),
+                            decoration: const InputDecoration(
+                              labelText: 'No. of Nights',
+                              prefixIcon: Icon(Icons.nights_stay_outlined),
+                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ),
                       ),
@@ -1687,6 +1725,85 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Total Amount (editable — auto-filled from room × nights)
+                  TextFormField(
+                    controller: _amountController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: 'Total Amount ($_sym)',
+                      hintText: 'Auto-calculated from room rate × nights',
+                      prefixIcon: const Icon(Icons.attach_money),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Discount row
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Type toggle
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Type', style: TextStyle(fontSize: 11, color: AppTheme.adminTextMuted, fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 6),
+                          Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _discountTypeBtn('%', 'percentage'),
+                                _discountTypeBtn('$_sym', 'flat'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 12),
+                      // Discount value field
+                      Expanded(
+                        child: TextFormField(
+                          controller: _discountController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          onChanged: (_) => setState(() {}),
+                          decoration: InputDecoration(
+                            labelText: _discountType == 'percentage' ? 'Discount (%)' : 'Discount ($_sym)',
+                            hintText: '0',
+                            prefixIcon: const Icon(Icons.local_offer_outlined),
+                          ),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return null;
+                            final val = double.tryParse(v.trim());
+                            if (val == null || val < 0) return 'Invalid';
+                            if (_discountType == 'percentage' && val > 100) return 'Max 100%';
+                            return null;
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Net Amount (read-only computed)
+                  AbsorbPointer(
+                    child: TextFormField(
+                      controller: TextEditingController(text: _grossTotal > 0 ? _netAmount.toStringAsFixed(2) : ''),
+                      decoration: InputDecoration(
+                        labelText: 'Net Amount ($_sym)',
+                        prefixIcon: Icon(Icons.price_check_rounded, color: AppTheme.success),
+                        filled: true,
+                        fillColor: AppTheme.success.withOpacity(0.04),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: AppTheme.success.withOpacity(0.3)),
+                        ),
+                      ),
+                      style: TextStyle(fontWeight: FontWeight.w700, color: AppTheme.success),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Container(
@@ -1751,6 +1868,32 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     return Text(
       text,
       style: TextStyle(color: AppTheme.adminTextMuted, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2),
+    );
+  }
+
+  Widget _discountTypeBtn(String label, String type) {
+    final isSelected = _discountType == type;
+    return GestureDetector(
+      onTap: () => setState(() {
+        _discountType = type;
+        _discountController.clear();
+      }),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.adminPrimary : Colors.white,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : AppTheme.adminTextMuted,
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
+        ),
+      ),
     );
   }
 

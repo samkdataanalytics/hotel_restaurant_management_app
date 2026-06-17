@@ -86,6 +86,8 @@ class SupabaseDataSource {
         'isGuestFormSubmitted': r['is_guest_form_submitted'] ?? false,
         'isPaid': r['is_paid'] ?? false,
         'guestPreferences': r['guest_preferences'],
+        'discountType': r['discount_type'] ?? 'flat',
+        'discountValue': r['discount_value'] ?? 0,
       });
 
   Map<String, dynamic> _bookingToRow(Booking b) => {
@@ -105,6 +107,8 @@ class SupabaseDataSource {
         'is_guest_form_submitted': b.isGuestFormSubmitted,
         'is_paid': b.isPaid,
         'guest_preferences': b.guestPreferences,
+        'discount_type': b.discountType,
+        'discount_value': b.discountValue,
         if (hotelId != null) 'hotel_id': hotelId,
       };
 
