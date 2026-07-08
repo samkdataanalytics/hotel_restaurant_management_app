@@ -207,7 +207,7 @@ class _FinancialsScreenState extends ConsumerState<FinancialsScreen> {
 
       for (final b in dayBookings) {
         if (b.nights > 0) {
-          final dailyRate = b.totalAmount / b.nights;
+          final dailyRate = b.netAmount / b.nights;
           dayRevenue += dailyRate;
           sourceRevenues[b.source] = (sourceRevenues[b.source] ?? 0) + dailyRate;
         }
