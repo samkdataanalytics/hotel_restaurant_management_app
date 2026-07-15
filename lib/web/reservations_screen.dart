@@ -1441,6 +1441,14 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
             _checkOutDate = result.add(const Duration(days: 1));
           }
         } else {
+          if (_checkInDate != null && !result.isAfter(_checkInDate!)) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: const Text('Check-out must be after check-in'),
+              backgroundColor: AppTheme.danger,
+              behavior: SnackBarBehavior.floating,
+            ));
+            return;
+          }
           _checkOutDate = result;
         }
         // Reset room selection if the selected room is now under maintenance
@@ -1463,6 +1471,12 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
     if (_checkInDate == null || _checkOutDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: const Text('Please select check-in and check-out dates'), backgroundColor: AppTheme.danger, behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+      );
+      return;
+    }
+    if (!_checkOutDate!.isAfter(_checkInDate!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: const Text('Check-out date must be after check-in date'), backgroundColor: AppTheme.danger, behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
       );
       return;
     }
@@ -1809,6 +1823,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
                                   final val = double.tryParse(v.trim());
                                   if (val == null || val < 0) return 'Invalid';
                                   if (_discountType == 'percentage' && val > 100) return 'Max 100%';
+                                  if (_discountType == 'flat' && _grossTotal > 0 && val > _grossTotal) return 'Cannot exceed total amount';
                                   return null;
                                 },
                               ),

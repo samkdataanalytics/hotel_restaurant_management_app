@@ -11,38 +11,38 @@ class GuestMenuService {
   // ─── Menu items ────────────────────────────────────────────────────────────
 
   Future<List<MenuItem>> getAvailableMenuItems(String propertyId) async {
-    final rows = await _db
-        .from('menu_items')
-        .select()
-        .eq('hotel_id', propertyId)
-        .eq('is_available', true)
-        .order('category')
-        .order('name');
-    return rows.map<MenuItem>((r) => MenuItem.fromMap({
-          'id': r['id'],
-          'name': r['name'],
-          'description': r['description'] ?? '',
-          'price': r['price'],
-          'category': r['category'] ?? 'Uncategorized',
-          'imageUrl': r['image_url'] ?? '',
-          'isAvailable': r['is_available'] ?? true,
-          'ingredients': r['ingredients'] ?? [],
-          'modifiers': r['modifiers'] ?? [],
-        })).toList();
+    final result = await _db.rpc(
+      'get_available_menu_items',
+      params: {'p_hotel_id': propertyId},
+    );
+    if (result == null) return [];
+    final rows = result as List<dynamic>;
+    return rows.map<MenuItem>((r) {
+      final m = r as Map<String, dynamic>;
+      return MenuItem.fromMap({
+        'id': m['id'],
+        'name': m['name'],
+        'description': m['description'] ?? '',
+        'price': m['price'],
+        'category': m['category'] ?? 'Uncategorized',
+        'imageUrl': m['image_url'] ?? '',
+        'isAvailable': m['is_available'] ?? true,
+        'ingredients': m['ingredients'] ?? [],
+        'modifiers': m['modifiers'] ?? [],
+      });
+    }).toList();
   }
 
   // ─── Table info ────────────────────────────────────────────────────────────
 
   Future<RestaurantTable?> getTable(
       String propertyId, String tableId) async {
-    final rows = await _db
-        .from('restaurant_tables')
-        .select()
-        .eq('hotel_id', propertyId)
-        .eq('id', tableId)
-        .limit(1);
-    if (rows.isEmpty) return null;
-    final r = rows.first;
+    final result = await _db.rpc('get_restaurant_table', params: {
+      'p_hotel_id':  propertyId,
+      'p_table_id':  tableId,
+    });
+    if (result == null) return null;
+    final r = result as Map<String, dynamic>;
     return RestaurantTable.fromMap({
       'id': r['id'],
       'tableNumber': r['table_number'],
@@ -166,24 +166,26 @@ class GuestMenuService {
     return orderId;
   }
 
-  // ─── Fetch order status (direct REST query — no Realtime required) ───────
-  /// Returns null if not found.
-  Future<({String status, String paymentStatus})?> fetchOrderStatus(String orderId) async {
-    final rows = await _db
-        .from('restaurant_orders')
-        .select('status, payment_status')
-        .eq('id', orderId)
-        .limit(1);
-    if (rows.isEmpty) return null;
+  // ─── Fetch order status (SECURITY DEFINER RPC — hotel-scoped) ────────────
+  /// Returns null if not found or the order does not belong to [hotelId].
+  Future<({String status, String paymentStatus})?> fetchOrderStatus(
+      String orderId, String hotelId) async {
+    final r = await _db.rpc('get_order_status', params: {
+      'p_order_id': orderId,
+      'p_hotel_id': hotelId,
+    });
+    if (r == null) return null;
+    final m = r as Map<String, dynamic>;
     return (
-      status: rows.first['status'] as String? ?? 'pending',
-      paymentStatus: rows.first['payment_status'] as String? ?? 'unpaid',
+      status: m['status'] as String? ?? 'pending',
+      paymentStatus: m['payment_status'] as String? ?? 'unpaid',
     );
   }
 
   // ─── Watch order (status + payment_status) ────────────────────────────────
 
-  Stream<String?> watchOrderStatus(String orderId) {
+  /// [hotelId] is required to scope the Realtime subscription to the property.
+  Stream<String?> watchOrderStatus(String orderId, String hotelId) {
     return _db
         .from('restaurant_orders')
         .stream(primaryKey: ['id'])
@@ -192,7 +194,9 @@ class GuestMenuService {
   }
 
   /// Streams both [status] and [paymentStatus] for a given order.
-  Stream<({String status, String paymentStatus})> watchOrder(String orderId) {
+  /// [hotelId] scopes the subscription to the property.
+  Stream<({String status, String paymentStatus})> watchOrder(
+      String orderId, String hotelId) {
     return _db
         .from('restaurant_orders')
         .stream(primaryKey: ['id'])

@@ -33,107 +33,6 @@ class BookingService {
   /// Set via AppShell._applyActiveProperty() when the active property changes.
   String? hotelId;
 
-  // ─── Row → Model mappers ───────────────────────────────────────────────────
-
-  static Guest _guestFromRow(Map<String, dynamic> r) => Guest.fromMap({
-        'id': r['id'],
-        'fullName': r['full_name'],
-        'email': r['email'],
-        'phone': r['phone'],
-        'idType': r['id_type'],
-        'idNumber': r['id_number'],
-        'nationality': r['nationality'],
-        'passportOrNic': r['passport_or_nic'],
-        'dateOfBirth': r['date_of_birth'],
-        'whatsApp': r['whats_app'],
-      });
-
-  Map<String, dynamic> _guestToRow(Guest g) => {
-        'id': g.id,
-        'full_name': g.fullName,
-        'email': g.email,
-        'phone': g.phone,
-        'id_type': g.idType,
-        'id_number': g.idNumber,
-        'nationality': g.nationality,
-        'passport_or_nic': g.passportOrNic,
-        'date_of_birth': g.dateOfBirth?.toIso8601String(),
-        'whats_app': g.whatsApp,
-        if (hotelId != null) 'hotel_id': hotelId,
-      };
-
-  static Room _roomFromRow(Map<String, dynamic> r) => Room.fromMap({
-        'id': r['id'],
-        'roomNumber': r['room_number'],
-        'type': r['type'],
-        'floor': r['floor'],
-        'status': r['status'],
-        'pricePerNight': r['price_per_night'],
-        'maintenanceStart': r['maintenance_start'],
-        'maintenanceEnd': r['maintenance_end'],
-      });
-
-  Map<String, dynamic> _roomToRow(Room r) => {
-        'id': r.id,
-        'room_number': r.roomNumber,
-        'type': r.type.name,
-        'floor': r.floor,
-        'status': r.status.name,
-        'price_per_night': r.pricePerNight,
-        'maintenance_start': r.maintenanceStart?.toIso8601String(),
-        'maintenance_end': r.maintenanceEnd?.toIso8601String(),
-        if (hotelId != null) 'hotel_id': hotelId,
-      };
-
-  static Booking _bookingFromRow(Map<String, dynamic> r) => Booking.fromMap({
-        'id': r['id'],
-        'bookingRef': r['booking_ref'],
-        'guestId': r['guest_id'],
-        'roomId': r['room_id'],
-        'checkInDate': r['check_in_date'],
-        'checkOutDate': r['check_out_date'],
-        'status': r['status'],
-        'numberOfGuests': r['number_of_guests'],
-        'specialRequests': r['special_requests'] ?? '',
-        'source': r['source'] ?? 'direct',
-        'totalAmount': r['total_amount'],
-        'isQrGenerated': r['is_qr_generated'] ?? false,
-        'isQrSent': r['is_qr_sent'] ?? false,
-        'isGuestFormSubmitted': r['is_guest_form_submitted'] ?? false,
-        'isPaid': r['is_paid'] ?? false,
-        'guestPreferences': r['guest_preferences'],
-      });
-
-  Map<String, dynamic> _bookingToRow(Booking b) => {
-        'id': b.id,
-        'booking_ref': b.bookingRef,
-        'guest_id': b.guestId,
-        'room_id': b.roomId,
-        'check_in_date': b.checkInDate.toIso8601String(),
-        'check_out_date': b.checkOutDate.toIso8601String(),
-        'status': b.status.name,
-        'number_of_guests': b.numberOfGuests,
-        'special_requests': b.specialRequests,
-        'source': b.source.name,
-        'total_amount': b.totalAmount,
-        'is_qr_generated': b.isQrGenerated,
-        'is_qr_sent': b.isQrSent,
-        'is_guest_form_submitted': b.isGuestFormSubmitted,
-        'is_paid': b.isPaid,
-        'guest_preferences': b.guestPreferences,
-        if (hotelId != null) 'hotel_id': hotelId,
-      };
-
-  static CheckIn _checkInFromRow(Map<String, dynamic> r) => CheckIn.fromMap({
-        'id': r['id'],
-        'bookingId': r['booking_id'],
-        'guestId': r['guest_id'],
-        'roomId': r['room_id'],
-        'checkInTime': r['check_in_time'],
-        'idVerified': r['id_verified'],
-        'keyIssued': r['key_issued'],
-      });
-
   Map<String, dynamic> _checkInToRow(CheckIn c) => {
         'id': c.id,
         'booking_id': c.bookingId,
@@ -142,33 +41,6 @@ class BookingService {
         'check_in_time': c.checkInTime.toIso8601String(),
         'id_verified': c.idVerified,
         'key_issued': c.keyIssued,
-        if (hotelId != null) 'hotel_id': hotelId,
-      };
-
-  static Expense _expenseFromRow(Map<String, dynamic> r) => Expense.fromMap({
-        'id': r['id'],
-        'description': r['description'],
-        'amount': r['amount'],
-        'category': r['category'],
-        'date': r['date'],
-        'endDate': r['end_date'],
-        'roomId': r['room_id'],
-        'isBillable': r['is_billable'] ?? false,
-        'isPaid': r['is_paid'] ?? false,
-        'bookingId': r['booking_id'],
-      });
-
-  Map<String, dynamic> _expenseToRow(Expense e) => {
-        'id': e.id,
-        'description': e.description,
-        'amount': e.amount,
-        'category': e.category.name,
-        'date': e.date.toIso8601String(),
-        'end_date': e.endDate?.toIso8601String(),
-        'room_id': e.roomId,
-        'is_billable': e.isBillable,
-        'is_paid': e.isPaid,
-        'booking_id': e.bookingId,
         if (hotelId != null) 'hotel_id': hotelId,
       };
 
@@ -184,32 +56,41 @@ class BookingService {
   // ─── Check-In Lookup ──────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>?> lookupBooking(String bookingRef) async {
-    final rows = await _db
-        .from('bookings')
-        .select()
-        .eq('booking_ref', bookingRef)
-        .limit(1);
-    if (rows.isEmpty) return null;
+    final response = await _db.rpc(
+      'lookup_guest_booking',
+      params: {'p_booking_ref': bookingRef},
+    );
+    if (response == null) return null;
 
-    final booking = _bookingFromRow(rows.first);
-
-    final guestRows = await _db
-        .from('guests')
-        .select()
-        .eq('id', booking.guestId)
-        .limit(1);
-    final roomRows = await _db
-        .from('rooms')
-        .select()
-        .eq('id', booking.roomId)
-        .limit(1);
-
+    final r = response as Map<String, dynamic>;
     return {
-      'booking': booking,
-      'guest': guestRows.isNotEmpty ? _guestFromRow(guestRows.first) : null,
-      'room': roomRows.isNotEmpty ? _roomFromRow(roomRows.first) : null,
-      'hotelId': rows.first['hotel_id'] as String? ?? '',
+      'booking': Booking.fromDbRow(r['booking'] as Map<String, dynamic>),
+      'guest':   r['guest'] != null ? Guest.fromDbRow(r['guest'] as Map<String, dynamic>) : null,
+      'room':    r['room']  != null ? Room.fromDbRow(r['room']  as Map<String, dynamic>) : null,
+      'hotelId': r['hotel_id'] as String? ?? '',
     };
+  }
+
+  Future<void> submitGuestForm({
+    required String bookingRef,
+    required Guest guest,
+    required Map<String, dynamic> preferences,
+    String specialRequests = '',
+  }) async {
+    await _db.rpc('submit_guest_form', params: {
+      'p_booking_ref':       bookingRef,
+      'p_full_name':         guest.fullName,
+      'p_email':             guest.email,
+      'p_phone':             guest.phone,
+      'p_id_type':           guest.idType,
+      'p_id_number':         guest.idNumber,
+      'p_nationality':       guest.nationality,
+      'p_passport_or_nic':   guest.passportOrNic,
+      'p_date_of_birth':     guest.dateOfBirth?.toIso8601String(),
+      'p_whats_app':         guest.whatsApp,
+      'p_guest_preferences': preferences,
+      'p_special_requests':  specialRequests,
+    });
   }
 
   // ─── Check-In / Check-Out ─────────────────────────────────────────────────
@@ -249,7 +130,7 @@ class BookingService {
         .limit(1);
 
     final room =
-        roomRows.isNotEmpty ? _roomFromRow(roomRows.first) : null;
+        roomRows.isNotEmpty ? Room.fromDbRow(roomRows.first) : null;
 
     // Fire check-in notification (non-blocking)
     if (hotelId != null && room != null) {
@@ -412,14 +293,26 @@ class BookingService {
         checkOut: checkOut,
       );
 
-      // Low availability alert: warn when ≤ 20% rooms are available
+      // Low availability alert: warn when ≤ 20% rooms are available.
+      // Dedup: skip if an unread low_availability notification was already
+      // sent in the last hour to avoid notification spam when bulk-adding bookings.
       final available = (results[2] as List).length;
       final total = (results[3] as List).length;
       if (total > 0 && available / total <= 0.20) {
-        await ns.notifyLowAvailability(
-          availableRooms: available,
-          totalRooms: total,
-        );
+        final recentAlert = await _db
+            .from('notifications')
+            .select('id')
+            .eq('hotel_id', hotelId!)
+            .eq('type', 'low_availability')
+            .eq('is_read', false)
+            .gte('created_at', DateTime.now().subtract(const Duration(hours: 1)).toIso8601String())
+            .limit(1);
+        if ((recentAlert as List).isEmpty) {
+          await ns.notifyLowAvailability(
+            availableRooms: available,
+            totalRooms: total,
+          );
+        }
       }
     } catch (_) {
       // Non-critical — never block main flow
