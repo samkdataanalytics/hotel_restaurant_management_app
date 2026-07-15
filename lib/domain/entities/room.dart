@@ -53,6 +53,17 @@ class Room {
     );
   }
 
+  static Room fromDbRow(Map<String, dynamic> r) => Room.fromMap({
+        'id': r['id'],
+        'roomNumber': r['room_number'],
+        'type': r['type'],
+        'floor': r['floor'],
+        'status': r['status'],
+        'pricePerNight': r['price_per_night'],
+        'maintenanceStart': r['maintenance_start'],
+        'maintenanceEnd': r['maintenance_end'],
+      });
+
   Room copyWith({
     String? id,
     String? roomNumber,

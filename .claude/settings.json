@@ -3,7 +3,10 @@
     "allow": [
       "Bash(node -e ' *)",
       "Bash(supabase db *)",
-      "Read(//c/Users/gphks/Documents/MyDoc/Proj/**)"
+      "Read(//c/Users/gphks/Documents/MyDoc/Proj/**)",
+      "Skill(artifact-design)",
+      "Skill(artifact-design:*)",
+      "Bash(flutter analyze *)"
     ]
   }
 }

@@ -108,6 +108,27 @@ class Booking {
     );
   }
 
+  static Booking fromDbRow(Map<String, dynamic> r) => Booking.fromMap({
+        'id': r['id'],
+        'bookingRef': r['booking_ref'],
+        'guestId': r['guest_id'],
+        'roomId': r['room_id'],
+        'checkInDate': r['check_in_date'],
+        'checkOutDate': r['check_out_date'],
+        'status': r['status'],
+        'numberOfGuests': r['number_of_guests'],
+        'specialRequests': r['special_requests'] ?? '',
+        'source': r['source'] ?? 'direct',
+        'totalAmount': r['total_amount'],
+        'isQrGenerated': r['is_qr_generated'] ?? false,
+        'isQrSent': r['is_qr_sent'] ?? false,
+        'isGuestFormSubmitted': r['is_guest_form_submitted'] ?? false,
+        'isPaid': r['is_paid'] ?? false,
+        'guestPreferences': r['guest_preferences'],
+        'discountType': r['discount_type'] ?? 'flat',
+        'discountValue': r['discount_value'] ?? 0,
+      });
+
   Booking copyWith({
     String? id,
     String? bookingRef,
