@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../domain/entities/staff_shift.dart';
+import '../domain/entities/staff_permission.dart' show PropertyStaffMember;
 
 class ShiftService {
   final _db = Supabase.instance.client;
@@ -106,6 +108,59 @@ class ShiftService {
       'clock_out': DateTime.now().toUtc().toIso8601String(),
       if (notes.isNotEmpty) 'notes': notes,
     }).eq('id', recordId);
+  }
+
+  // ── Copy week ─────────────────────────────────────────────────────────────
+
+  /// Copies all `scheduled` shifts from the week starting [sourceWeekStart]
+  /// into the week starting [targetWeekStart]. Staff names are re-resolved
+  /// from [staff] (rather than copying the possibly-stale denormalised name).
+  ///
+  /// If [overwrite] is true, existing shifts in the target week are deleted
+  /// first. Returns the number of shifts copied.
+  Future<int> copyWeek({
+    required DateTime sourceWeekStart,
+    required DateTime targetWeekStart,
+    required List<PropertyStaffMember> staff,
+    bool overwrite = false,
+  }) async {
+    final sourceDays = weekDays(sourceWeekStart);
+    final source = await getShiftsForRange(sourceDays.first, sourceDays.last);
+    final scheduled =
+        source.where((s) => s.status == ShiftStatus.scheduled).toList();
+    if (scheduled.isEmpty) return 0;
+
+    final targetDays = weekDays(targetWeekStart);
+    if (overwrite) {
+      await _db
+          .from('staff_shifts')
+          .delete()
+          .eq('hotel_id', hotelId)
+          .gte('shift_date', targetDays.first.toIso8601String().substring(0, 10))
+          .lte('shift_date', targetDays.last.toIso8601String().substring(0, 10));
+    }
+
+    final dayOffset = targetWeekStart.difference(sourceWeekStart).inDays;
+    final rows = scheduled.map((s) {
+      final member =
+          staff.where((m) => m.userId == s.staffUserId).firstOrNull;
+      final newDate = s.shiftDate.add(Duration(days: dayOffset));
+      return {
+        'id': const Uuid().v4(),
+        'hotel_id': hotelId,
+        'staff_user_id': s.staffUserId,
+        'staff_name': member?.fullName ?? s.staffName,
+        'shift_date': newDate.toIso8601String().substring(0, 10),
+        'start_time': s.startTime,
+        'end_time': s.endTime,
+        'role': s.role,
+        'notes': s.notes,
+        'status': 'scheduled',
+      };
+    }).toList();
+
+    await _db.from('staff_shifts').insert(rows);
+    return rows.length;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

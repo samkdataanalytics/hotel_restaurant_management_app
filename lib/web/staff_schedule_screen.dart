@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../domain/entities/staff_shift.dart';
 import '../domain/entities/staff_permission.dart';
 import '../services/shift_service.dart';
+import '../services/notification_service.dart';
 import '../providers/service_providers.dart';
 import '../providers/app_auth_provider.dart';
 import 'widgets/responsive_dialog.dart';
@@ -44,18 +45,26 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
   late TabController _tab;
   DateTime _weekOf = ShiftService.weekStart(DateTime.now());
   ShiftService? _svc;
+  NotificationService? _notifSvc;
+  String? _hotelId;
 
   List<StaffShift> _shifts  = [];
   List<TimeRecord> _records = [];
   TimeRecord? _activeRecord;
   bool _loadingShifts  = true;
   bool _loadingRecords = true;
+  bool _copyingWeek = false;
 
   // Staff list for the Add Shift dropdown
   List<PropertyStaffMember> _staff = [];
 
   // Time-records filter
   String? _filterUserId; // null = all staff (managers only)
+
+  // Schedule tab: My Shifts / All Staff toggle (resolved on first build).
+  bool? _mineOnly;
+
+  String? get _currentUserId => Supabase.instance.client.auth.currentUser?.id;
 
   @override
   void initState() {
@@ -74,7 +83,9 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
   Future<void> _init() async {
     final hotelId = ref.read(activePropertyProvider)?.id;
     if (hotelId == null) return;
+    _hotelId = hotelId;
     _svc = ShiftService(hotelId);
+    _notifSvc = NotificationService(hotelId);
     await Future.wait([_loadShifts(), _loadRecords(), _loadStaff()]);
   }
 
@@ -173,22 +184,44 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
     }
   }
 
+  // ── Notifications ────────────────────────────────────────────────────────
+
+  /// Notifies [staffUserId] of a schedule change, unless they're the one
+  /// making the change (a manager editing their own shift needs no alert).
+  void _notifyStaff(String staffUserId, String title, String body) {
+    if (_notifSvc == null) return;
+    if (staffUserId == _currentUserId) return;
+    _notifSvc!.notifyShiftChange(
+      recipientUserId: staffUserId,
+      title: title,
+      body: body,
+    );
+  }
+
   // ── Shift dialogs ─────────────────────────────────────────────────────────
 
-  Future<void> _showAddShift(DateTime date) async {
+  Future<void> _showAddShift(DateTime date, {String? staffId}) async {
     if (_svc == null || !_isManager) return;
     final result = await showDialog<StaffShift>(
       context: context,
       builder: (_) => _ShiftDialog(
         initialDate: date,
+        initialStaffId: staffId,
         staff: _staff,
-        hotelId: ref.read(activePropertyProvider)!.id,
+        hotelId: _hotelId!,
+        allShifts: _shifts,
       ),
     );
     if (result != null) {
       try {
         await _svc!.addShift(result);
         await _loadShifts();
+        _notifyStaff(
+          result.staffUserId,
+          'New Shift Added',
+          'You\'re scheduled ${DateFormat('EEE, MMM d').format(result.shiftDate)}, '
+              '${result.startTime}–${result.endTime}.',
+        );
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -208,12 +241,20 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
         initialDate: shift.shiftDate,
         staff: _staff,
         hotelId: shift.hotelId,
+        allShifts: _shifts,
+        onDelete: () => _deleteShift(shift),
       ),
     );
     if (result != null) {
       try {
         await _svc!.updateShift(result);
         await _loadShifts();
+        _notifyStaff(
+          result.staffUserId,
+          'Shift Updated',
+          'Your shift on ${DateFormat('EEE, MMM d').format(result.shiftDate)} '
+              'is now ${result.startTime}–${result.endTime}.',
+        );
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -247,6 +288,89 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
     if (ok == true) {
       await _svc!.deleteShift(shift.id);
       await _loadShifts();
+      _notifyStaff(
+        shift.staffUserId,
+        'Shift Removed',
+        'Your shift on ${DateFormat('EEE, MMM d').format(shift.shiftDate)} '
+            '(${shift.startTime}–${shift.endTime}) was removed.',
+      );
+    }
+  }
+
+  // ── Copy last week ────────────────────────────────────────────────────────
+
+  Future<void> _copyLastWeek() async {
+    if (_svc == null || !_isManager || _copyingWeek) return;
+    final sourceStart = _weekOf.subtract(const Duration(days: 7));
+
+    var overwrite = false;
+    final hasExisting = _shifts.any((s) => s.status != ShiftStatus.cancelled);
+    if (hasExisting) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('This week already has shifts'),
+          content: const Text(
+              'Add last week\'s shifts alongside the existing ones, or '
+              'replace this week\'s schedule entirely?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, 'cancel'),
+                child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, 'merge'),
+                child: const Text('Add Alongside')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, 'replace'),
+                child: const Text('Replace',
+                    style: TextStyle(color: Color(0xFFEF4444)))),
+          ],
+        ),
+      );
+      if (choice == null || choice == 'cancel') return;
+      overwrite = choice == 'replace';
+    }
+
+    setState(() => _copyingWeek = true);
+    try {
+      final count = await _svc!.copyWeek(
+        sourceWeekStart: sourceStart,
+        targetWeekStart: _weekOf,
+        staff: _staff,
+        overwrite: overwrite,
+      );
+      await _loadShifts();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(count == 0
+                  ? 'Last week had no shifts to copy.'
+                  : 'Copied $count shift${count == 1 ? '' : 's'} from last week.')),
+        );
+      }
+      if (count > 0) {
+        final days = ShiftService.weekDays(_weekOf);
+        final weekLabel = DateFormat('MMM d').format(days.first);
+        final affected = _shifts
+            .where((s) => s.status == ShiftStatus.scheduled)
+            .map((s) => s.staffUserId)
+            .toSet();
+        for (final uid in affected) {
+          _notifyStaff(
+            uid,
+            'Schedule Updated',
+            'Your schedule for the week of $weekLabel was updated.',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to copy last week: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _copyingWeek = false);
     }
   }
 
@@ -258,6 +382,14 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
     final weekLabel =
         '${DateFormat('MMM d').format(days.first)} – '
         '${DateFormat('MMM d, yyyy').format(days.last)}';
+
+    _mineOnly ??= !_isManager;
+    final visibleStaff = _mineOnly!
+        ? _staff.where((s) => s.userId == _currentUserId).toList()
+        : _staff;
+    final visibleShifts = _mineOnly!
+        ? _shifts.where((s) => s.staffUserId == _currentUserId).toList()
+        : _shifts;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -333,7 +465,28 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
                 const SizedBox(width: 12),
                 _weekNavBtn(Icons.chevron_right_rounded, _nextWeek),
                 const Spacer(),
-                if (_tab.index == 0 && _isManager)
+                if (_tab.index == 0) ...[
+                  _mineAllToggle(),
+                  const SizedBox(width: 10),
+                ],
+                if (_tab.index == 0 && _isManager) ...[
+                  OutlinedButton.icon(
+                    onPressed: _copyingWeek ? null : _copyLastWeek,
+                    style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFE2E8F0)),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10)),
+                    icon: _copyingWeek
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.copy_all_rounded,
+                            size: 16, color: Color(0xFF475569)),
+                    label: const Text('Copy Last Week',
+                        style: TextStyle(fontSize: 13, color: Color(0xFF475569))),
+                  ),
+                  const SizedBox(width: 10),
                   FilledButton.icon(
                     onPressed: () => _showAddShift(DateTime.now()),
                     style: FilledButton.styleFrom(
@@ -344,6 +497,7 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
                     label: const Text('Add Shift',
                         style: TextStyle(fontSize: 13)),
                   ),
+                ],
               ],
             ),
           ),
@@ -357,12 +511,12 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
               children: [
                 _ScheduleTab(
                   days: days,
-                  shifts: _shifts,
+                  staff: visibleStaff,
+                  shifts: visibleShifts,
                   loading: _loadingShifts,
                   isManager: _isManager,
                   onAddShift: _showAddShift,
                   onEditShift: _showEditShift,
-                  onDeleteShift: _deleteShift,
                 ),
                 _TimeTrackingTab(
                   records: _records,
@@ -386,6 +540,27 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
     );
   }
 
+  Widget _mineAllToggle() => SegmentedButton<bool>(
+        segments: const [
+          ButtonSegment(
+              value: true,
+              label: Text('Mine', style: TextStyle(fontSize: 12))),
+          ButtonSegment(
+              value: false,
+              label: Text('All Staff', style: TextStyle(fontSize: 12))),
+        ],
+        selected: {_mineOnly ?? true},
+        showSelectedIcon: false,
+        style: SegmentedButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          side: const BorderSide(color: Color(0xFFE2E8F0)),
+          selectedBackgroundColor: _kAccentBg,
+          selectedForegroundColor: _kAccent,
+        ),
+        onSelectionChanged: (s) => setState(() => _mineOnly = s.first),
+      );
+
   Widget _weekNavBtn(IconData icon, VoidCallback onTap) => InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
@@ -401,25 +576,28 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
       );
 }
 
-// ─── Schedule Tab ─────────────────────────────────────────────────────────────
+// ─── Schedule Tab (week grid: staff × day) ────────────────────────────────────
 
 class _ScheduleTab extends StatelessWidget {
+  static const double _nameColWidth = 168;
+  static const double _dayColWidth = 128;
+
   final List<DateTime> days;
+  final List<PropertyStaffMember> staff;
   final List<StaffShift> shifts;
   final bool loading;
   final bool isManager;
-  final void Function(DateTime) onAddShift;
+  final void Function(DateTime date, {String? staffId}) onAddShift;
   final void Function(StaffShift) onEditShift;
-  final void Function(StaffShift) onDeleteShift;
 
   const _ScheduleTab({
     required this.days,
+    required this.staff,
     required this.shifts,
     required this.loading,
     required this.isManager,
     required this.onAddShift,
     required this.onEditShift,
-    required this.onDeleteShift,
   });
 
   @override
@@ -427,137 +605,193 @@ class _ScheduleTab extends StatelessWidget {
     if (loading) {
       return const Center(child: CircularProgressIndicator());
     }
-    return ListView.builder(
-      padding: const EdgeInsets.all(20),
-      itemCount: days.length,
-      itemBuilder: (_, i) {
-        final day = days[i];
-        final dayShifts = shifts
-            .where((s) =>
-                s.shiftDate.year == day.year &&
-                s.shiftDate.month == day.month &&
-                s.shiftDate.day == day.day)
-            .toList();
-        final isToday = _isToday(day);
+    if (staff.isEmpty) {
+      return const Center(
+        child: Text('No staff to schedule',
+            style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8))),
+      );
+    }
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 14),
+    final totalWidth = _nameColWidth + _dayColWidth * days.length;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: totalWidth,
           child: Container(
+            // Border is applied via foregroundDecoration (not decoration) so it
+            // paints on top without insetting the child — with a fixed-width
+            // child, an inset border shrinks available space and causes the
+            // last column to overflow by exactly the border width.
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: isToday
-                      ? _kAccent.withValues(alpha: 0.4)
-                      : const Color(0xFFE2E8F0)),
-              boxShadow: const [
-                BoxShadow(
-                    color: Color(0x06000000),
-                    blurRadius: 8,
-                    offset: Offset(0, 2))
-              ],
+            ),
+            foregroundDecoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Day header
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      if (isToday)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: _kAccent,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            DateFormat('EEE, MMM d').format(day),
-                            style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white),
-                          ),
-                        )
-                      else
-                        Text(
-                          DateFormat('EEEE, MMM d').format(day),
-                          style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF1E293B)),
-                        ),
-                      const Spacer(),
-                      Text('${dayShifts.length} shift${dayShifts.length == 1 ? '' : 's'}',
-                          style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF94A3B8))),
-                      if (isManager) ...[
-                        const SizedBox(width: 10),
-                        InkWell(
-                          onTap: () => onAddShift(day),
-                          borderRadius: BorderRadius.circular(6),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: _kAccentBg,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.add_rounded,
-                                    size: 14, color: _kAccent),
-                                SizedBox(width: 3),
-                                Text('Add',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: _kAccent)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (dayShifts.isEmpty)
-                  const Padding(
-                    padding:
-                        EdgeInsets.fromLTRB(16, 0, 16, 14),
-                    child: Text(
-                      'No shifts scheduled',
-                      style: TextStyle(
-                          fontSize: 12, color: Color(0xFFCBD5E1)),
-                    ),
-                  )
-                else
-                  ...dayShifts.asMap().entries.map((e) {
-                    final idx = e.key;
-                    final shift = e.value;
-                    return Column(
+                _headerRow(),
+                const Divider(height: 1),
+                ...staff.asMap().entries.map((e) => Column(
                       children: [
-                        if (idx > 0)
-                          const Divider(height: 1, indent: 16),
-                        _ShiftRow(
-                          shift: shift,
-                          isManager: isManager,
-                          onEdit: () => onEditShift(shift),
-                          onDelete: () => onDeleteShift(shift),
-                        ),
+                        if (e.key > 0) const Divider(height: 1),
+                        _staffRow(e.value),
                       ],
-                    );
-                  }),
+                    )),
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
+  }
+
+  Widget _headerRow() => Row(
+        children: [
+          Container(
+            width: _nameColWidth,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            alignment: Alignment.centerLeft,
+            child: const Text('Team',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF64748B))),
+          ),
+          ...days.map((d) {
+            final isToday = _isToday(d);
+            return Container(
+              width: _dayColWidth,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isToday ? _kAccentBg : null,
+                border:
+                    const Border(left: BorderSide(color: Color(0xFFE2E8F0))),
+              ),
+              child: Column(
+                children: [
+                  Text(DateFormat('EEE').format(d),
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: isToday ? _kAccent : const Color(0xFF64748B))),
+                  Text(DateFormat('MMM d').format(d),
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: isToday ? _kAccent : const Color(0xFF94A3B8))),
+                ],
+              ),
+            );
+          }),
+        ],
+      );
+
+  Widget _staffRow(PropertyStaffMember member) {
+    final memberShifts = shifts.where((s) => s.staffUserId == member.userId);
+    final totalMinutes =
+        memberShifts.fold(0, (sum, s) => sum + s.durationMinutes);
+    final color = _roleColor(member.role);
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: _nameColWidth,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      shape: BoxShape.circle),
+                  child: Center(
+                    child: Text(member.initials,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: color)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(member.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1E293B))),
+                      Text(_hoursLabel(totalMinutes),
+                          style: const TextStyle(
+                              fontSize: 11, color: Color(0xFF94A3B8))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...days.map((d) => _dayCell(member, d)),
+        ],
+      ),
+    );
+  }
+
+  Widget _dayCell(PropertyStaffMember member, DateTime day) {
+    final cellShifts = shifts
+        .where((s) =>
+            s.staffUserId == member.userId &&
+            s.shiftDate.year == day.year &&
+            s.shiftDate.month == day.month &&
+            s.shiftDate.day == day.day)
+        .toList();
+
+    return Container(
+      width: _dayColWidth,
+      constraints: const BoxConstraints(minHeight: 58),
+      padding: const EdgeInsets.all(4),
+      decoration: const BoxDecoration(
+        border: Border(left: BorderSide(color: Color(0xFFE2E8F0))),
+      ),
+      child: Column(
+        children: [
+          ...cellShifts.map((s) => _ShiftChip(
+                shift: s,
+                onTap: isManager ? () => onEditShift(s) : null,
+              )),
+          if (isManager)
+            InkWell(
+              onTap: () => onAddShift(day, staffId: member.userId),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Icon(Icons.add_rounded,
+                    size: 14, color: Colors.grey.shade300),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _hoursLabel(int minutes) {
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    if (minutes == 0) return 'No shifts this week';
+    if (m == 0) return '${h}h this week';
+    return '${h}h ${m}m this week';
   }
 
   static bool _isToday(DateTime d) {
@@ -566,140 +800,54 @@ class _ScheduleTab extends StatelessWidget {
   }
 }
 
-// ─── Shift row ────────────────────────────────────────────────────────────────
+// ─── Shift chip (grid cell content) ───────────────────────────────────────────
 
-class _ShiftRow extends StatelessWidget {
+class _ShiftChip extends StatelessWidget {
   final StaffShift shift;
-  final bool isManager;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onTap;
 
-  const _ShiftRow({
-    required this.shift,
-    required this.isManager,
-    required this.onEdit,
-    required this.onDelete,
-  });
+  const _ShiftChip({required this.shift, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final color = _roleColor(shift.role);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          // Avatar
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                _initials(shift.staffName),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${shift.startTime}–${shift.endTime}',
                 style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: color),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Name + role
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(shift.staffName,
-                    style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E293B))),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        _roleLabel(shift.role),
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: color),
-                      ),
-                    ),
-                    if (shift.status != ShiftStatus.scheduled) ...[
-                      const SizedBox(width: 6),
-                      _StatusChip(shift.status),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Time
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('${shift.startTime} – ${shift.endTime}',
-                  style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF334155))),
-              Text(shift.durationLabel,
-                  style: const TextStyle(
-                      fontSize: 11, color: Color(0xFF94A3B8))),
+                    fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+            Text(_roleLabel(shift.role),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 9, color: color)),
+            if (shift.status != ShiftStatus.scheduled) ...[
+              const SizedBox(height: 2),
+              _StatusChip(shift.status),
             ],
-          ),
-
-          // Actions
-          if (isManager) ...[
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.edit_rounded,
-                  size: 17, color: Color(0xFF94A3B8)),
-              onPressed: onEdit,
-              tooltip: 'Edit',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded,
-                  size: 17, color: Color(0xFFEF4444)),
-              onPressed: onDelete,
-              tooltip: 'Delete',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-            ),
           ],
-        ],
+        ),
       ),
     );
   }
 
-  static String _initials(String name) {
-    final parts = name.trim().split(' ');
-    if (parts.isEmpty || name.isEmpty) return '?';
-    if (parts.length == 1) return parts[0][0].toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-  }
-
-  static String _roleLabel(String role) =>
-      role.replaceAll('_', ' ').split(' ')
-          .map((w) => w.isNotEmpty
-              ? '${w[0].toUpperCase()}${w.substring(1)}'
-              : '')
-          .join(' ');
+  static String _roleLabel(String role) => role
+      .replaceAll('_', ' ')
+      .split(' ')
+      .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
+      .join(' ');
 }
 
 // ─── Status chip ──────────────────────────────────────────────────────────────
@@ -1078,14 +1226,22 @@ class _StaffFilter extends StatelessWidget {
 class _ShiftDialog extends StatefulWidget {
   final StaffShift? existing;
   final DateTime initialDate;
+  final String? initialStaffId;
   final List<PropertyStaffMember> staff;
   final String hotelId;
+  /// Already-loaded shifts for the visible week — used for overlap detection.
+  final List<StaffShift> allShifts;
+  /// Present only when editing; shows a Delete action in the dialog.
+  final Future<void> Function()? onDelete;
 
   const _ShiftDialog({
     this.existing,
     required this.initialDate,
+    this.initialStaffId,
     required this.staff,
     required this.hotelId,
+    this.allShifts = const [],
+    this.onDelete,
   });
 
   @override
@@ -1113,6 +1269,12 @@ class _ShiftDialogState extends State<_ShiftDialog> {
     'maintenance',
   ];
 
+  static const _presets = [
+    (label: 'Morning',   start: '07:00', end: '15:00'),
+    (label: 'Afternoon', start: '15:00', end: '23:00'),
+    (label: 'Night',     start: '23:00', end: '07:00'),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -1125,11 +1287,48 @@ class _ShiftDialogState extends State<_ShiftDialog> {
     _status     = ex?.status    ?? ShiftStatus.scheduled;
     _notesCtrl.text = _notes;
 
-    if (ex != null) {
-      _selectedStaff = widget.staff
-          .where((s) => s.userId == ex.staffUserId)
-          .firstOrNull;
+    final preselectId = ex?.staffUserId ?? widget.initialStaffId;
+    if (preselectId != null) {
+      _selectedStaff =
+          widget.staff.where((s) => s.userId == preselectId).firstOrNull;
     }
+  }
+
+  /// Returns an existing shift for the selected staff/date that overlaps the
+  /// currently-entered time range, or null. Excludes the shift being edited
+  /// and any cancelled shifts.
+  StaffShift? _findOverlap() {
+    if (_selectedStaff == null) return null;
+    for (final s in widget.allShifts) {
+      if (s.staffUserId != _selectedStaff!.userId) continue;
+      if (widget.existing != null && s.id == widget.existing!.id) continue;
+      if (s.status == ShiftStatus.cancelled) continue;
+      if (s.shiftDate.year != _date.year ||
+          s.shiftDate.month != _date.month ||
+          s.shiftDate.day != _date.day) {
+        continue;
+      }
+      if (_timesOverlap(s.startTime, s.endTime, _startTime, _endTime)) {
+        return s;
+      }
+    }
+    return null;
+  }
+
+  static bool _timesOverlap(
+      String aStart, String aEnd, String bStart, String bEnd) {
+    int toMins(String t) {
+      final p = t.split(':');
+      return int.parse(p[0]) * 60 + int.parse(p[1]);
+    }
+
+    final aS = toMins(aStart);
+    var aE = toMins(aEnd);
+    final bS = toMins(bStart);
+    var bE = toMins(bEnd);
+    if (aE <= aS) aE += 24 * 60; // overnight wrap
+    if (bE <= bS) bE += 24 * 60;
+    return aS < bE && bS < aE;
   }
 
   @override
@@ -1162,8 +1361,35 @@ class _ShiftDialogState extends State<_ShiftDialog> {
     return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (_selectedStaff == null) return;
+
+    final overlap = _findOverlap();
+    if (overlap != null) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Overlapping Shift'),
+          content: Text(
+              '${_selectedStaff!.fullName} already has a shift '
+              '${overlap.startTime}–${overlap.endTime} on this day. '
+              'Add this one anyway?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: _kAccent),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Add Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
+    if (!mounted) return;
+
     final shift = StaffShift(
       id:           widget.existing?.id ?? const Uuid().v4(),
       hotelId:      widget.hotelId,
@@ -1230,6 +1456,27 @@ class _ShiftDialogState extends State<_ShiftDialog> {
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 14),
+
+              // Quick presets
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _presets.map((p) {
+                  final selected = _startTime == p.start && _endTime == p.end;
+                  return ChoiceChip(
+                    label: Text(p.label, style: const TextStyle(fontSize: 12)),
+                    selected: selected,
+                    selectedColor: _kAccentBg,
+                    labelStyle: TextStyle(
+                        color: selected ? _kAccent : const Color(0xFF475569)),
+                    onSelected: (_) => setState(() {
+                      _startTime = p.start;
+                      _endTime = p.end;
+                    }),
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 14),
 
@@ -1326,18 +1573,35 @@ class _ShiftDialogState extends State<_ShiftDialog> {
 
               // Actions
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: _selectedStaff != null ? _submit : null,
-                    style: FilledButton.styleFrom(
-                        backgroundColor: _kAccent),
-                    child: Text(isEdit ? 'Save Changes' : 'Add Shift'),
+                  if (isEdit && widget.onDelete != null)
+                    TextButton.icon(
+                      onPressed: () async {
+                        await widget.onDelete!();
+                        if (context.mounted) Navigator.pop(context);
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded,
+                          size: 16, color: Color(0xFFEF4444)),
+                      label: const Text('Delete',
+                          style: TextStyle(color: Color(0xFFEF4444))),
+                    )
+                  else
+                    const SizedBox.shrink(),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: _selectedStaff != null ? _submit : null,
+                        style: FilledButton.styleFrom(
+                            backgroundColor: _kAccent),
+                        child: Text(isEdit ? 'Save Changes' : 'Add Shift'),
+                      ),
+                    ],
                   ),
                 ],
               ),

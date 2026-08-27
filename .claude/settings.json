@@ -6,7 +6,9 @@
       "Read(//c/Users/gphks/Documents/MyDoc/Proj/**)",
       "Skill(artifact-design)",
       "Skill(artifact-design:*)",
-      "Bash(flutter analyze *)"
+      "Bash(flutter analyze *)",
+      "Bash(flutter --version)",
+      "Bash(where chromium-cli *)"
     ]
   }
 }

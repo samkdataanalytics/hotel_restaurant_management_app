@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/notification_service.dart';
 import '../../app_theme.dart';
 
@@ -13,6 +14,7 @@ const _kTypes = {
   'room_service':     (icon: Icons.room_service_rounded,      color: Color(0xFF8B5CF6)),
   'low_availability': (icon: Icons.warning_amber_rounded,     color: Color(0xFFF59E0B)),
   'housekeeping':     (icon: Icons.cleaning_services_rounded, color: Color(0xFF06B6D4)),
+  'shift_change':     (icon: Icons.calendar_month_rounded,    color: Color(0xFF818CF8)),
 };
 
 ({IconData icon, Color color}) _typeInfo(String type) =>
@@ -49,7 +51,8 @@ class _NotificationBellState extends State<NotificationBell>
     _shakeAnim = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _shakeCtrl, curve: Curves.elasticIn),
     );
-    _sub = widget.service.watchNotifications().listen((list) {
+    final viewerUserId = Supabase.instance.client.auth.currentUser?.id;
+    _sub = widget.service.watchNotifications(viewerUserId: viewerUserId).listen((list) {
       final prevUnread = _notifications.where((n) => !n.isRead).length;
       final newUnread = list.where((n) => !n.isRead).length;
       setState(() => _notifications = list);
