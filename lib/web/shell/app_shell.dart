@@ -8,17 +8,10 @@ import '../../providers/app_auth_provider.dart';
 import '../../providers/hotel_session.dart';
 import '../../services/organization_service.dart';
 import '../../di/injection_container.dart';
-import '../../data/datasources/supabase_data_source.dart';
-import '../../data/repositories/menu_item_repository_impl.dart';
-import '../../data/repositories/restaurant_table_repository_impl.dart';
-import '../../data/repositories/order_repository_impl.dart';
-import '../../data/repositories/ingredient_repository_impl.dart';
-import '../../domain/repositories/menu_item_repository.dart';
-import '../../domain/repositories/restaurant_table_repository.dart';
 import '../../domain/repositories/order_repository.dart';
-import '../../domain/repositories/ingredient_repository.dart';
 import '../../domain/entities/staff_permission.dart';
 import '../../providers/service_providers.dart';
+import '../../providers/property_scope.dart';
 import '../edit_property_dialog.dart';
 import '../../services/notification_service.dart';
 import '../widgets/notification_bell.dart';
@@ -255,19 +248,14 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     ref.read(activePropertyProvider.notifier).setProperty(property);
 
-    // Point singleton services at the new property before any parallel work
-    ref.read(bookingServiceProvider).hotelId    = property.id;
-    ref.read(restaurantServiceProvider).hotelId = property.id;
-
-    // Point new Clean Architecture repositories at the active property
-    (sl<MenuItemRepository>() as MenuItemRepositoryImpl).hotelId = property.id;
-    (sl<RestaurantTableRepository>() as RestaurantTableRepositoryImpl).hotelId = property.id;
-    (sl<OrderRepository>() as OrderRepositoryImpl).hotelId = property.id;
-    (sl<IngredientRepository>() as IngredientRepositoryImpl).hotelId = property.id;
-    // Shared data source backs rooms, guests, bookings, check-ins, expenses.
-    // Without this its hotelId stays null -> inserts omit hotel_id -> the row
-    // fails the hotel-scoped RLS WITH CHECK (42501). (Bug surfaced on Add Room.)
-    sl<SupabaseDataSource>().hotelId = property.id;
+    // Point every tenant-scoped singleton at the new property before any
+    // parallel work. Shared with the staff mobile app — see property_scope.dart
+    // for why each assignment matters (missing one => RLS 42501).
+    applyPropertyScope(
+      bookingService: ref.read(bookingServiceProvider),
+      restaurantService: ref.read(restaurantServiceProvider),
+      propertyId: property.id,
+    );
 
     // Run session sync (fetches hotel_settings) and permission load in parallel
     // — they are independent DB calls, no ordering required.
@@ -301,14 +289,16 @@ class _AppShellState extends ConsumerState<AppShell> {
     // owner   = created the property (hotel_users) — full admin including team mgmt
     // manager = promoted staff member — full operational access, no team mgmt
     // staff   = limited to their assigned permissions
-    // null    = not found in any table:
-    //   • regular accounts (org owners) → treat as owner
-    //   • staff accounts (@staff.internal) → role wasn't readable; default to 'staff'
-    //     so they land on their first permitted page, not the hotel Dashboard.
+    // null    = not found in any table — see resolvePropertyRole for why that
+    //           means owner for a regular account but staff for a staff account.
+    // Shared with the staff mobile app so the two cannot disagree about who
+    // counts as a manager.
     final isStaffAccount =
         ref.read(authProvider).valueOrNull?.isStaffAccount ?? false;
-    final isOwner   = !isStaffAccount && (role == null || role == 'owner');
-    final isManager = isOwner || role == 'manager';
+    final resolved =
+        resolvePropertyRole(role: role, isStaffAccount: isStaffAccount);
+    final isOwner   = resolved.isOwner;
+    final isManager = resolved.isManager;
     Map<String, PrivilegeLevel> permissions = {};
     if (!isManager) {
       permissions = await ref.read(staffServiceProvider).getMyPermissions(propertyId);

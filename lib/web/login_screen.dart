@@ -5,6 +5,7 @@ import '../app_theme.dart';
 import '../providers/app_auth_provider.dart';
 import '../router.dart';
 import '../providers/service_providers.dart';
+import '../services/auth_identity.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -60,13 +61,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       _error = null;
     });
 
-    // If the input has no '@' it's a staff username — construct the synthetic
-    // email directly without an RPC lookup (staff emails = {username}@staff.internal).
-    // Wrong usernames are handled by Supabase auth returning invalid-credentials.
-    String email = input;
-    if (!input.contains('@')) {
-      email = '$input@staff.internal';
-    }
+    // Staff sign in by username; resolveSignInEmail builds the synthetic
+    // {username}@staff.internal address. Shared with the staff mobile app.
+    final email = resolveSignInEmail(input);
 
     // Sign in via Riverpod auth notifier — GoRouter redirect handles navigation
     final err = await ref.read(authProvider.notifier).signIn(email, password);

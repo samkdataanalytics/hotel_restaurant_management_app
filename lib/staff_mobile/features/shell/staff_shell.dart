@@ -1,0 +1,269 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../session/app_lock.dart';
+import '../../session/staff_session.dart';
+import '../../widgets/offline_banner.dart';
+import '../property/property_switcher_sheet.dart';
+import 'staff_tabs.dart';
+
+/// Bottom-tab shell for the staff app.
+///
+/// The tab bar is built from the signed-in user's privilege map on every build,
+/// so switching property can change which tabs exist.
+class StaffShell extends ConsumerStatefulWidget {
+  const StaffShell({super.key});
+
+  @override
+  ConsumerState<StaffShell> createState() => _StaffShellState();
+}
+
+class _StaffShellState extends ConsumerState<StaffShell> {
+  int _index = 0;
+
+  /// Screens are kept alive across tab switches via IndexedStack, so a
+  /// half-scrolled floor or a search term survives a trip to another tab.
+  @override
+  Widget build(BuildContext context) {
+    final sessionAsync = ref.watch(staffSessionProvider);
+
+    return sessionAsync.when(
+      loading: () => const _ShellScaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => _ShellScaffold(body: _SessionError(error: e)),
+      data: (session) {
+        final tabs = visibleTabsFor(session);
+
+        if (tabs.isEmpty) {
+          return _ShellScaffold(
+            title: session.activeProperty?.name,
+            body: const _NoAccess(),
+            actions: [_PropertyButton(session: session)],
+          );
+        }
+
+        // Clamp rather than reset: losing a tab after a property switch should
+        // land on the nearest remaining one, not always bounce to the first.
+        final index = _index.clamp(0, tabs.length - 1);
+
+        return _ShellScaffold(
+          title: tabs[index].label,
+          subtitle: session.activeProperty?.name,
+          actions: [_PropertyButton(session: session)],
+          body: IndexedStack(
+            index: index,
+            children: [for (final tab in tabs) tab.build()],
+          ),
+          navigationBar: tabs.length < 2
+              // A single tab needs no tab bar — it is just the screen.
+              ? null
+              : NavigationBar(
+                  selectedIndex: index,
+                  onDestinationSelected: (i) => setState(() => _index = i),
+                  destinations: [
+                    for (final tab in tabs)
+                      NavigationDestination(
+                        icon: Icon(tab.icon),
+                        selectedIcon: Icon(tab.selectedIcon),
+                        label: tab.label,
+                      ),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _ShellScaffold extends StatelessWidget {
+  final String? title;
+  final String? subtitle;
+  final Widget body;
+  final Widget? navigationBar;
+  final List<Widget> actions;
+
+  const _ShellScaffold({
+    this.title,
+    this.subtitle,
+    required this.body,
+    this.navigationBar,
+    this.actions = const [],
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        titleSpacing: 20,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(title ?? 'HotRest'),
+            if (subtitle != null)
+              Text(
+                subtitle!,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
+        actions: actions,
+      ),
+      body: Column(
+        children: [
+          const OfflineBanner(),
+          Expanded(child: body),
+        ],
+      ),
+      bottomNavigationBar: navigationBar,
+    );
+  }
+}
+
+/// App bar overflow: property switching, biometric lock, sign out.
+///
+/// "Switch property" is omitted for single-property users rather than shown
+/// disabled — a control that can never do anything is just noise.
+class _PropertyButton extends ConsumerWidget {
+  final StaffSessionState session;
+  const _PropertyButton({required this.session});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final lock = ref.watch(appLockProvider);
+
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert),
+      onSelected: (value) async {
+        switch (value) {
+          case 'switch':
+            await showPropertySwitcher(context);
+          case 'lock':
+            final ok = await ref
+                .read(appLockProvider.notifier)
+                .setEnabled(!lock.enabled);
+            if (!ok && context.mounted) {
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Could not turn on biometric unlock. Check that a '
+                      'fingerprint or face is enrolled on this device.',
+                    ),
+                  ),
+                );
+            }
+          case 'signout':
+            ref.read(appLockProvider.notifier).reset();
+            if (context.mounted) await confirmSignOut(context);
+        }
+      },
+      itemBuilder: (_) => [
+        if (session.hasMultipleProperties)
+          const PopupMenuItem(
+            value: 'switch',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.swap_horiz_rounded),
+              title: Text('Switch property'),
+            ),
+          ),
+        if (lock.available)
+          PopupMenuItem(
+            value: 'lock',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(lock.enabled
+                  ? Icons.lock_rounded
+                  : Icons.lock_open_rounded),
+              title: Text(lock.enabled
+                  ? 'Biometric unlock: on'
+                  : 'Biometric unlock: off'),
+              subtitle: const Text('For shared devices'),
+            ),
+          ),
+        const PopupMenuItem(
+          value: 'signout',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.logout_rounded),
+            title: Text('Sign out'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NoAccess extends StatelessWidget {
+  const _NoAccess();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_outline_rounded, size: 56, color: scheme.outline),
+            const SizedBox(height: 20),
+            Text('No sections assigned',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            Text(
+              'Your account does not have access to any area of this property '
+              'yet. Ask a manager to grant you permissions.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant, height: 1.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionError extends ConsumerWidget {
+  final Object error;
+  const _SessionError({required this.error});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline_rounded, size: 56, color: scheme.error),
+            const SizedBox(height: 20),
+            Text('Could not load your session',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            Text(
+              '$error',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant, height: 1.5),
+            ),
+            const SizedBox(height: 28),
+            FilledButton.icon(
+              onPressed: () => ref.invalidate(staffSessionProvider),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

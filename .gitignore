@@ -54,3 +54,9 @@ app.*.map.json
 /android/app/release
 .vercel
 .env*.local
+
+# Flutter iOS build artefacts
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Podfile.lock
+ios/Pods/

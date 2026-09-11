@@ -1,6 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Release builds need this declared here. The Flutter template only puts
+         it in src/debug and src/profile, so a release APK would have no network
+         access at all. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Read by connectivity_plus to tell "no network" apart from "server
+         unreachable" when explaining a failed write. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Biometric re-unlock on shared devices (local_auth). Optional at
+         runtime: the toggle is hidden when no biometric is enrolled. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+
     <application
-        android:label="hotel_checkin"
+        android:label="HotRest Staff"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

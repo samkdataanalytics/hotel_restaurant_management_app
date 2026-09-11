@@ -29,6 +29,21 @@ dependencies:
   get_it: ^9.2.1
   crypto: ^3.0.3
 
+  # ── Staff mobile app (lib/main_mobile.dart) ────────────────────────────────
+  # Only reachable from the mobile entry point; the web build never imports
+  # these. Each supports web as a no-op or stub, so adding them cannot break
+  # `flutter build web`.
+  # Pinned to v10, not v9 or v11, and both bounds matter:
+  #   * v9's web implementation uses dart:html, which fails the wasm dry run on
+  #     `flutter build web` even though no web code imports it — the plugin
+  #     registrant pulls in every declared platform implementation regardless.
+  #     v10 moved to package:web.
+  #   * v11 requires win32 ^6, which conflicts with file_picker ^8 (win32 ^5).
+  #     file_picker is used by two working web screens, so it is not moving.
+  flutter_secure_storage: ^10.3.2  # session tokens in the platform keystore
+  connectivity_plus: ^6.1.0        # offline banner + write failure messaging
+  local_auth: ^3.0.2               # biometric re-unlock on shared devices
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -21,6 +21,7 @@ import '../domain/entities/staff_permission.dart';
 import '../services/booking_service.dart';
 import '../services/restaurant_service.dart';
 import '../providers/service_providers.dart';
+import '../providers/invoice_provider.dart';
 
 class ReservationsScreen extends ConsumerStatefulWidget {
   const ReservationsScreen({super.key});
