@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../data/order_alerts.dart';
+import '../../router/staff_router.dart';
 import '../../session/app_lock.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
@@ -168,6 +170,8 @@ class _PropertyButton extends ConsumerWidget {
                   ),
                 );
             }
+          case 'soldout':
+            context.push(StaffRoutes.availability);
           case 'alerts':
             final wanted = !alertsOn;
             final ok = await ref
@@ -198,6 +202,16 @@ class _PropertyButton extends ConsumerWidget {
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.swap_horiz_rounded),
               title: Text('Switch property'),
+            ),
+          ),
+        if (session.canView('restaurant_management'))
+          const PopupMenuItem(
+            value: 'soldout',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.no_food_outlined),
+              title: Text('Sold out items'),
+              subtitle: Text('Mark a dish off the menu'),
             ),
           ),
         PopupMenuItem(

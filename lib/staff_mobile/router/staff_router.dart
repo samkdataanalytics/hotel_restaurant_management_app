@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/staff_login_screen.dart';
+import '../features/orders/availability_screen.dart';
 import '../features/orders/order_entry_screen.dart';
+import '../features/orders/payment_screen.dart';
 import '../features/shell/setup_required_screen.dart';
 import '../features/shell/staff_shell.dart';
 import '../session/staff_session.dart';
@@ -12,8 +14,10 @@ abstract final class StaffRoutes {
   static const login = '/login';
   static const setupRequired = '/setup-required';
   static const home = '/home';
+  static const availability = '/availability';
 
   static String orderEntry(String tableId) => '/tables/$tableId/order';
+  static String payment(String tableId) => '/tables/$tableId/pay';
 }
 
 /// Router for the staff mobile app.
@@ -77,6 +81,16 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/tables/:tableId/order',
         builder: (_, state) => OrderEntryScreen(
+          tableId: state.pathParameters['tableId']!,
+        ),
+      ),
+      GoRoute(
+        path: StaffRoutes.availability,
+        builder: (_, __) => const AvailabilityScreen(),
+      ),
+      GoRoute(
+        path: '/tables/:tableId/pay',
+        builder: (_, state) => PaymentScreen(
           tableId: state.pathParameters['tableId']!,
         ),
       ),

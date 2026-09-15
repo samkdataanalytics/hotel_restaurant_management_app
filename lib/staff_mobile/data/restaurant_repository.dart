@@ -5,6 +5,7 @@ import '../../domain/entities/restaurant_order.dart';
 import '../../domain/entities/restaurant_table.dart';
 import '../../providers/service_providers.dart';
 import '../session/staff_session.dart';
+import 'front_desk_repository.dart';
 import 'local_store.dart';
 
 /// How a table reads on the floor board.
@@ -262,6 +263,43 @@ class RestaurantRepository {
 
   Future<({double taxRate, double serviceChargeRate})> loadChargeSettings() =>
       _ref.read(restaurantServiceProvider).getChargeSettings();
+
+  /// The full menu including unavailable items, for the 86 screen.
+  ///
+  /// Separate from [loadMenuByCategory], which filters unavailable items out so
+  /// they cannot reach a cart. Marking something back on requires seeing it.
+  Future<Map<String, List<MenuItem>>> loadFullMenuByCategory() async {
+    final items = await _ref.read(restaurantServiceProvider).getMenuItems();
+    final grouped = <String, List<MenuItem>>{};
+    for (final item in items) {
+      grouped.putIfAbsent(item.category, () => []).add(item);
+    }
+    return grouped;
+  }
+
+  /// Marks a menu item available or sold out.
+  ///
+  /// Goes through saveMenuItem so the change reaches the guest QR menu and
+  /// every other device, which is the whole point — a dish that ran out should
+  /// stop being orderable everywhere at once.
+  Future<void> setItemAvailability(MenuItem item, bool isAvailable) =>
+      _ref
+          .read(restaurantServiceProvider)
+          .saveMenuItem(item.copyWith(isAvailable: isAvailable));
+
+  /// Guests currently in house, for charge-to-room.
+  ///
+  /// Both buckets count: someone due to leave today has not left yet and can
+  /// still charge lunch to their room.
+  Future<List<ArrivalEntry>> loadInHouseGuests() async {
+    final all = await _ref.read(frontDeskRepositoryProvider).loadArrivals();
+    final today = DateTime.now();
+    return all.where((e) {
+      final bucket = e.bucketFor(today);
+      return bucket == ArrivalBucket.inHouse ||
+          bucket == ArrivalBucket.departingToday;
+    }).toList();
+  }
 }
 
 final restaurantRepositoryProvider = Provider<RestaurantRepository>(

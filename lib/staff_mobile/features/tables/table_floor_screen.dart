@@ -109,7 +109,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
     );
   }
 
-  void _openTable(TableFloorEntry entry, bool mayOrder) {
+  Future<void> _openTable(TableFloorEntry entry, bool mayOrder) async {
     if (!mayOrder) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -123,7 +123,31 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
         );
       return;
     }
-    context.push(StaffRoutes.orderEntry(entry.table.id));
+
+    // A free table has only one sensible action, so tapping it goes straight
+    // to order entry. An occupied one has two, and guessing wrong either loses
+    // a waiter's time or opens a bill they did not ask for.
+    if (entry.state == FloorState.free) {
+      await context.push(StaffRoutes.orderEntry(entry.table.id));
+      return;
+    }
+
+    final action = await showModalBottomSheet<_TableAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => _TableActions(entry: entry),
+    );
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case _TableAction.addItems:
+        await context.push(StaffRoutes.orderEntry(entry.table.id));
+      case _TableAction.settle:
+        await context.push(StaffRoutes.payment(entry.table.id));
+    }
+    // Settling frees the table, so the board must re-read rather than keep
+    // showing it occupied.
+    if (mounted) ref.invalidate(_floorProvider);
   }
 }
 
@@ -382,5 +406,68 @@ class _StaleNotice extends StatelessWidget {
     if (d.inMinutes < 60) return '${d.inMinutes}m ago';
     if (d.inHours < 24) return '${d.inHours}h ago';
     return '${d.inDays}d ago';
+  }
+}
+
+
+enum _TableAction { addItems, settle }
+
+/// What can be done with a table that already has open orders.
+class _TableActions extends StatelessWidget {
+  final TableFloorEntry entry;
+  const _TableActions({required this.entry});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text('Table ${entry.table.tableNumber}',
+                      style: Theme.of(context).textTheme.titleLarge),
+                ),
+                Text(
+                  entry.openTotal.toStringAsFixed(2),
+                  style: const TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${entry.openItemCount} item'
+                '${entry.openItemCount == 1 ? '' : 's'} on this table',
+                style: TextStyle(
+                    fontSize: 13, color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.add_circle_outline_rounded),
+            title: const Text('Add another round'),
+            onTap: () => Navigator.of(context).pop(_TableAction.addItems),
+          ),
+          ListTile(
+            leading: Icon(Icons.receipt_long_rounded, color: scheme.primary),
+            title: Text('Settle the bill',
+                style: TextStyle(
+                    color: scheme.primary, fontWeight: FontWeight.w600)),
+            onTap: () => Navigator.of(context).pop(_TableAction.settle),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
   }
 }
