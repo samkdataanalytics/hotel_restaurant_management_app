@@ -170,6 +170,10 @@ class _PropertyButton extends ConsumerWidget {
                   ),
                 );
             }
+          case 'printer':
+            context.push(StaffRoutes.printer);
+          case 'kitchen':
+            context.push(StaffRoutes.kitchen);
           case 'soldout':
             context.push(StaffRoutes.availability);
           case 'alerts':
@@ -202,6 +206,25 @@ class _PropertyButton extends ConsumerWidget {
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.swap_horiz_rounded),
               title: Text('Switch property'),
+            ),
+          ),
+        const PopupMenuItem(
+          value: 'printer',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.print_outlined),
+            title: Text('Receipt printer'),
+            subtitle: Text('Bluetooth, per device'),
+          ),
+        ),
+        if (session.canView('restaurant_kitchen'))
+          const PopupMenuItem(
+            value: 'kitchen',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.restaurant_menu_outlined),
+              title: Text('Kitchen display'),
+              subtitle: Text('Full screen ticket board'),
             ),
           ),
         if (session.canView('restaurant_management'))

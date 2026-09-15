@@ -214,13 +214,13 @@ void main() {
       const svcRate = 0.10;
       const discountPct = 10.0;
 
-      final itemsTotal = 1500.0;
-      final discountValue = itemsTotal * (discountPct / 100);
-      final subtotal = itemsTotal - discountValue;
-      final tax = subtotal * taxRate;
-      final dineInFraction = 1200.0 / itemsTotal;
-      final serviceCharge = dineInFraction * subtotal * svcRate;
-      final expected = subtotal + tax + serviceCharge;
+      const itemsTotal = 1500.0;
+      const discountValue = itemsTotal * (discountPct / 100);
+      const subtotal = itemsTotal - discountValue;
+      const tax = subtotal * taxRate;
+      const dineInFraction = 1200.0 / itemsTotal;
+      const serviceCharge = dineInFraction * subtotal * svcRate;
+      const expected = subtotal + tax + serviceCharge;
 
       final bill = computeTableBill(
         orders: orders,

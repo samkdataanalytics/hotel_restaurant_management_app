@@ -6,6 +6,8 @@ import '../../../domain/table_bill.dart';
 import '../../../providers/service_providers.dart';
 import '../../data/connectivity.dart';
 import '../../data/front_desk_repository.dart';
+import '../../data/receipt_builder.dart';
+import '../../data/receipt_printer.dart';
 import '../../data/restaurant_repository.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
@@ -256,7 +258,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             ),
           ),
         );
-      Navigator.of(context).pop(true);
+
+      // Printing is offered after the bill is settled, never before: the
+      // payment must not depend on a printer being reachable.
+      await _offerReceipt(entry, bill, status, roomId != null);
+
+      if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       setState(() => _settling = false);
@@ -266,6 +273,68 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         isOnline: true,
         action: 'Settling the bill',
       );
+    }
+  }
+
+  /// Offers a printed receipt, if this device has a printer configured.
+  ///
+  /// Silently skipped when no printer is set up — most staff phones will never
+  /// have one, and prompting them every time would be noise.
+  Future<void> _offerReceipt(
+    TableFloorEntry entry,
+    TableBill bill,
+    PaymentStatus status,
+    bool chargedToRoom,
+  ) async {
+    final printer = ref.read(receiptPrinterProvider);
+    if (printer.savedPrinter == null) return;
+    if (!mounted) return;
+
+    final wants = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Print the receipt?'),
+        content: Text('To ${printer.savedPrinter!.name}'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('No receipt'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Print'),
+          ),
+        ],
+      ),
+    );
+    if (wants != true || !mounted) return;
+
+    final session = ref.read(staffSessionProvider).valueOrNull;
+    try {
+      final builder = await ReceiptBuilder.create(paper: printer.paper);
+      await printer.printBytes(builder.build(
+        header: ReceiptHeader(
+          propertyName: session?.activeProperty?.name ?? 'HotRest',
+          addressLine: session?.activeProperty?.address,
+          phone: session?.activeProperty?.phone,
+        ),
+        orders: entry.openOrders,
+        bill: bill,
+        tableLabel: 'Table ${entry.table.tableNumber}',
+        settledAt: DateTime.now(),
+        chargedToRoom: chargedToRoom,
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      // A failed print must not imply a failed payment — the bill is already
+      // settled by this point.
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text('Payment went through, but printing failed: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          duration: const Duration(seconds: 6),
+        ));
     }
   }
 

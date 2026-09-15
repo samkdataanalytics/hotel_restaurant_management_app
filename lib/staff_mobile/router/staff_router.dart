@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/staff_login_screen.dart';
+import '../features/kitchen/kitchen_screen.dart';
 import '../features/orders/availability_screen.dart';
 import '../features/orders/order_entry_screen.dart';
 import '../features/orders/payment_screen.dart';
+import '../features/orders/printer_settings_screen.dart';
 import '../features/shell/setup_required_screen.dart';
 import '../features/shell/staff_shell.dart';
 import '../session/staff_session.dart';
@@ -15,6 +17,8 @@ abstract final class StaffRoutes {
   static const setupRequired = '/setup-required';
   static const home = '/home';
   static const availability = '/availability';
+  static const kitchen = '/kitchen';
+  static const printer = '/printer';
 
   static String orderEntry(String tableId) => '/tables/$tableId/order';
   static String payment(String tableId) => '/tables/$tableId/pay';
@@ -83,6 +87,19 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, state) => OrderEntryScreen(
           tableId: state.pathParameters['tableId']!,
         ),
+      ),
+      // Full screen rather than a tab: a kitchen board runs all day on a
+      // propped-up tablet, so it wants the whole display and no tab bar. It
+      // also unlocks landscape and holds a wakelock, which must be released
+      // when it closes — an IndexedStack tab is never disposed on switch, so
+      // those would leak into the rest of the app.
+      GoRoute(
+        path: StaffRoutes.kitchen,
+        builder: (_, __) => const KitchenScreen(),
+      ),
+      GoRoute(
+        path: StaffRoutes.printer,
+        builder: (_, __) => const PrinterSettingsScreen(),
       ),
       GoRoute(
         path: StaffRoutes.availability,
