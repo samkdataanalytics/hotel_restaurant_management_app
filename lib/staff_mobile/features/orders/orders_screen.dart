@@ -43,7 +43,7 @@ final _ordersProvider = FutureProvider.autoDispose<_OrdersView>((ref) async {
 });
 
 /// Which slice of the order list is showing.
-enum _Filter { active, today, all }
+enum _Filter { active, roomService, today, all }
 
 /// Live order list — what the kitchen is working on, and what it has finished.
 ///
@@ -106,13 +106,19 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     icon: Icons.receipt_long_outlined,
                     title: switch (_filter) {
                       _Filter.active => 'Nothing in the kitchen',
+                      _Filter.roomService => 'No room service orders',
                       _Filter.today => 'No orders today',
                       _Filter.all => 'No orders yet',
                     },
-                    body: _filter == _Filter.active
-                        ? 'Orders fired from the floor appear here until they '
-                            'are served.'
-                        : 'Orders will show here once they are taken.',
+                    body: switch (_filter) {
+                      _Filter.active =>
+                        'Orders fired from the floor appear here until they '
+                            'are served.',
+                      _Filter.roomService =>
+                        'Orders placed from an in-room QR code appear here '
+                            'until they are delivered.',
+                      _ => 'Orders will show here once they are taken.',
+                    },
                   );
                 }
                 return ListView.separated(
@@ -155,6 +161,17 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 o.status == OrderStatus.preparing ||
                 o.status == OrderStatus.ready)
             // Oldest first: the kitchen works the queue from the front.
+            .toList()
+            .reversed
+            .toList();
+      case _Filter.roomService:
+        // H-05: the room service queue. These orders arrive from the in-room
+        // QR and are worked the same way as any other ticket — acknowledged,
+        // prepared, marked delivered — so they need a view keyed to the room
+        // rather than a separate workflow.
+        return live
+            .where((o) => o.type == OrderType.roomService)
+            .where((o) => o.status != OrderStatus.served)
             .toList()
             .reversed
             .toList();
@@ -218,6 +235,7 @@ class _FilterBar extends StatelessWidget {
         children: [
           for (final (f, label) in const [
             (_Filter.active, 'In the kitchen'),
+            (_Filter.roomService, 'Room service'),
             (_Filter.today, 'Today'),
             (_Filter.all, 'All'),
           ]) ...[

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../data/front_desk_repository.dart';
 import '../../session/staff_session.dart';
+import '../../router/staff_router.dart';
 import '../../theme/staff_theme.dart';
 import 'front_desk_message.dart';
 
@@ -28,6 +30,33 @@ class ArrivalsScreen extends ConsumerStatefulWidget {
 
 class _ArrivalsScreenState extends ConsumerState<ArrivalsScreen> {
   ArrivalBucket _bucket = ArrivalBucket.arrivingToday;
+
+  /// Opens the action that matches where the guest is in their stay.
+  ///
+  /// The bucket already says what is wanted: somebody arriving needs checking
+  /// in, somebody in house or leaving needs checking out. Presenting both every
+  /// time would make the common case slower.
+  /// Opens the action that matches where the guest is in their stay.
+  ///
+  /// The bucket already says what is wanted: somebody arriving needs checking
+  /// in, somebody in house or leaving needs checking out. Offering both every
+  /// time would make the common case slower.
+  Future<void> _open(ArrivalEntry entry) async {
+    final bucket = entry.bucketFor(DateTime.now());
+    final route = switch (bucket) {
+      ArrivalBucket.arrivingToday || ArrivalBucket.upcoming =>
+        StaffRoutes.checkIn,
+      ArrivalBucket.inHouse || ArrivalBucket.departingToday =>
+        StaffRoutes.checkOut,
+      null => null,
+    };
+    if (route == null) return;
+
+    final changed = await context.push<bool>(route, extra: entry);
+    // The board must re-read after a check-in or check-out, since both move
+    // the guest into a different bucket.
+    if (changed == true && mounted) ref.invalidate(_arrivalsProvider);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,6 +118,7 @@ class _ArrivalsScreenState extends ConsumerState<ArrivalsScreen> {
                           entry: visible[i],
                           bucket: _bucket,
                           today: today,
+                          onTap: () => _open(visible[i]),
                         ),
                       ),
               ),
@@ -144,11 +174,13 @@ class _ArrivalCard extends StatelessWidget {
   final ArrivalEntry entry;
   final ArrivalBucket bucket;
   final DateTime today;
+  final VoidCallback onTap;
 
   const _ArrivalCard({
     required this.entry,
     required this.bucket,
     required this.today,
+    required this.onTap,
   });
 
   static final _dayFormat = DateFormat('EEE d MMM');
@@ -166,7 +198,9 @@ class _ArrivalCard extends StatelessWidget {
 
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: Padding(
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,6 +321,7 @@ class _ArrivalCard extends StatelessWidget {
               ),
             ],
           ],
+        ),
         ),
       ),
     );

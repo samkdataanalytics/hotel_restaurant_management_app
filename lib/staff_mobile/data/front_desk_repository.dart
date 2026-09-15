@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/entities/booking.dart';
 import '../../domain/entities/guest.dart';
+import '../../domain/entities/expense.dart';
+import '../../domain/entities/restaurant_order.dart';
 import '../../domain/entities/room.dart';
 import '../../providers/service_providers.dart';
 
@@ -63,6 +65,42 @@ class ArrivalEntry {
   }
 }
 
+
+/// Everything a guest owes at check-out, assembled from the three places a
+/// charge can come from.
+class GuestFolio {
+  final ArrivalEntry stay;
+
+  /// Restaurant orders that were billed to the room.
+  final List<RestaurantOrder> restaurantOrders;
+
+  /// Room-linked expenses — minibar, laundry, damages.
+  final List<Expense> expenses;
+
+  const GuestFolio({
+    required this.stay,
+    this.restaurantOrders = const [],
+    this.expenses = const [],
+  });
+
+  /// What the room itself costs for the stay.
+  double get roomCharge => stay.booking.totalAmount;
+
+  double get restaurantTotal =>
+      restaurantOrders.fold(0.0, (sum, o) => sum + o.totalAmount);
+
+  /// Only billable expenses reach the guest — an internal cost recorded
+  /// against the room is the hotel's, not theirs.
+  double get expensesTotal => expenses
+      .where((e) => e.isBillable)
+      .fold(0.0, (sum, e) => sum + e.amount);
+
+  double get total => roomCharge + restaurantTotal + expensesTotal;
+
+  bool get isEmpty =>
+      restaurantOrders.isEmpty && expenses.isEmpty && roomCharge == 0;
+}
+
 /// Reads for the front-desk surfaces.
 ///
 /// Same seam principle as [RestaurantRepository]: screens never call a service
@@ -87,6 +125,40 @@ class FrontDeskRepository {
               room: r['room'] as Room?,
             ))
         .toList();
+  }
+
+
+  /// Assembles what a guest owes.
+  ///
+  /// The three sources are fetched together — a folio missing its restaurant
+  /// charges because one call was slow would undercharge the guest.
+  Future<GuestFolio> loadFolio(ArrivalEntry stay) async {
+    final booking = _ref.read(bookingServiceProvider);
+    final restaurant = _ref.read(restaurantServiceProvider);
+
+    final results = await (
+      restaurant.getChargedToRoomOrders(stay.booking.id),
+      booking.getExpensesByBookingId(stay.booking.id),
+    ).wait;
+
+    return GuestFolio(
+      stay: stay,
+      restaurantOrders: results.$1,
+      expenses: results.$2,
+    );
+  }
+
+  /// Looks a booking up by its reference, for a guest arriving at the door
+  /// with a confirmation on their phone.
+  Future<ArrivalEntry?> lookupBooking(String bookingRef) async {
+    final result =
+        await _ref.read(bookingServiceProvider).lookupBooking(bookingRef.trim());
+    if (result == null) return null;
+    return ArrivalEntry(
+      booking: result['booking'] as Booking,
+      guest: result['guest'] as Guest?,
+      room: result['room'] as Room?,
+    );
   }
 
   Future<List<Room>> loadRooms() async {

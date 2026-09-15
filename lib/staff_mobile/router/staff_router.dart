@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/staff_login_screen.dart';
+import '../features/frontdesk/check_in_screen.dart';
+import '../features/frontdesk/check_out_screen.dart';
+import '../../staff_mobile/data/front_desk_repository.dart';
 import '../features/kitchen/kitchen_screen.dart';
 import '../features/orders/availability_screen.dart';
 import '../features/orders/order_entry_screen.dart';
@@ -19,6 +22,8 @@ abstract final class StaffRoutes {
   static const availability = '/availability';
   static const kitchen = '/kitchen';
   static const printer = '/printer';
+  static const checkIn = '/check-in';
+  static const checkOut = '/check-out';
 
   static String orderEntry(String tableId) => '/tables/$tableId/order';
   static String payment(String tableId) => '/tables/$tableId/pay';
@@ -96,6 +101,34 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: StaffRoutes.kitchen,
         builder: (_, __) => const KitchenScreen(),
+      ),
+      // `extra` carries the already-loaded stay so these screens do not
+      // re-fetch what the arrivals board just showed. Both cope with it being
+      // absent, which is what a cold deep link would give them.
+      GoRoute(
+        path: StaffRoutes.checkIn,
+        builder: (_, state) =>
+            CheckInScreen(stay: state.extra as ArrivalEntry?),
+      ),
+      GoRoute(
+        path: StaffRoutes.checkOut,
+        builder: (_, state) {
+          final stay = state.extra as ArrivalEntry?;
+          if (stay == null) {
+            return const Scaffold(
+              body: Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Text(
+                    'Open a guest from the arrivals list to check them out.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            );
+          }
+          return CheckOutScreen(stay: stay);
+        },
       ),
       GoRoute(
         path: StaffRoutes.printer,
