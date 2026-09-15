@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/entities/room.dart';
-import '../../../providers/service_providers.dart';
 import '../../data/connectivity.dart';
+import '../../data/front_desk_realtime.dart';
 import '../../data/front_desk_repository.dart';
 import '../../session/staff_session.dart';
 import '../../theme/staff_theme.dart';
@@ -13,6 +13,10 @@ import 'front_desk_message.dart';
 final _roomsProvider = FutureProvider.autoDispose<List<Room>>((ref) async {
   ref.watch(
       staffSessionProvider.select((s) => s.valueOrNull?.activeProperty?.id));
+
+  // Live once migration 20260915000001 publishes these tables; a no-op and
+  // harmless before that.
+  ref.watch(frontDeskRealtimeProvider);
   return ref.watch(frontDeskRepositoryProvider).loadRooms();
 });
 
@@ -21,10 +25,11 @@ final _roomsProvider = FutureProvider.autoDispose<List<Room>>((ref) async {
 /// Housekeeping's whole case for being on a phone is not carrying a paper round
 /// back to the desk, so status changes are available here rather than read-only.
 ///
-/// A caveat worth knowing: `rooms.status` is a three-state column
-/// (available / occupied / maintenance). There is no separate housekeeping
-/// state, so "dirty / cleaning / inspected / ready" cannot be expressed yet —
-/// that needs a schema column, and this change touches no backend.
+/// Two independent axes, shown together: occupancy (available / occupied /
+/// maintenance), which check-in and check-out drive, and cleaning state
+/// (ready / dirty / cleaning / inspected), which housekeeping drives. A room
+/// can be occupied AND dirty, so collapsing them would lose what the round is
+/// actually tracking.
 class RoomsScreen extends ConsumerStatefulWidget {
   const RoomsScreen({super.key});
 
@@ -33,7 +38,7 @@ class RoomsScreen extends ConsumerStatefulWidget {
 }
 
 class _RoomsScreenState extends ConsumerState<RoomsScreen> {
-  RoomStatus? _filter;
+  HousekeepingStatus? _filter;
   final _busy = <String>{};
 
   @override
@@ -51,12 +56,13 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
         onRetry: () => ref.invalidate(_roomsProvider),
       ),
       data: (rooms) {
-        final counts = <RoomStatus, int>{
-          for (final s in RoomStatus.values)
-            s: rooms.where((r) => r.status == s).length,
+        final counts = <HousekeepingStatus, int>{
+          for (final s in HousekeepingStatus.values)
+            s: rooms.where((r) => r.housekeeping == s).length,
         };
-        final visible =
-            _filter == null ? rooms : rooms.where((r) => r.status == _filter).toList();
+        final visible = _filter == null
+            ? rooms
+            : rooms.where((r) => r.housekeeping == _filter).toList();
 
         return Column(
           children: [
@@ -115,18 +121,27 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
       );
   }
 
+  /// The cleaning round, in the order it actually happens.
+  static HousekeepingStatus _nextHousekeeping(HousekeepingStatus current) =>
+      switch (current) {
+        HousekeepingStatus.dirty => HousekeepingStatus.cleaning,
+        HousekeepingStatus.cleaning => HousekeepingStatus.inspected,
+        HousekeepingStatus.inspected => HousekeepingStatus.ready,
+        // A ready room going back to dirty is the guest-checked-out case.
+        HousekeepingStatus.ready => HousekeepingStatus.dirty,
+      };
+
   Future<void> _cycle(Room room) async {
     if (_busy.contains(room.id)) return;
     setState(() => _busy.add(room.id));
     final isOnline = ref.read(isOnlineProvider);
 
     try {
-      // Reuses the service's own cycle rather than deciding the next status
-      // here: available -> maintenance -> available, occupied -> occupied.
-      await ref.read(bookingServiceProvider).toggleRoomStatus(room);
+      await ref
+          .read(frontDeskRepositoryProvider)
+          .setHousekeeping(room, _nextHousekeeping(room.housekeeping));
       if (!mounted) return;
       setState(() => _busy.remove(room.id));
-      // Rooms are not in the realtime publication, so refresh explicitly.
       ref.invalidate(_roomsProvider);
     } catch (e) {
       if (!mounted) return;
@@ -143,9 +158,9 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
 
 class _StatusBar extends StatelessWidget {
   final int total;
-  final Map<RoomStatus, int> counts;
-  final RoomStatus? selected;
-  final ValueChanged<RoomStatus?> onSelected;
+  final Map<HousekeepingStatus, int> counts;
+  final HousekeepingStatus? selected;
+  final ValueChanged<HousekeepingStatus?> onSelected;
 
   const _StatusBar({
     required this.total,
@@ -167,7 +182,7 @@ class _StatusBar extends StatelessWidget {
             selected: selected == null,
             onSelected: (_) => onSelected(null),
           ),
-          for (final status in RoomStatus.values) ...[
+          for (final status in HousekeepingStatus.values) ...[
             const SizedBox(width: 8),
             ChoiceChip(
               label: Text('${_label(status)}  ${counts[status] ?? 0}'),
@@ -180,10 +195,11 @@ class _StatusBar extends StatelessWidget {
     );
   }
 
-  static String _label(RoomStatus s) => switch (s) {
-        RoomStatus.available => 'Available',
-        RoomStatus.occupied => 'Occupied',
-        RoomStatus.maintenance => 'Maintenance',
+  static String _label(HousekeepingStatus s) => switch (s) {
+        HousekeepingStatus.ready => 'Ready',
+        HousekeepingStatus.dirty => 'Dirty',
+        HousekeepingStatus.cleaning => 'Cleaning',
+        HousekeepingStatus.inspected => 'Inspected',
       };
 }
 
@@ -203,12 +219,11 @@ class _RoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final accent = _accent(room.status);
+    final accent = _housekeepingAccent(room.housekeeping);
 
-    // An occupied room is not something housekeeping flips from the corridor —
-    // it clears when the guest checks out. Tapping it would either do nothing
-    // or do something surprising, so it is not offered.
-    final tappable = onTap != null && room.status != RoomStatus.occupied;
+    // Housekeeping can be advanced on any room, occupied included — a stayover
+    // clean happens while the guest is still in residence.
+    final tappable = onTap != null;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -250,7 +265,7 @@ class _RoomCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${room.typeLabel}  ·  Floor ${room.floor}',
+                    '${room.statusLabel}  ·  Floor ${room.floor}',
                     style: TextStyle(
                       fontSize: 12,
                       color: scheme.onSurfaceVariant,
@@ -266,7 +281,7 @@ class _RoomCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      room.statusLabel.toUpperCase(),
+                      room.housekeepingLabel.toUpperCase(),
                       style: TextStyle(
                         color: accent,
                         fontSize: 11,
@@ -277,11 +292,7 @@ class _RoomCard extends StatelessWidget {
                   ),
                   const Spacer(),
                   Text(
-                    tappable
-                        ? 'Tap to mark ${_nextLabel(room.status)}'
-                        : room.status == RoomStatus.occupied
-                            ? 'Clears at check-out'
-                            : '',
+                    tappable ? 'Tap to mark ${_nextLabel(room.housekeeping)}' : '',
                     style: TextStyle(
                       fontSize: 11.5,
                       color: scheme.onSurfaceVariant,
@@ -297,15 +308,17 @@ class _RoomCard extends StatelessWidget {
     );
   }
 
-  static String _nextLabel(RoomStatus s) => switch (s) {
-        RoomStatus.available => 'maintenance',
-        RoomStatus.maintenance => 'available',
-        RoomStatus.occupied => '',
+  static String _nextLabel(HousekeepingStatus s) => switch (s) {
+        HousekeepingStatus.dirty => 'cleaning',
+        HousekeepingStatus.cleaning => 'inspected',
+        HousekeepingStatus.inspected => 'ready',
+        HousekeepingStatus.ready => 'dirty',
       };
 
-  static Color _accent(RoomStatus s) => switch (s) {
-        RoomStatus.available => StaffTheme.tableReady,
-        RoomStatus.occupied => StaffTheme.tableSeated,
-        RoomStatus.maintenance => StaffTheme.tableBillRequested,
+  static Color _housekeepingAccent(HousekeepingStatus s) => switch (s) {
+        HousekeepingStatus.ready => StaffTheme.tableReady,
+        HousekeepingStatus.dirty => StaffTheme.tableInKitchen,
+        HousekeepingStatus.cleaning => StaffTheme.tableBillRequested,
+        HousekeepingStatus.inspected => StaffTheme.tableSeated,
       };
 }

@@ -7,6 +7,12 @@ class CheckIn {
   final bool idVerified;
   final bool keyIssued;
 
+  /// Object path in the private `guest-documents` bucket, or null when no
+  /// document was captured. Nullable because a desk must still be able to check
+  /// someone in when the camera is unavailable.
+  final String? idDocumentUrl;
+  final String? signatureUrl;
+
   CheckIn({
     required this.id,
     required this.bookingId,
@@ -15,6 +21,8 @@ class CheckIn {
     required this.checkInTime,
     required this.idVerified,
     required this.keyIssued,
+    this.idDocumentUrl,
+    this.signatureUrl,
   });
 
   Map<String, dynamic> toMap() {
@@ -26,6 +34,8 @@ class CheckIn {
       'checkInTime': checkInTime.toIso8601String(),
       'idVerified': idVerified ? 1 : 0,
       'keyIssued': keyIssued ? 1 : 0,
+      'idDocumentUrl': idDocumentUrl,
+      'signatureUrl': signatureUrl,
     };
   }
 
@@ -38,6 +48,8 @@ class CheckIn {
       checkInTime: DateTime.parse(map['checkInTime'] as String),
       idVerified: map['idVerified'] == 1 || map['idVerified'] == true,
       keyIssued: map['keyIssued'] == 1 || map['keyIssued'] == true,
+      idDocumentUrl: map['idDocumentUrl'] as String?,
+      signatureUrl: map['signatureUrl'] as String?,
     );
   }
 
@@ -49,6 +61,8 @@ class CheckIn {
     DateTime? checkInTime,
     bool? idVerified,
     bool? keyIssued,
+    String? idDocumentUrl,
+    String? signatureUrl,
   }) {
     return CheckIn(
       id: id ?? this.id,
@@ -58,6 +72,8 @@ class CheckIn {
       checkInTime: checkInTime ?? this.checkInTime,
       idVerified: idVerified ?? this.idVerified,
       keyIssued: keyIssued ?? this.keyIssued,
+      idDocumentUrl: idDocumentUrl ?? this.idDocumentUrl,
+      signatureUrl: signatureUrl ?? this.signatureUrl,
     );
   }
 }

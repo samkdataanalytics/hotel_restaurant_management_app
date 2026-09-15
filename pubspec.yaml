@@ -54,6 +54,8 @@ dependencies:
   wakelock_plus: ^1.5.2
   esc_pos_utils_plus: ^2.0.4
   print_bluetooth_thermal: ^1.2.4
+  image_picker: ^1.2.3
+  signature: ^6.4.0
 
 dev_dependencies:
   flutter_test:

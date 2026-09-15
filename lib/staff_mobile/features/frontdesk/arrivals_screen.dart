@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/front_desk_realtime.dart';
 import '../../data/front_desk_repository.dart';
 import '../../session/staff_session.dart';
 import '../../router/staff_router.dart';
@@ -13,6 +14,10 @@ final _arrivalsProvider =
     FutureProvider.autoDispose<List<ArrivalEntry>>((ref) async {
   ref.watch(
       staffSessionProvider.select((s) => s.valueOrNull?.activeProperty?.id));
+
+  // Live once migration 20260915000001 publishes these tables; a no-op and
+  // harmless before that.
+  ref.watch(frontDeskRealtimeProvider);
   return ref.watch(frontDeskRepositoryProvider).loadArrivals();
 });
 
@@ -58,11 +63,39 @@ class _ArrivalsScreenState extends ConsumerState<ArrivalsScreen> {
     if (changed == true && mounted) ref.invalidate(_arrivalsProvider);
   }
 
+  Future<void> _walkIn() async {
+    final created = await context.push<bool>(StaffRoutes.walkIn);
+    if (created == true && mounted) ref.invalidate(_arrivalsProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(_arrivalsProvider);
     final today = DateTime.now();
+    final canCreate = ref
+            .watch(staffSessionProvider)
+            .valueOrNull
+            ?.canEdit('hotel_reservations') ??
+        false;
 
+    return Stack(
+      children: [
+        _body(async, today),
+        if (canCreate)
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton.extended(
+              onPressed: _walkIn,
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+              label: const Text('Walk-in'),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _body(AsyncValue<List<ArrivalEntry>> async, DateTime today) {
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => FrontDeskMessage(

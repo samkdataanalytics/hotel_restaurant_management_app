@@ -2,10 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:flutter/foundation.dart';
+
+import '../../../domain/entities/check_in.dart';
 import '../../../domain/entities/guest.dart';
 import '../../../providers/service_providers.dart';
 import '../../data/connectivity.dart';
 import '../../data/front_desk_repository.dart';
+import '../../data/guest_documents.dart';
+import 'document_capture.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
 
@@ -49,6 +54,8 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
   String _idType = 'Passport';
 
   ArrivalEntry? _stay;
+  Uint8List? _idPhoto;
+  Uint8List? _signature;
   bool _looking = false;
   bool _checkingIn = false;
   String? _lookupError;
@@ -338,33 +345,31 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
             ),
           ),
 
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.photo_camera_outlined,
-                    size: 19, color: scheme.onSurfaceVariant),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Photographing the ID and taking a signature are not '
-                    'available yet — they need somewhere private to store the '
-                    'files. Record the ID number above in the meantime.',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      color: scheme.onSurfaceVariant,
-                      height: 1.45,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          const SizedBox(height: 20),
+          Text('Registration', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Both are optional — check-in is not blocked when the camera is '
+            'unavailable or a guest declines.',
+            style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 12),
+          _CaptureTile(
+            icon: Icons.badge_outlined,
+            label: 'Photo of ID',
+            captured: _idPhoto != null,
+            preview: _idPhoto,
+            onCapture: _captureId,
+            onClear: () => setState(() => _idPhoto = null),
+          ),
+          const SizedBox(height: 10),
+          _CaptureTile(
+            icon: Icons.draw_outlined,
+            label: 'Guest signature',
+            captured: _signature != null,
+            preview: _signature,
+            onCapture: _captureSignature,
+            onClear: () => setState(() => _signature = null),
           ),
 
           const SizedBox(height: 24),
@@ -391,6 +396,28 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _captureId() async {
+    try {
+      final bytes = await captureIdPhoto(context);
+      if (bytes != null && mounted) setState(() => _idPhoto = bytes);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(
+            'Could not use the camera. Check the permission in device '
+            'settings. ($e)',
+          ),
+        ));
+    }
+  }
+
+  Future<void> _captureSignature() async {
+    final bytes = await captureSignature(context);
+    if (bytes != null && mounted) setState(() => _signature = bytes);
   }
 
   Future<void> _lookup() async {
@@ -449,6 +476,61 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     }
   }
 
+  /// Stores the captured ID photo and signature against the new check-in.
+  ///
+  /// Best effort by design — see the call site.
+  Future<void> _uploadDocuments(Map<String, dynamic> checkInResult) async {
+    if (_idPhoto == null && _signature == null) return;
+
+    final checkIn = checkInResult['checkIn'];
+    final hotelId =
+        ref.read(staffSessionProvider).valueOrNull?.activeProperty?.id;
+    if (checkIn is! CheckIn || hotelId == null) return;
+
+    final documents = ref.read(guestDocumentsProvider);
+    final failures = <String>[];
+
+    if (_idPhoto != null) {
+      try {
+        await documents.upload(
+          hotelId: hotelId,
+          checkInId: checkIn.id,
+          kind: GuestDocuments.kindId,
+          bytes: _idPhoto!,
+        );
+      } catch (e) {
+        failures.add('ID photo');
+      }
+    }
+
+    if (_signature != null) {
+      try {
+        await documents.upload(
+          hotelId: hotelId,
+          checkInId: checkIn.id,
+          kind: GuestDocuments.kindSignature,
+          bytes: _signature!,
+          extension: 'png',
+        );
+      } catch (e) {
+        failures.add('signature');
+      }
+    }
+
+    if (failures.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(
+            'Checked in, but the ${failures.join(' and ')} did not upload. '
+            'Capture it again from the web panel.',
+          ),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          duration: const Duration(seconds: 6),
+        ));
+    }
+  }
+
   Future<void> _checkIn() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final stay = _stay!;
@@ -472,10 +554,17 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
     );
 
     try {
-      await ref.read(bookingServiceProvider).performCheckIn(
+      final result = await ref.read(bookingServiceProvider).performCheckIn(
             booking: stay.booking,
             guest: guest,
           );
+
+      // Documents are uploaded after the check-in succeeds, and a failure here
+      // does not undo it. A guest standing at the desk with a room assigned
+      // must not be un-checked-in because venue wifi dropped mid-upload — the
+      // desk is told instead, and can retake later.
+      await _uploadDocuments(result);
+
       if (!mounted) return;
       setState(() => _checkingIn = false);
       ScaffoldMessenger.of(context)
@@ -498,5 +587,85 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
         action: 'Checking ${guest.fullName} in',
       );
     }
+  }
+}
+
+
+/// One capture slot — empty, or showing what was captured.
+class _CaptureTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool captured;
+  final Uint8List? preview;
+  final VoidCallback onCapture;
+  final VoidCallback onClear;
+
+  const _CaptureTile({
+    required this.icon,
+    required this.label,
+    required this.captured,
+    required this.preview,
+    required this.onCapture,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onCapture,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // A thumbnail, not just a tick: the desk needs to see that the
+              // photo is actually legible before the guest walks away.
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: preview != null
+                    ? Image.memory(preview!, fit: BoxFit.cover)
+                    : Icon(icon, color: scheme.onSurfaceVariant),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 15)),
+                    const SizedBox(height: 2),
+                    Text(
+                      captured ? 'Captured — tap to retake' : 'Not captured',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: captured ? scheme.primary : scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (captured)
+                IconButton(
+                  tooltip: 'Remove',
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: onClear,
+                )
+              else
+                Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

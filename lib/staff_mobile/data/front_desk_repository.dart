@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../domain/entities/booking.dart';
 import '../../domain/entities/guest.dart';
@@ -165,6 +166,18 @@ class FrontDeskRepository {
     final rooms = await _ref.read(bookingServiceProvider).getAllRooms();
     rooms.sort(_byRoomNumber);
     return rooms;
+  }
+
+  /// Moves a room through the cleaning cycle.
+  ///
+  /// Writes only the housekeeping column, deliberately leaving rooms.status
+  /// alone: occupancy is driven by check-in and check-out, and a housekeeper
+  /// marking a room clean must not accidentally free an occupied one.
+  Future<void> setHousekeeping(Room room, HousekeepingStatus next) async {
+    await Supabase.instance.client
+        .from('rooms')
+        .update({'housekeeping_status': next.name})
+        .eq('id', room.id);
   }
 
   /// Numeric where room numbers are numeric ("2" before "10"), otherwise

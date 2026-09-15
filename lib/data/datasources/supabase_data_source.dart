@@ -55,6 +55,7 @@ class SupabaseDataSource {
         'pricePerNight': r['price_per_night'],
         'maintenanceStart': r['maintenance_start'],
         'maintenanceEnd': r['maintenance_end'],
+        'housekeeping': r['housekeeping_status'],
       });
 
   Map<String, dynamic> _roomToRow(Room r) => {
@@ -66,6 +67,7 @@ class SupabaseDataSource {
         'price_per_night': r.pricePerNight,
         'maintenance_start': r.maintenanceStart?.toIso8601String(),
         'maintenance_end': r.maintenanceEnd?.toIso8601String(),
+        'housekeeping_status': r.housekeeping.name,
         if (hotelId != null) 'hotel_id': hotelId,
       };
 
@@ -116,6 +118,8 @@ class SupabaseDataSource {
         'checkInTime': r['check_in_time'],
         'idVerified': r['id_verified'],
         'keyIssued': r['key_issued'],
+        'idDocumentUrl': r['id_document_url'],
+        'signatureUrl': r['signature_url'],
       });
 
   Map<String, dynamic> _checkInToRow(CheckIn c) => {
@@ -126,6 +130,8 @@ class SupabaseDataSource {
         'check_in_time': c.checkInTime.toIso8601String(),
         'id_verified': c.idVerified,
         'key_issued': c.keyIssued,
+        if (c.idDocumentUrl != null) 'id_document_url': c.idDocumentUrl,
+        if (c.signatureUrl != null) 'signature_url': c.signatureUrl,
         if (hotelId != null) 'hotel_id': hotelId,
       };
 

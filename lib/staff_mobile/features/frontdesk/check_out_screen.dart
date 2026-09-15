@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../providers/hotel_session.dart';
+import '../../../providers/invoice_provider.dart';
 import '../../../providers/service_providers.dart';
 import '../../data/connectivity.dart';
 import '../../data/front_desk_repository.dart';
@@ -18,11 +20,10 @@ final _folioProvider = FutureProvider.autoDispose
 /// Shows everything the guest owes in one place — the room, anything billed
 /// from the restaurant, and room-linked expenses — before releasing the room.
 ///
-/// The invoice PDF is not generated here. `invoice_service.dart` imports
-/// `dart:js_interop` and `package:web`, so it cannot compile for native at all;
-/// producing a PDF on mobile needs that service split along a platform seam
-/// first. Until then the folio is shown on screen and the invoice is issued
-/// from the web panel.
+/// The invoice PDF uses the same `invoice_service.dart` the web panel does,
+/// reachable on native now that its browser-canvas logo resize sits behind a
+/// conditional import. Printing.layoutPdf hands it to the OS share/print sheet,
+/// so the desk can AirDrop, email or print it without a thermal printer.
 class CheckOutScreen extends ConsumerStatefulWidget {
   final ArrivalEntry stay;
   const CheckOutScreen({super.key, required this.stay});
@@ -33,6 +34,7 @@ class CheckOutScreen extends ConsumerStatefulWidget {
 
 class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
   bool _checkingOut = false;
+  bool _buildingInvoice = false;
 
   static final _dayFormat = DateFormat('EEE d MMM');
 
@@ -44,6 +46,21 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        actions: [
+          if (async.hasValue)
+            IconButton(
+              tooltip: 'Invoice',
+              icon: _buildingInvoice
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2.2))
+                  : const Icon(Icons.picture_as_pdf_outlined),
+              onPressed: _buildingInvoice
+                  ? null
+                  : () => _showInvoice(async.requireValue),
+            ),
+        ],
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -210,8 +227,8 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'The invoice PDF is issued from the web panel. Checking out '
-                'here releases the room and closes the booking.',
+                'Tap the PDF icon for the invoice. Checking out releases the '
+                'room and closes the booking.',
                 style: TextStyle(
                   fontSize: 12.5,
                   color: scheme.onSurfaceVariant,
@@ -223,6 +240,70 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
         ),
       ],
     );
+  }
+
+  /// Builds and shows the invoice PDF.
+  ///
+  /// Available before check-out as well as after — a guest often wants the
+  /// bill to look over while they finish packing.
+  Future<void> _showInvoice(GuestFolio folio) async {
+    if (_buildingInvoice) return;
+    final room = folio.stay.room;
+    final guest = folio.stay.guest;
+
+    if (room == null || guest == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+          content: Text(
+            'This booking is missing its room or guest record, so an invoice '
+            'cannot be built. Use the web panel.',
+          ),
+        ));
+      return;
+    }
+
+    setState(() => _buildingInvoice = true);
+    final property = ref.read(staffSessionProvider).valueOrNull?.activeProperty;
+
+    try {
+      // Tax and service rates come from the property's own settings rather
+      // than being assumed, so the invoice matches what the web would issue.
+      final charges =
+          await ref.read(restaurantServiceProvider).getChargeSettings();
+
+      await ref.read(invoiceServiceProvider).displayInvoicePdf(
+            booking: folio.stay.booking,
+            room: room,
+            guest: guest,
+            expenses: folio.expenses,
+            restaurantOrders: folio.restaurantOrders,
+            currencySymbol: property?.currency ?? '',
+            settings: HotelSettings(
+              hotelId: property?.id ?? '',
+              displayName: property?.name ?? 'HotRest',
+              address: property?.address ?? '',
+              phone: property?.phone ?? '',
+              email: property?.email ?? '',
+              currencySymbol: property?.currency ?? '',
+              taxRate: charges.taxRate,
+              serviceChargeRate: charges.serviceChargeRate,
+              logoUrl: property?.logoUrl ?? '',
+              primaryColorHex: property?.primaryColor ?? '#D4A853',
+            ),
+          );
+      if (mounted) setState(() => _buildingInvoice = false);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _buildingInvoice = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text('Could not build the invoice: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          duration: const Duration(seconds: 6),
+        ));
+    }
   }
 
   Future<void> _checkOut(GuestFolio folio) async {
