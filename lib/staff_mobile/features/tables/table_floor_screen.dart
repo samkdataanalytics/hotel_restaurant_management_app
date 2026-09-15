@@ -5,7 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/orders_realtime.dart';
-import '../../data/table_floor_repository.dart';
+import '../../data/outbox.dart';
+import '../../data/restaurant_repository.dart';
 import '../../router/staff_router.dart';
 import '../../session/staff_session.dart';
 import '../../theme/staff_theme.dart';
@@ -17,7 +18,7 @@ import '../shell/staff_tabs.dart';
 /// so firing an order from the web POS updates the phone within a second and an
 /// idle board costs nothing.
 final _floorProvider =
-    FutureProvider.autoDispose<List<TableFloorEntry>>((ref) async {
+    FutureProvider.autoDispose<Cached<List<TableFloorEntry>>>((ref) async {
   // Re-read whenever an order changes for this property. Watching the stream's
   // tick rather than patching rows keeps one source of truth.
   ref.watch(ordersRealtimeProvider);
@@ -25,7 +26,10 @@ final _floorProvider =
   // Also rebuild on property switch.
   ref.watch(staffSessionProvider.select((s) => s.valueOrNull?.activeProperty?.id));
 
-  return ref.watch(tableFloorRepositoryProvider).loadFloor();
+  // A queued order should occupy its table immediately, before it syncs.
+  ref.watch(outboxProvider);
+
+  return ref.watch(restaurantRepositoryProvider).loadFloor();
 });
 
 class TableFloorScreen extends ConsumerStatefulWidget {
@@ -69,10 +73,23 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
           error: e,
           onRetry: () => ref.invalidate(_floorProvider),
         ),
-        data: (entries) {
+        data: (cached) {
+          final entries = cached.value;
           if (entries.isEmpty) return const _NoTables();
 
-          return GridView.builder(
+          return Column(
+            children: [
+              if (cached.isStale) _StaleNotice(age: cached.age),
+              Expanded(child: _grid(entries, mayOrder)),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _grid(List<TableFloorEntry> entries, bool mayOrder) {
+    return GridView.builder(
             padding: const EdgeInsets.all(16),
             physics: const AlwaysScrollableScrollPhysics(),
             gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -89,9 +106,6 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
               enabled: mayOrder,
               onTap: () => _openTable(entries[i], mayOrder),
             ),
-          );
-        },
-      ),
     );
   }
 
@@ -324,5 +338,49 @@ class _FloorError extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Shown when the board is rendered from cache because the network read failed.
+///
+/// Stated explicitly rather than shown as an error: stale table state is still
+/// useful to a waiter, but presenting it as live would be a lie.
+class _StaleNotice extends StatelessWidget {
+  final Duration? age;
+  const _StaleNotice({required this.age});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      color: scheme.tertiaryContainer,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      child: Row(
+        children: [
+          Icon(Icons.history_rounded,
+              size: 17, color: scheme.onTertiaryContainer),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              'Showing saved data${age == null ? '' : ' from ${_ago(age!)}'} — '
+              'pull to refresh',
+              style: TextStyle(
+                color: scheme.onTertiaryContainer,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _ago(Duration d) {
+    if (d.inMinutes < 1) return 'a moment ago';
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    return '${d.inDays}d ago';
   }
 }

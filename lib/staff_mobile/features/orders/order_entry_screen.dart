@@ -5,7 +5,8 @@ import '../../../domain/entities/menu_item.dart';
 import '../../../domain/entities/restaurant_order.dart';
 import '../../../providers/service_providers.dart';
 import '../../data/connectivity.dart';
-import '../../data/table_floor_repository.dart';
+import '../../data/outbox.dart';
+import '../../data/restaurant_repository.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
 import '../shell/staff_tabs.dart';
@@ -17,15 +18,16 @@ import 'order_cart.dart';
 typedef _OrderContext = ({
   TableFloorEntry entry,
   Map<String, List<MenuItem>> menu,
+  bool menuIsStale,
 });
 
 final _orderContextProvider = FutureProvider.autoDispose
     .family<_OrderContext, String>((ref, tableId) async {
-  final repo = ref.watch(tableFloorRepositoryProvider);
+  final repo = ref.watch(restaurantRepositoryProvider);
   // The menu and the table's open orders are independent reads — serialising
   // them would double the wait before a waiter can start tapping.
   final results = await (repo.loadTable(tableId), repo.loadMenuByCategory()).wait;
-  return (entry: results.$1, menu: results.$2);
+  return (entry: results.$1, menu: results.$2.value, menuIsStale: results.$2.isStale);
 });
 
 /// Order entry: browse the menu, build a round, fire it to the kitchen.
@@ -238,7 +240,12 @@ class _OrderEntryScreenState extends ConsumerState<OrderEntryScreen> {
     setState(() => _sending = true);
     final service = ref.read(restaurantServiceProvider);
     final isOnline = ref.read(isOnlineProvider);
+    final propertyId =
+        ref.read(staffSessionProvider).valueOrNull?.activeProperty?.id;
     final items = _cart.items;
+    final tableLabel = entry.table.tableNumber;
+
+    var queued = false;
 
     try {
       if (entry.activeOrder != null) {
@@ -252,35 +259,73 @@ class _OrderEntryScreenState extends ConsumerState<OrderEntryScreen> {
           type: OrderType.dineIn,
         );
       }
-
-      if (!mounted) return;
-      setState(() {
-        _cart = _cart.clear();
-        _sending = false;
-      });
-
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              'Sent to the kitchen — table ${entry.table.tableNumber}',
-            ),
-          ),
-        );
-      Navigator.of(context).pop();
     } catch (e) {
-      if (!mounted) return;
-      // Keep the cart intact. Losing a built round because the wifi dropped in
-      // a basement is the single worst thing this screen could do.
-      setState(() => _sending = false);
-      showWriteFailure(
-        context,
-        error: e,
-        isOnline: isOnline,
-        action: 'Sending the order',
-      );
+      // The write failed. If the device is offline this is expected, and the
+      // round is queued rather than lost — a waiter who has already told the
+      // kitchen "it's in" must not discover later that it was not.
+      if (!isOnline && propertyId != null) {
+        try {
+          if (entry.activeOrder != null) {
+            await ref.read(outboxProvider.notifier).queueAddItems(
+                  propertyId: propertyId,
+                  orderId: entry.activeOrder!.id,
+                  items: items,
+                );
+          } else {
+            await ref.read(outboxProvider.notifier).queueCreateOrder(
+                  propertyId: propertyId,
+                  tableId: entry.table.id,
+                  items: items,
+                );
+          }
+          queued = true;
+        } catch (queueError) {
+          // Queueing itself failed — the storage is unavailable. Say so
+          // plainly rather than implying the order is safe.
+          if (!mounted) return;
+          setState(() => _sending = false);
+          showWriteFailure(
+            context,
+            error: queueError,
+            isOnline: isOnline,
+            action: 'Saving the order for later',
+          );
+          return;
+        }
+      } else {
+        // Online, so this is a real server error. Keep the cart intact.
+        if (!mounted) return;
+        setState(() => _sending = false);
+        showWriteFailure(
+          context,
+          error: e,
+          isOnline: isOnline,
+          action: 'Sending the order',
+        );
+        return;
+      }
     }
+
+    if (!mounted) return;
+    setState(() {
+      _cart = _cart.clear();
+      _sending = false;
+    });
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            queued
+                ? 'Saved for table $tableLabel — it will send when you are '
+                    'back online'
+                : 'Sent to the kitchen — table $tableLabel',
+          ),
+          duration: Duration(seconds: queued ? 5 : 3),
+        ),
+      );
+    Navigator.of(context).pop();
   }
 }
 

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/order_alerts.dart';
 import '../../session/app_lock.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
+import '../../widgets/outbox_banner.dart';
 import '../property/property_switcher_sheet.dart';
 import 'staff_tabs.dart';
 
@@ -26,6 +28,10 @@ class _StaffShellState extends ConsumerState<StaffShell> {
   @override
   Widget build(BuildContext context) {
     final sessionAsync = ref.watch(staffSessionProvider);
+
+    // Bound to the shell, not to a tab: a kitchen tablet sitting on the
+    // Orders tab and one sitting on the Floor should both alert.
+    ref.watch(orderAlertListenerProvider);
 
     return sessionAsync.when(
       loading: () => const _ShellScaffold(
@@ -118,6 +124,7 @@ class _ShellScaffold extends StatelessWidget {
       body: Column(
         children: [
           const OfflineBanner(),
+          const OutboxBanner(),
           Expanded(child: body),
         ],
       ),
@@ -137,6 +144,7 @@ class _PropertyButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final lock = ref.watch(appLockProvider);
+    final alertsOn = ref.watch(orderAlertsProvider);
 
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert),
@@ -160,6 +168,23 @@ class _PropertyButton extends ConsumerWidget {
                   ),
                 );
             }
+          case 'alerts':
+            final wanted = !alertsOn;
+            final ok = await ref
+                .read(orderAlertsProvider.notifier)
+                .setEnabled(wanted);
+            if (wanted && !ok && context.mounted) {
+              ScaffoldMessenger.of(context)
+                ..hideCurrentSnackBar()
+                ..showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Notifications are blocked for this app. Turn them on '
+                      'in your device settings first.',
+                    ),
+                  ),
+                );
+            }
           case 'signout':
             ref.read(appLockProvider.notifier).reset();
             if (context.mounted) await confirmSignOut(context);
@@ -175,6 +200,19 @@ class _PropertyButton extends ConsumerWidget {
               title: Text('Switch property'),
             ),
           ),
+        PopupMenuItem(
+          value: 'alerts',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(alertsOn
+                ? Icons.notifications_active_rounded
+                : Icons.notifications_off_outlined),
+            title: Text(alertsOn
+                ? 'New order alerts: on'
+                : 'New order alerts: off'),
+            subtitle: const Text('Sound while the app is open'),
+          ),
+        ),
         if (lock.available)
           PopupMenuItem(
             value: 'lock',

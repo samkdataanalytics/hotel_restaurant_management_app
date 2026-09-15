@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'di/injection_container.dart';
 import 'staff_mobile/app.dart';
+import 'staff_mobile/data/local_store.dart';
 import 'staff_mobile/session/secure_session_storage.dart';
 
 /// Entry point for the HotRest **staff mobile app**.
@@ -66,5 +67,20 @@ void main() async {
   // platform-agnostic and are reused unchanged.
   await initDependencies();
 
-  runApp(const ProviderScope(child: StaffMobileApp()));
+  // Offline layer. Opened before runApp so nothing downstream has to cope with
+  // a half-initialised store; a failure here is survivable, and the app falls
+  // back to online-only rather than refusing to start.
+  final localStore = LocalStore();
+  try {
+    await localStore.init();
+  } catch (e) {
+    debugPrint('Offline storage unavailable, continuing online-only: $e');
+  }
+
+  runApp(
+    ProviderScope(
+      overrides: [localStoreProvider.overrideWithValue(localStore)],
+      child: const StaffMobileApp(),
+    ),
+  );
 }

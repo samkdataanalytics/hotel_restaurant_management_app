@@ -4,6 +4,8 @@ import '../../domain/entities/menu_item.dart';
 import '../../domain/entities/restaurant_order.dart';
 import '../../domain/entities/restaurant_table.dart';
 import '../../providers/service_providers.dart';
+import '../session/staff_session.dart';
+import 'local_store.dart';
 
 /// How a table reads on the floor board.
 ///
@@ -55,6 +57,24 @@ class TableFloorEntry {
     return DateTime.now().difference(oldest);
   }
 
+  /// Cache representation. Reuses the entities' own toMap so the stored shape
+  /// tracks the domain model rather than drifting from it.
+  Map<String, dynamic> toCache() => {
+        'table': table.toMap(),
+        'openOrders': openOrders.map((o) => o.toMap()).toList(),
+      };
+
+  factory TableFloorEntry.fromCache(Map<String, dynamic> m) {
+    final orders = (m['openOrders'] as List? ?? [])
+        .map((o) => RestaurantOrder.fromMap(Map<String, dynamic>.from(o as Map)))
+        .toList();
+    return TableFloorEntry(
+      table: RestaurantTable.fromMap(Map<String, dynamic>.from(m['table'] as Map)),
+      activeOrder: orders.isEmpty ? null : orders.last,
+      openOrders: orders,
+    );
+  }
+
   FloorState get state {
     if (openOrders.isEmpty) return FloorState.free;
 
@@ -77,16 +97,81 @@ class TableFloorEntry {
 /// a read-through cache and a write outbox can be added later by changing this
 /// one class — no screen has to know. Keep it that way: if a screen starts
 /// calling `restaurantServiceProvider` directly, that property is lost.
-class TableFloorRepository {
+/// A value plus where it came from, so a screen can say "showing data from
+/// 12 minutes ago" instead of silently presenting stale numbers as live.
+class Cached<T> {
+  final T value;
+
+  /// True when the network read failed and this came from the cache.
+  final bool isStale;
+
+  /// When the cached copy was stored. Null when [value] is fresh.
+  final DateTime? cachedAt;
+
+  const Cached(this.value, {this.isStale = false, this.cachedAt});
+
+  Duration? get age => cachedAt == null ? null : DateTime.now().difference(cachedAt!);
+}
+
+class RestaurantRepository {
   final Ref _ref;
-  TableFloorRepository(this._ref);
+  RestaurantRepository(this._ref);
+
+  String? get _propertyId =>
+      _ref.read(staffSessionProvider).valueOrNull?.activeProperty?.id;
+
+  /// Read-through cache.
+  ///
+  /// Tries the network first and refreshes the cache on success. On failure
+  /// falls back to the last good copy rather than showing an error — a waiter
+  /// on a dead spot needs yesterday's menu far more than a red screen. Throws
+  /// only when there is no cached copy either, because then there is genuinely
+  /// nothing to show.
+  Future<Cached<T>> _readThrough<T>({
+    required String key,
+    required Future<T> Function() fetch,
+    required Object Function(T) encode,
+    required T Function(dynamic) decode,
+  }) async {
+    final store = _ref.read(localStoreProvider);
+    final propertyId = _propertyId;
+
+    try {
+      final fresh = await fetch();
+      if (propertyId != null) {
+        await store.writeCache(propertyId, key, encode(fresh));
+      }
+      return Cached(fresh);
+    } catch (e) {
+      if (propertyId == null) rethrow;
+      final cached = store.readCache(propertyId, key);
+      if (cached == null) rethrow;
+      return Cached(
+        decode(cached.value),
+        isStale: true,
+        cachedAt: cached.savedAt,
+      );
+    }
+  }
 
   /// The floor board in one call.
   ///
   /// Tables are fetched once, then each table's open orders are fetched
   /// concurrently. A sequential loop here is the difference between a snappy
   /// board and a visible stall on a 30-table floor.
-  Future<List<TableFloorEntry>> loadFloor() async {
+  Future<Cached<List<TableFloorEntry>>> loadFloor() => _readThrough(
+        key: 'floor',
+        fetch: _fetchFloor,
+        // Tables and their open orders are cached separately from each other's
+        // shape so a decode failure degrades to a cold read, not a crash.
+        encode: (entries) => entries.map((e) => e.toCache()).toList(),
+        decode: (raw) => (raw as List)
+            .map((m) => TableFloorEntry.fromCache(
+                Map<String, dynamic>.from(m as Map)))
+            .toList(),
+      );
+
+  Future<List<TableFloorEntry>> _fetchFloor() async {
     final service = _ref.read(restaurantServiceProvider);
     final tables = await service.getTables();
 
@@ -138,8 +223,29 @@ class TableFloorRepository {
   ///
   /// An 86'd item is filtered out here rather than in the UI so it cannot be
   /// added to a cart from any screen.
-  Future<Map<String, List<MenuItem>>> loadMenuByCategory() async {
+  Future<Cached<Map<String, List<MenuItem>>>> loadMenuByCategory() =>
+      _readThrough(
+        key: 'menu',
+        fetch: _fetchMenu,
+        // Stored flat and regrouped on read, so the cached shape does not
+        // depend on how the UI happens to group it today.
+        encode: (grouped) => [
+          for (final items in grouped.values)
+            for (final item in items) item.toMap(),
+        ],
+        decode: (raw) => _group(
+          (raw as List).map(
+            (m) => MenuItem.fromMap(Map<String, dynamic>.from(m as Map)),
+          ),
+        ),
+      );
+
+  Future<Map<String, List<MenuItem>>> _fetchMenu() async {
     final items = await _ref.read(restaurantServiceProvider).getMenuItems();
+    return _group(items.where((i) => i.isAvailable));
+  }
+
+  static Map<String, List<MenuItem>> _group(Iterable<MenuItem> items) {
     final grouped = <String, List<MenuItem>>{};
     for (final item in items.where((i) => i.isAvailable)) {
       grouped.putIfAbsent(item.category, () => []).add(item);
@@ -147,10 +253,17 @@ class TableFloorRepository {
     return grouped;
   }
 
+  /// Every order for the active property, newest first.
+  ///
+  /// `getOrders()` is already scoped to the active property's hotel_id by the
+  /// repository layer, so this inherits tenancy without a filter here.
+  Future<List<RestaurantOrder>> loadOrders() =>
+      _ref.read(restaurantServiceProvider).getOrders();
+
   Future<({double taxRate, double serviceChargeRate})> loadChargeSettings() =>
       _ref.read(restaurantServiceProvider).getChargeSettings();
 }
 
-final tableFloorRepositoryProvider = Provider<TableFloorRepository>(
-  TableFloorRepository.new,
+final restaurantRepositoryProvider = Provider<RestaurantRepository>(
+  RestaurantRepository.new,
 );

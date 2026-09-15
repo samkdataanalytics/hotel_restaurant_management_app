@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../session/staff_session.dart';
+import '../frontdesk/arrivals_screen.dart';
+import '../frontdesk/rooms_screen.dart';
+import '../orders/orders_screen.dart';
 import '../tables/table_floor_screen.dart';
-import 'placeholder_screen.dart';
 
 /// One bottom-nav destination.
 class StaffTab {
@@ -42,44 +44,23 @@ const _allTabs = <StaffTab>[
     label: 'Orders',
     icon: Icons.receipt_long_outlined,
     selectedIcon: Icons.receipt_long,
-    build: _ordersPlaceholder,
+    build: OrdersScreen.new,
   ),
   StaffTab(
     sectionKey: 'hotel_checkins',
     label: 'Arrivals',
     icon: Icons.how_to_reg_outlined,
     selectedIcon: Icons.how_to_reg,
-    build: _arrivalsPlaceholder,
+    build: ArrivalsScreen.new,
   ),
   StaffTab(
     sectionKey: 'hotel_rooms',
     label: 'Rooms',
     icon: Icons.meeting_room_outlined,
     selectedIcon: Icons.meeting_room,
-    build: _roomsPlaceholder,
+    build: RoomsScreen.new,
   ),
 ];
-
-Widget _ordersPlaceholder() => const PlaceholderScreen(
-      title: 'Orders',
-      icon: Icons.receipt_long_outlined,
-      message: 'The full order history is on the web panel for now.\n\n'
-          'Live orders for each table are on the Floor tab.',
-    );
-
-Widget _arrivalsPlaceholder() => const PlaceholderScreen(
-      title: 'Arrivals',
-      icon: Icons.how_to_reg_outlined,
-      message: 'Arrivals, check-in and check-out are coming to mobile next.\n\n'
-          'Use the web panel in the meantime.',
-    );
-
-Widget _roomsPlaceholder() => const PlaceholderScreen(
-      title: 'Rooms',
-      icon: Icons.meeting_room_outlined,
-      message: 'Room and housekeeping status are coming to mobile next.\n\n'
-          'Use the web panel in the meantime.',
-    );
 
 /// The tabs this user can actually see, built from their privilege map.
 ///

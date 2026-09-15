@@ -9,6 +9,11 @@
     <!-- Biometric re-unlock on shared devices (local_auth). Optional at
          runtime: the toggle is hidden when no biometric is enrolled. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <!-- New-order alerts. Android 13+ also requires a runtime grant, which is
+         requested only when someone turns alerts on. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Lets an alert sound while the device is idle. -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
 
     <application
         android:label="HotRest Staff"
