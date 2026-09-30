@@ -13,6 +13,8 @@ import '../features/manager/cancellations_screen.dart';
 import '../features/manager/expense_screen.dart';
 import '../features/manager/notifications_screen.dart';
 import '../features/orders/availability_screen.dart';
+import '../features/scan/scan_screen.dart';
+import '../../domain/entities/restaurant_order.dart';
 import '../features/orders/order_entry_screen.dart';
 import '../features/orders/payment_screen.dart';
 import '../features/orders/printer_settings_screen.dart';
@@ -34,6 +36,8 @@ abstract final class StaffRoutes {
   static const cancellations = '/cancellations';
   static const expense = '/expense';
   static const analytics = '/analytics';
+  static const scan = '/scan';
+  static const deliveryOrder = '/delivery-order';
 
   static String orderEntry(String tableId) => '/tables/$tableId/order';
   static String payment(String tableId) => '/tables/$tableId/pay';
@@ -139,6 +143,15 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
           }
           return CheckOutScreen(stay: stay);
         },
+      ),
+      GoRoute(
+        path: StaffRoutes.deliveryOrder,
+        builder: (_, __) =>
+            const OrderEntryScreen(type: OrderType.delivery),
+      ),
+      GoRoute(
+        path: StaffRoutes.scan,
+        builder: (_, __) => const ScanScreen(),
       ),
       GoRoute(
         path: StaffRoutes.notifications,

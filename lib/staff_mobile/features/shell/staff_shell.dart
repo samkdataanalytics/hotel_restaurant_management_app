@@ -59,7 +59,14 @@ class _StaffShellState extends ConsumerState<StaffShell> {
         return _ShellScaffold(
           title: tabs[index].label,
           subtitle: session.activeProperty?.name,
-          actions: [_PropertyButton(session: session)],
+          actions: [
+            IconButton(
+              tooltip: 'Scan a code',
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              onPressed: () => context.push(StaffRoutes.scan),
+            ),
+            _PropertyButton(session: session),
+          ],
           body: IndexedStack(
             index: index,
             children: [for (final tab in tabs) tab.build()],
@@ -173,6 +180,8 @@ class _PropertyButton extends ConsumerWidget {
             }
           case 'printer':
             context.push(StaffRoutes.printer);
+          case 'delivery':
+            context.push(StaffRoutes.deliveryOrder);
           case 'myshift':
             await showModalBottomSheet<void>(
               context: context,
@@ -236,6 +245,16 @@ class _PropertyButton extends ConsumerWidget {
             subtitle: Text('Bluetooth, per device'),
           ),
         ),
+        if (session.canEdit('restaurant_pos'))
+          const PopupMenuItem(
+            value: 'delivery',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.delivery_dining_outlined),
+              title: Text('Delivery order'),
+              subtitle: Text('UberEats, PickMe and others'),
+            ),
+          ),
         const PopupMenuItem(
           value: 'myshift',
           child: ListTile(

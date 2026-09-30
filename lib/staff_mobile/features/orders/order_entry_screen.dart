@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../domain/entities/menu_item.dart';
 import '../../../domain/entities/restaurant_order.dart';
@@ -14,11 +15,21 @@ import 'cart_sheet.dart';
 import 'modifier_sheet.dart';
 import 'order_cart.dart';
 
+const _uuid = Uuid();
+
 /// Everything order entry needs for one table, loaded in parallel.
 typedef _OrderContext = ({
   TableFloorEntry entry,
   Map<String, List<MenuItem>> menu,
   bool menuIsStale,
+});
+
+/// Menu only, for an order with no table behind it.
+final _menuOnlyProvider =
+    FutureProvider.autoDispose<Map<String, List<MenuItem>>>((ref) async {
+  final cached =
+      await ref.watch(restaurantRepositoryProvider).loadMenuByCategory();
+  return cached.value;
 });
 
 final _orderContextProvider = FutureProvider.autoDispose
@@ -37,8 +48,20 @@ final _orderContextProvider = FutureProvider.autoDispose
 /// category rail, a large-target menu list, and a cart that stays one tap away
 /// at the bottom of the screen.
 class OrderEntryScreen extends ConsumerStatefulWidget {
-  final String tableId;
-  const OrderEntryScreen({super.key, required this.tableId});
+  /// Null for an order with no table — a delivery taken over the phone.
+  final String? tableId;
+
+  /// Dine-in for a table, delivery for a platform order.
+  final OrderType type;
+
+  const OrderEntryScreen({
+    super.key,
+    this.tableId,
+    this.type = OrderType.dineIn,
+  }) : assert(tableId != null || type == OrderType.delivery,
+            'Only a delivery order may have no table.');
+
+  bool get isDelivery => type == OrderType.delivery;
 
   @override
   ConsumerState<OrderEntryScreen> createState() => _OrderEntryScreenState();
@@ -47,6 +70,15 @@ class OrderEntryScreen extends ConsumerStatefulWidget {
 class _OrderEntryScreenState extends ConsumerState<OrderEntryScreen> {
   OrderCart _cart = const OrderCart();
   String _search = '';
+
+  /// Delivery only. Defaults to the first platform rather than empty, because
+  /// every delivery order has one and an unset dropdown is just a step.
+  String _platform = _deliveryPlatforms.first;
+  final _deliveryRef = TextEditingController();
+
+  /// The same three the web POS offers, so reporting groups consistently.
+  static const _deliveryPlatforms = ['UberEats', 'PickMe', 'Other'];
+
   String? _category;
   bool _sending = false;
 
@@ -55,12 +87,12 @@ class _OrderEntryScreenState extends ConsumerState<OrderEntryScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _deliveryRef.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final contextAsync = ref.watch(_orderContextProvider(widget.tableId));
     final session = ref.watch(staffSessionProvider).valueOrNull;
 
     // Permission is re-checked here, not just on the floor: this screen is
@@ -81,106 +113,210 @@ class _OrderEntryScreenState extends ConsumerState<OrderEntryScreen> {
       );
     }
 
+    // A delivery order has no table to load, so it reads the menu alone.
+    return widget.isDelivery ? _deliveryScaffold() : _tableScaffold();
+  }
+
+  Widget _tableScaffold() {
+    final contextAsync = ref.watch(_orderContextProvider(widget.tableId!));
+
     return contextAsync.when(
       loading: () => const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       ),
-      error: (e, _) => Scaffold(
-        appBar: AppBar(title: const Text('Order')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
+      error: (e, _) => _errorScaffold(
+        'Could not open this table.',
+        e,
+        () => ref.invalidate(_orderContextProvider(widget.tableId!)),
+      ),
+      data: (ctx) {
+        final entry = ctx.entry;
+        final isSecondRound = entry.activeOrder != null;
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('Could not open this table.\n\n$e',
-                    textAlign: TextAlign.center),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: () =>
-                      ref.invalidate(_orderContextProvider(widget.tableId)),
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Try again'),
+                Text('Table ${entry.table.tableNumber}'),
+                Text(
+                  isSecondRound
+                      ? 'Adding to order #${entry.activeOrder!.orderNumber}'
+                      : 'New order',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
           ),
-        ),
-      ),
-      data: (ctx) => _build(ctx),
+          body: Column(
+            children: [
+              const OfflineBanner(),
+              if (isSecondRound) _RunningTab(entry: entry),
+              ..._menuBody(ctx.menu),
+            ],
+          ),
+          bottomNavigationBar: _cart.isEmpty
+              ? null
+              : _CartBar(
+                  cart: _cart,
+                  sending: _sending,
+                  onReview: _reviewCart,
+                  onSend: () => _send(entry),
+                  isSecondRound: isSecondRound,
+                ),
+        );
+      },
     );
   }
 
-  Widget _build(_OrderContext ctx) {
-    final entry = ctx.entry;
-    final categories = ctx.menu.keys.toList();
-    final activeCategory =
-        _category != null && ctx.menu.containsKey(_category) ? _category : null;
+  Widget _deliveryScaffold() {
+    final menuAsync = ref.watch(_menuOnlyProvider);
+    final scheme = Theme.of(context).colorScheme;
 
-    final visible = _visibleItems(ctx.menu, activeCategory);
-    final isSecondRound = entry.activeOrder != null;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text('Table ${entry.table.tableNumber}'),
-            Text(
-              isSecondRound
-                  ? 'Adding to order #${entry.activeOrder!.orderNumber}'
-                  : 'New order',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w500,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
+    return menuAsync.when(
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
       ),
-      body: Column(
-        children: [
-          const OfflineBanner(),
-          if (isSecondRound) _RunningTab(entry: entry),
-          _SearchBar(
-            controller: _searchController,
-            onChanged: (v) => setState(() => _search = v),
+      error: (e, _) => _errorScaffold(
+        'Could not load the menu.',
+        e,
+        () => ref.invalidate(_menuOnlyProvider),
+      ),
+      data: (menu) => Scaffold(
+        appBar: AppBar(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('Delivery order'),
+              Text(
+                _platform,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
-          if (categories.length > 1 && _search.isEmpty)
-            _CategoryRail(
-              categories: categories,
-              selected: activeCategory,
-              onSelected: (c) => setState(() => _category = c),
-            ),
-          Expanded(
-            child: visible.isEmpty
-                ? const _NoMatches()
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    itemCount: visible.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (_, i) => _MenuRow(
-                      item: visible[i],
-                      inCart: _quantityOf(visible[i].id),
-                      onTap: () => _addItem(visible[i]),
-                      onLongPress: () => _addItem(visible[i], forceSheet: true),
+        ),
+        body: Column(
+          children: [
+            const OfflineBanner(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      initialValue: _platform,
+                      isDense: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Platform',
+                        prefixIcon: Icon(Icons.delivery_dining_outlined),
+                      ),
+                      items: [
+                        for (final p in _deliveryPlatforms)
+                          DropdownMenuItem(value: p, child: Text(p)),
+                      ],
+                      onChanged: (v) =>
+                          setState(() => _platform = v ?? _platform),
                     ),
                   ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: _cart.isEmpty
-          ? null
-          : _CartBar(
-              cart: _cart,
-              sending: _sending,
-              onReview: _reviewCart,
-              onSend: () => _send(entry),
-              isSecondRound: isSecondRound,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _deliveryRef,
+                      autocorrect: false,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Their ref',
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+            ..._menuBody(menu),
+          ],
+        ),
+        bottomNavigationBar: _cart.isEmpty
+            ? null
+            : _CartBar(
+                cart: _cart,
+                sending: _sending,
+                onReview: _reviewCart,
+                onSend: () => _send(null),
+                isSecondRound: false,
+              ),
+      ),
     );
+  }
+
+  Widget _errorScaffold(String message, Object error, VoidCallback onRetry) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Order')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('$message\n\n$error', textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try again'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Search, categories and the menu list — identical either way, so the two
+  /// scaffolds share it rather than each growing their own copy.
+  List<Widget> _menuBody(Map<String, List<MenuItem>> menu) {
+    final categories = menu.keys.toList();
+    final activeCategory =
+        _category != null && menu.containsKey(_category) ? _category : null;
+    final visible = _visibleItems(menu, activeCategory);
+
+    return [
+      _SearchBar(
+        controller: _searchController,
+        onChanged: (v) => setState(() => _search = v),
+      ),
+      if (categories.length > 1 && _search.isEmpty)
+        _CategoryRail(
+          categories: categories,
+          selected: activeCategory,
+          onSelected: (c) => setState(() => _category = c),
+        ),
+      Expanded(
+        child: visible.isEmpty
+            ? const _NoMatches()
+            : ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                itemCount: visible.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) => _MenuRow(
+                  item: visible[i],
+                  inCart: _quantityOf(visible[i].id),
+                  onTap: () => _addItem(visible[i]),
+                  onLongPress: () => _addItem(visible[i], forceSheet: true),
+                ),
+              ),
+      ),
+    ];
   }
 
   List<MenuItem> _visibleItems(
@@ -234,7 +370,7 @@ class _OrderEntryScreenState extends ConsumerState<OrderEntryScreen> {
     setState(() => _cart = updated);
   }
 
-  Future<void> _send(TableFloorEntry entry) async {
+  Future<void> _send(TableFloorEntry? entry) async {
     if (_cart.isEmpty || _sending) return;
 
     setState(() => _sending = true);
@@ -243,12 +379,30 @@ class _OrderEntryScreenState extends ConsumerState<OrderEntryScreen> {
     final propertyId =
         ref.read(staffSessionProvider).valueOrNull?.activeProperty?.id;
     final items = _cart.items;
-    final tableLabel = entry.table.tableNumber;
+    final label = entry == null ? _platform : 'table ${entry.table.tableNumber}';
 
     var queued = false;
 
     try {
-      if (entry.activeOrder != null) {
+      if (entry == null) {
+        // Delivery: no table, so it goes through saveOrder with the platform
+        // and their reference attached, which is what makes it show up in the
+        // same reporting as everything else.
+        final ts = DateTime.now();
+        await service.saveOrder(RestaurantOrder(
+          id: _uuid.v4(),
+          orderNumber: ts.millisecondsSinceEpoch.toString().substring(7),
+          type: OrderType.delivery,
+          status: OrderStatus.pending,
+          paymentStatus: PaymentStatus.unpaid,
+          createdAt: ts,
+          items: items,
+          deliveryPlatform: _platform,
+          deliveryOrderRef: _deliveryRef.text.trim().isEmpty
+              ? null
+              : _deliveryRef.text.trim(),
+        ));
+      } else if (entry.activeOrder != null) {
         // Second round: append to the open order rather than creating a new
         // one, so the table settles as a single bill.
         await service.addItemsToOrder(entry.activeOrder!.id, items);
@@ -263,7 +417,12 @@ class _OrderEntryScreenState extends ConsumerState<OrderEntryScreen> {
       // The write failed. If the device is offline this is expected, and the
       // round is queued rather than lost — a waiter who has already told the
       // kitchen "it's in" must not discover later that it was not.
-      if (!isOnline && propertyId != null) {
+      //
+      // Delivery orders are NOT queued: their platform reference is the link
+      // back to an order the platform already accepted, and replaying one
+      // blind minutes later risks duplicating a delivery that was re-entered
+      // by hand in the meantime.
+      if (!isOnline && propertyId != null && entry != null) {
         try {
           if (entry.activeOrder != null) {
             await ref.read(outboxProvider.notifier).queueAddItems(
@@ -293,7 +452,6 @@ class _OrderEntryScreenState extends ConsumerState<OrderEntryScreen> {
           return;
         }
       } else {
-        // Online, so this is a real server error. Keep the cart intact.
         if (!mounted) return;
         setState(() => _sending = false);
         showWriteFailure(
@@ -318,9 +476,8 @@ class _OrderEntryScreenState extends ConsumerState<OrderEntryScreen> {
         SnackBar(
           content: Text(
             queued
-                ? 'Saved for table $tableLabel — it will send when you are '
-                    'back online'
-                : 'Sent to the kitchen — table $tableLabel',
+                ? 'Saved for $label — it will send when you are back online'
+                : 'Sent to the kitchen — $label',
           ),
           duration: Duration(seconds: queued ? 5 : 3),
         ),

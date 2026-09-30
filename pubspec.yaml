@@ -56,6 +56,7 @@ dependencies:
   print_bluetooth_thermal: ^1.2.4
   image_picker: ^1.2.3
   signature: ^6.4.0
+  mobile_scanner: ^7.4.2
 
 dev_dependencies:
   flutter_test:
