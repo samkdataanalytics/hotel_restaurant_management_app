@@ -72,5 +72,7 @@
 	<string>Used to photograph a guest’s ID document when checking them in.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Used to attach an existing scan of a guest’s ID when checking them in.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Used to print receipts to a paired Bluetooth thermal printer.</string>
 </dict>
 </plist>

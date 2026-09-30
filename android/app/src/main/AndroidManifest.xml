@@ -9,6 +9,22 @@
     <!-- Biometric re-unlock on shared devices (local_auth). Optional at
          runtime: the toggle is hidden when no biometric is enrolled. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <!-- Receipt printing over Bluetooth Classic (print_bluetooth_thermal).
+         Split by API level: BLUETOOTH/BLUETOOTH_ADMIN were replaced by the
+         granular permissions in API 31, so they are capped rather than left to
+         look required on modern devices.
+
+         BLUETOOTH_SCAN and ACCESS_FINE_LOCATION are deliberately NOT here. The
+         app only ever lists printers the OS has already paired and connects to
+         the chosen one — pairing itself is left to system settings. Scanning
+         would drag in a location permission, which is a large thing to ask a
+         waiter for in order to print a receipt. -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+
     <!-- Guest ID capture at check-in (image_picker). Reading media is only
          needed for the "choose from photos" path on older Android. -->
     <uses-permission android:name="android.permission.CAMERA"/>
