@@ -146,6 +146,7 @@ class SupabaseDataSource {
         'isBillable': r['is_billable'] ?? false,
         'isPaid': r['is_paid'] ?? false,
         'bookingId': r['booking_id'],
+        'receiptUrl': r['receipt_url'],
       });
 
   Map<String, dynamic> _expenseToRow(Expense e) => {
@@ -159,6 +160,7 @@ class SupabaseDataSource {
         'is_billable': e.isBillable,
         'is_paid': e.isPaid,
         'booking_id': e.bookingId,
+        if (e.receiptUrl != null) 'receipt_url': e.receiptUrl,
         if (hotelId != null) 'hotel_id': hotelId,
       };
 

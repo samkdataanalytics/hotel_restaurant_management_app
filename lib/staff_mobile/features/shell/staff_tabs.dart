@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../session/staff_session.dart';
 import '../frontdesk/arrivals_screen.dart';
+import '../manager/today_screen.dart';
 import '../frontdesk/rooms_screen.dart';
 import '../orders/orders_screen.dart';
 import '../tables/table_floor_screen.dart';
@@ -27,11 +28,19 @@ class StaffTab {
 
 /// Every tab the staff app can show, in display order.
 ///
-/// Phase 1 ships the restaurant floor. Sections that exist on web but have no
-/// mobile screen yet are listed with an explicit "use the web panel" placeholder
-/// rather than omitted — a waiter who has Check-Ins permission should be told
-/// where it lives, not silently shown a shorter tab bar with no explanation.
+/// Five at most, which is what a bottom bar carries before the labels stop
+/// being readable — and exactly what an owner with every permission sees. Once-
+/// a-day actions (clocking in, logging an expense, the kitchen board) live in
+/// the app bar menu instead, because a tab is for a surface you work from, not
+/// a thing you do and leave.
 const _allTabs = <StaffTab>[
+  StaffTab(
+    sectionKey: 'hotel_dashboard',
+    label: 'Today',
+    icon: Icons.insights_outlined,
+    selectedIcon: Icons.insights,
+    build: TodayScreen.new,
+  ),
   StaffTab(
     sectionKey: 'restaurant_tables',
     label: 'Floor',
@@ -75,9 +84,14 @@ const _allTabs = <StaffTab>[
 /// shell renders a dedicated explanation for that rather than an empty tab bar;
 /// property switching and sign-out live in the app bar menu, so they stay
 /// reachable either way.
-List<StaffTab> visibleTabsFor(StaffSessionState session) => _allTabs
-    .where((t) => t.sectionKey == null || session.canView(t.sectionKey!))
-    .toList();
+List<StaffTab> visibleTabsFor(StaffSessionState session) {
+  assert(_allTabs.length <= 5,
+      'A bottom bar past five destinations truncates its labels. Put the '
+      'extra surface in the app bar menu instead.');
+  return _allTabs
+      .where((t) => t.sectionKey == null || session.canView(t.sectionKey!))
+      .toList();
+}
 
 /// Whether this user may create or modify orders.
 ///

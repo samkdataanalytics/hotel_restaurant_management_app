@@ -4,7 +4,8 @@
 --   1. A PRIVATE bucket for guest identity documents.
 --   2. Columns on check_ins to reference them.
 --   3. A housekeeping state on rooms, separate from occupancy.
---   4. The realtime publication the arrivals and room boards need.
+--   4. The realtime publication the arrivals and room boards need, plus the
+--      notifications table, whose live stream has never actually worked.
 --
 -- Nothing here alters an existing column or policy, so the web panel is
 -- unaffected: it simply does not read the new columns.
@@ -121,10 +122,22 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE rooms;
   END IF;
+
+  -- notifications has been read through a .stream() in notification_service
+  -- since it was written, but was never published — so watchNotifications()
+  -- has only ever emitted its initial snapshot and then gone quiet. This is
+  -- the fix for that, not a new feature.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND tablename = 'notifications'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+  END IF;
 END $$;
 
-ALTER TABLE bookings  REPLICA IDENTITY FULL;
-ALTER TABLE check_ins REPLICA IDENTITY FULL;
-ALTER TABLE rooms     REPLICA IDENTITY FULL;
+ALTER TABLE bookings      REPLICA IDENTITY FULL;
+ALTER TABLE check_ins     REPLICA IDENTITY FULL;
+ALTER TABLE rooms         REPLICA IDENTITY FULL;
+ALTER TABLE notifications REPLICA IDENTITY FULL;
 
 NOTIFY pgrst, 'reload schema';

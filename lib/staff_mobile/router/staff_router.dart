@@ -8,6 +8,10 @@ import '../features/frontdesk/check_out_screen.dart';
 import '../features/frontdesk/walk_in_screen.dart';
 import '../../staff_mobile/data/front_desk_repository.dart';
 import '../features/kitchen/kitchen_screen.dart';
+import '../features/manager/analytics_screen.dart';
+import '../features/manager/cancellations_screen.dart';
+import '../features/manager/expense_screen.dart';
+import '../features/manager/notifications_screen.dart';
 import '../features/orders/availability_screen.dart';
 import '../features/orders/order_entry_screen.dart';
 import '../features/orders/payment_screen.dart';
@@ -26,6 +30,10 @@ abstract final class StaffRoutes {
   static const checkIn = '/check-in';
   static const checkOut = '/check-out';
   static const walkIn = '/walk-in';
+  static const notifications = '/notifications';
+  static const cancellations = '/cancellations';
+  static const expense = '/expense';
+  static const analytics = '/analytics';
 
   static String orderEntry(String tableId) => '/tables/$tableId/order';
   static String payment(String tableId) => '/tables/$tableId/pay';
@@ -131,6 +139,22 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
           }
           return CheckOutScreen(stay: stay);
         },
+      ),
+      GoRoute(
+        path: StaffRoutes.notifications,
+        builder: (_, __) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: StaffRoutes.cancellations,
+        builder: (_, __) => const CancellationsScreen(),
+      ),
+      GoRoute(
+        path: StaffRoutes.expense,
+        builder: (_, __) => const ExpenseScreen(),
+      ),
+      GoRoute(
+        path: StaffRoutes.analytics,
+        builder: (_, __) => const AnalyticsScreen(),
       ),
       GoRoute(
         path: StaffRoutes.walkIn,

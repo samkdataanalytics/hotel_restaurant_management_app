@@ -22,7 +22,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// operator decision rather than something to hard-code. [deleteForCheckIn]
 /// exists so a retention job has something to call.
 class GuestDocuments {
-  static const bucket = 'guest-documents';
+  /// Overridden by subclasses that store into a different private bucket.
+  String get bucketName => 'guest-documents';
 
   SupabaseClient get _db => Supabase.instance.client;
 
@@ -43,7 +44,7 @@ class GuestDocuments {
     String extension = 'jpg',
   }) async {
     final path = '$hotelId/$checkInId/$kind.$extension';
-    await _db.storage.from(bucket).uploadBinary(
+    await _db.storage.from(bucketName).uploadBinary(
           path,
           bytes,
           fileOptions: FileOptions(
@@ -61,7 +62,7 @@ class GuestDocuments {
   /// Signed, and deliberately short: a link to someone's passport should not
   /// keep working after the screen showing it is closed.
   Future<String> signedUrl(String path, {Duration ttl = const Duration(minutes: 5)}) =>
-      _db.storage.from(bucket).createSignedUrl(path, ttl.inSeconds);
+      _db.storage.from(bucketName).createSignedUrl(path, ttl.inSeconds);
 
   /// Removes every document for one check-in. For a retention job to call.
   Future<void> deleteForCheckIn({
@@ -70,10 +71,10 @@ class GuestDocuments {
   }) async {
     try {
       final prefix = '$hotelId/$checkInId';
-      final files = await _db.storage.from(bucket).list(path: prefix);
+      final files = await _db.storage.from(bucketName).list(path: prefix);
       if (files.isEmpty) return;
       await _db.storage
-          .from(bucket)
+          .from(bucketName)
           .remove(files.map((f) => '$prefix/${f.name}').toList());
     } catch (e) {
       debugPrint('GuestDocuments: cleanup for $checkInId failed: $e');
@@ -84,4 +85,19 @@ class GuestDocuments {
 
 final guestDocumentsProvider = Provider<GuestDocuments>(
   (ref) => GuestDocuments(),
+);
+
+/// Receipt photos attached to expenses.
+///
+/// Its own bucket rather than sharing `guest-documents`, because the two have
+/// genuinely different lifetimes: a receipt wants keeping for the tax year, a
+/// photographed passport wants deleting as soon as the stay is reconciled.
+/// One bucket would force one retention policy onto both.
+class ExpenseReceipts extends GuestDocuments {
+  @override
+  String get bucketName => 'expense-receipts';
+}
+
+final expenseReceiptsProvider = Provider<ExpenseReceipts>(
+  (ref) => ExpenseReceipts(),
 );

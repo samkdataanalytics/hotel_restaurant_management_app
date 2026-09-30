@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data/order_alerts.dart';
 import '../../router/staff_router.dart';
+import '../manager/my_shift_screen.dart';
 import '../../session/app_lock.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
@@ -172,6 +173,24 @@ class _PropertyButton extends ConsumerWidget {
             }
           case 'printer':
             context.push(StaffRoutes.printer);
+          case 'myshift':
+            await showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              showDragHandle: true,
+              builder: (_) => SizedBox(
+                height: MediaQuery.of(context).size.height * 0.85,
+                child: const MyShiftScreen(),
+              ),
+            );
+          case 'notifications':
+            context.push(StaffRoutes.notifications);
+          case 'expense':
+            context.push(StaffRoutes.expense);
+          case 'cancellations':
+            context.push(StaffRoutes.cancellations);
+          case 'analytics':
+            context.push(StaffRoutes.analytics);
           case 'kitchen':
             context.push(StaffRoutes.kitchen);
           case 'soldout':
@@ -217,6 +236,50 @@ class _PropertyButton extends ConsumerWidget {
             subtitle: Text('Bluetooth, per device'),
           ),
         ),
+        const PopupMenuItem(
+          value: 'myshift',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.schedule_outlined),
+            title: Text('My shift'),
+            subtitle: Text('Clock in and out'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'notifications',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.notifications_none_rounded),
+            title: Text('Notifications'),
+          ),
+        ),
+        if (session.canEdit('hotel_expenses'))
+          const PopupMenuItem(
+            value: 'expense',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.receipt_outlined),
+              title: Text('Log an expense'),
+            ),
+          ),
+        if (session.canView('restaurant_cancellations'))
+          const PopupMenuItem(
+            value: 'cancellations',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.remove_circle_outline_rounded),
+              title: Text('Cancellations & refunds'),
+            ),
+          ),
+        if (session.canView('restaurant_analytics'))
+          const PopupMenuItem(
+            value: 'analytics',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.bar_chart_rounded),
+              title: Text('Sales'),
+            ),
+          ),
         if (session.canView('restaurant_kitchen'))
           const PopupMenuItem(
             value: 'kitchen',

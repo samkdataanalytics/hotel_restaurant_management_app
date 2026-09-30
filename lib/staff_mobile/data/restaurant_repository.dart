@@ -287,6 +287,31 @@ class RestaurantRepository {
           .read(restaurantServiceProvider)
           .saveMenuItem(item.copyWith(isAvailable: isAvailable));
 
+  /// Voids part or all of a line.
+  ///
+  /// Which service call applies is decided by whether the money has already
+  /// changed hands, not by asking the user to pick: an unpaid order is
+  /// cancelled (and its ingredients returned to stock), a settled one is
+  /// refunded. Offering both would invite choosing the wrong one.
+  Future<void> voidOrderLine({
+    required RestaurantOrder order,
+    required String orderItemId,
+    required int quantity,
+  }) {
+    final service = _ref.read(restaurantServiceProvider);
+    final alreadyPaid = order.paymentStatus == PaymentStatus.paid ||
+        order.paymentStatus == PaymentStatus.chargedToRoom;
+
+    return alreadyPaid
+        ? service.refundOrderItem(order.id, orderItemId, quantity)
+        : service.cancelOrderItem(order.id, orderItemId, quantity);
+  }
+
+  /// Voids a whole order. Restores inventory only when it was still pending,
+  /// which is the service's own rule.
+  Future<void> cancelWholeOrder(String orderId) =>
+      _ref.read(restaurantServiceProvider).cancelOrder(orderId);
+
   /// Guests currently in house, for charge-to-room.
   ///
   /// Both buckets count: someone due to leave today has not left yet and can
