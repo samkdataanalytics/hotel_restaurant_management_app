@@ -180,6 +180,8 @@ class _PropertyButton extends ConsumerWidget {
             }
           case 'printer':
             context.push(StaffRoutes.printer);
+          case 'guests':
+            context.push(StaffRoutes.guests);
           case 'delivery':
             context.push(StaffRoutes.deliveryOrder);
           case 'myshift':
@@ -245,6 +247,16 @@ class _PropertyButton extends ConsumerWidget {
             subtitle: Text('Bluetooth, per device'),
           ),
         ),
+        if (session.canView('hotel_reservations'))
+          const PopupMenuItem(
+            value: 'guests',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.people_outline_rounded),
+              title: Text('Guests'),
+              subtitle: Text('Past stays and preferences'),
+            ),
+          ),
         if (session.canEdit('restaurant_pos'))
           const PopupMenuItem(
             value: 'delivery',

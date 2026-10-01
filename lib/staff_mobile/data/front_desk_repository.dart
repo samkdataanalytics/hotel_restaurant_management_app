@@ -7,6 +7,7 @@ import '../../domain/entities/expense.dart';
 import '../../domain/entities/restaurant_order.dart';
 import '../../domain/entities/room.dart';
 import '../../providers/service_providers.dart';
+import 'guest_history.dart';
 
 /// Where a booking sits relative to today, which is what a front desk actually
 /// sorts by — not the raw BookingStatus.
@@ -159,6 +160,27 @@ class FrontDeskRepository {
       booking: result['booking'] as Booking,
       guest: result['guest'] as Guest?,
       room: result['room'] as Room?,
+    );
+  }
+
+  /// Every guest with their stay history attached.
+  ///
+  /// Two reads rather than one per guest: pulling a guest's bookings
+  /// individually would be an N+1 across the whole book, and the enriched
+  /// booking query already returns everything needed to group them locally.
+  Future<List<GuestRecord>> loadGuestHistory() async {
+    final booking = _ref.read(bookingServiceProvider);
+    final results = await (
+      booking.getAllGuests(),
+      booking.getEnrichedBookings(),
+    ).wait;
+
+    return buildGuestHistory(
+      guests: results.$1,
+      bookings: [
+        for (final row in results.$2)
+          (booking: row['booking'] as Booking, room: row['room'] as Room?),
+      ],
     );
   }
 

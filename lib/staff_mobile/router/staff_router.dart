@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/staff_login_screen.dart';
 import '../features/frontdesk/check_in_screen.dart';
 import '../features/frontdesk/check_out_screen.dart';
+import '../features/frontdesk/guest_history_screen.dart';
 import '../features/frontdesk/walk_in_screen.dart';
 import '../../staff_mobile/data/front_desk_repository.dart';
 import '../features/kitchen/kitchen_screen.dart';
@@ -38,6 +39,7 @@ abstract final class StaffRoutes {
   static const analytics = '/analytics';
   static const scan = '/scan';
   static const deliveryOrder = '/delivery-order';
+  static const guests = '/guests';
 
   static String orderEntry(String tableId) => '/tables/$tableId/order';
   static String payment(String tableId) => '/tables/$tableId/pay';
@@ -168,6 +170,10 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: StaffRoutes.analytics,
         builder: (_, __) => const AnalyticsScreen(),
+      ),
+      GoRoute(
+        path: StaffRoutes.guests,
+        builder: (_, __) => const GuestHistoryScreen(),
       ),
       GoRoute(
         path: StaffRoutes.walkIn,
