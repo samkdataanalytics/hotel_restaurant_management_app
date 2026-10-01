@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../domain/entities/ingredient.dart';
+import '../../domain/entities/inventory_item.dart';
 import '../../domain/entities/menu_item.dart';
 import '../../domain/entities/restaurant_order.dart';
 import '../../domain/entities/restaurant_table.dart';
@@ -264,6 +266,45 @@ class RestaurantRepository {
   Future<({double taxRate, double serviceChargeRate})> loadChargeSettings() =>
       _ref.read(restaurantServiceProvider).getChargeSettings();
 
+  /// Ingredients paired with their stock levels, for a stock count.
+  ///
+  /// Ingredients without an inventory row are included with a zero count
+  /// rather than hidden: an ingredient nobody has ever counted is exactly the
+  /// one a stock take needs to surface.
+  Future<List<StockLine>> loadStock() async {
+    final service = _ref.read(restaurantServiceProvider);
+    final results = await (service.getIngredients(), service.getInventory()).wait;
+
+    final byIngredient = {
+      for (final InventoryItem i in results.$2) i.ingredientId: i,
+    };
+
+    final lines = [
+      for (final Ingredient ingredient in results.$1)
+        StockLine(ingredient: ingredient, inventory: byIngredient[ingredient.id]),
+    ];
+    lines.sort((a, b) => a.ingredient.name
+        .toLowerCase()
+        .compareTo(b.ingredient.name.toLowerCase()));
+    return lines;
+  }
+
+  /// Writes a counted figure as an adjustment to the expected one.
+  ///
+  /// Uses adjustStock with the delta rather than setting the absolute value,
+  /// so the movement is recorded the same way every other stock change is and
+  /// a concurrent deduction from an order placed mid-count is not silently
+  /// overwritten.
+  Future<void> applyStockCount({
+    required String ingredientId,
+    required double expected,
+    required double counted,
+  }) {
+    final delta = counted - expected;
+    if (delta == 0) return Future.value();
+    return _ref.read(restaurantServiceProvider).adjustStock(ingredientId, delta);
+  }
+
   /// The full menu including unavailable items, for the 86 screen.
   ///
   /// Separate from [loadMenuByCategory], which filters unavailable items out so
@@ -330,3 +371,23 @@ class RestaurantRepository {
 final restaurantRepositoryProvider = Provider<RestaurantRepository>(
   RestaurantRepository.new,
 );
+
+
+/// One ingredient and what the system thinks it has.
+class StockLine {
+  final Ingredient ingredient;
+
+  /// Null when the ingredient has no inventory row yet.
+  final InventoryItem? inventory;
+
+  const StockLine({required this.ingredient, this.inventory});
+
+  double get expected => inventory?.currentStock ?? 0;
+
+  double get minimum => inventory?.minStockLevel ?? 0;
+
+  /// Already below the reorder threshold before anyone counts.
+  bool get isLow => minimum > 0 && expected <= minimum;
+
+  bool get neverCounted => inventory == null;
+}

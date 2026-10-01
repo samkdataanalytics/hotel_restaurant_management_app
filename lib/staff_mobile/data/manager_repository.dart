@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../domain/entities/staff_shift.dart';
 import '../../providers/service_providers.dart';
 import '../../services/notification_service.dart';
 import '../../services/shift_service.dart';
 import '../session/staff_session.dart';
+
+const _uuid = Uuid();
 
 /// Today's numbers, as one figure set.
 class TodayStats {
@@ -118,6 +121,73 @@ class ManagerRepository {
     );
     records.sort((a, b) => b.clockIn.compareTo(a.clockIn));
     return records;
+  }
+
+  /// Every shift in the week containing [anyDay], for the whole property.
+  Future<List<StaffShift>> shiftsForWeek(DateTime anyDay) async {
+    final service = _shifts;
+    if (service == null) return [];
+    final start = ShiftService.weekStart(anyDay);
+    return service.getShiftsForRange(start, start.add(const Duration(days: 6)));
+  }
+
+  Future<void> addShift(StaffShift shift) async => _shifts?.addShift(shift);
+
+  Future<void> deleteShift(String shiftId) async =>
+      _shifts?.deleteShift(shiftId);
+
+  /// Copies one week's rota onto the next.
+  ///
+  /// The roadmap calls this the shortcut that makes scheduling bearable, and it
+  /// is: most weeks are last week with a couple of changes. Shifts already on
+  /// the target week are left alone rather than duplicated — running it twice
+  /// must not double-book everyone.
+  Future<int> copyWeek({
+    required DateTime fromWeek,
+    required DateTime toWeek,
+  }) async {
+    final service = _shifts;
+    final propertyId = _propertyId;
+    if (service == null || propertyId == null) return 0;
+
+    final source = await shiftsForWeek(fromWeek);
+    if (source.isEmpty) return 0;
+
+    final existing = await shiftsForWeek(toWeek);
+    String key(String userId, int weekday, String start) =>
+        '$userId|$weekday|$start';
+    final taken = {
+      for (final s in existing)
+        key(s.staffUserId, s.shiftDate.weekday, s.startTime),
+    };
+
+    final offset = ShiftService.weekStart(toWeek)
+        .difference(ShiftService.weekStart(fromWeek));
+
+    var copied = 0;
+    for (final shift in source) {
+      if (shift.status == ShiftStatus.cancelled) continue;
+      final date = shift.shiftDate.add(offset);
+      if (taken.contains(key(shift.staffUserId, date.weekday, shift.startTime))) {
+        continue;
+      }
+
+      await service.addShift(StaffShift(
+        id: _uuid.v4(),
+        hotelId: propertyId,
+        staffUserId: shift.staffUserId,
+        staffName: shift.staffName,
+        shiftDate: date,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        role: shift.role,
+        notes: shift.notes,
+        status: ShiftStatus.scheduled,
+        createdAt: DateTime.now(),
+      ));
+      copied++;
+    }
+    return copied;
   }
 
   // ─── Notifications ────────────────────────────────────────────────────────

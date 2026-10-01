@@ -180,6 +180,12 @@ class _PropertyButton extends ConsumerWidget {
             }
           case 'printer':
             context.push(StaffRoutes.printer);
+          case 'team':
+            context.push(StaffRoutes.team);
+          case 'schedule':
+            context.push(StaffRoutes.schedule);
+          case 'stock':
+            context.push(StaffRoutes.stock);
           case 'guests':
             context.push(StaffRoutes.guests);
           case 'delivery':
@@ -247,6 +253,36 @@ class _PropertyButton extends ConsumerWidget {
             subtitle: Text('Bluetooth, per device'),
           ),
         ),
+        // Owner-only: a manager runs the floor, an owner decides who has access.
+        if (session.isOwner)
+          const PopupMenuItem(
+            value: 'team',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.groups_outlined),
+              title: Text('Team'),
+              subtitle: Text('Who works here, and what they can see'),
+            ),
+          ),
+        if (session.isManager)
+          const PopupMenuItem(
+            value: 'schedule',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.calendar_month_outlined),
+              title: Text('Rota'),
+              subtitle: Text('Who is on, and when'),
+            ),
+          ),
+        if (session.canView('restaurant_management'))
+          const PopupMenuItem(
+            value: 'stock',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.inventory_2_outlined),
+              title: Text('Stock count'),
+            ),
+          ),
         if (session.canView('hotel_reservations'))
           const PopupMenuItem(
             value: 'guests',

@@ -10,6 +10,9 @@ import '../features/frontdesk/walk_in_screen.dart';
 import '../../staff_mobile/data/front_desk_repository.dart';
 import '../features/kitchen/kitchen_screen.dart';
 import '../features/manager/analytics_screen.dart';
+import '../features/manager/schedule_screen.dart';
+import '../features/manager/team_screen.dart';
+import '../features/stock/stock_count_screen.dart';
 import '../features/manager/cancellations_screen.dart';
 import '../features/manager/expense_screen.dart';
 import '../features/manager/notifications_screen.dart';
@@ -40,6 +43,9 @@ abstract final class StaffRoutes {
   static const scan = '/scan';
   static const deliveryOrder = '/delivery-order';
   static const guests = '/guests';
+  static const team = '/team';
+  static const schedule = '/schedule';
+  static const stock = '/stock';
 
   static String orderEntry(String tableId) => '/tables/$tableId/order';
   static String payment(String tableId) => '/tables/$tableId/pay';
@@ -170,6 +176,18 @@ final staffRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: StaffRoutes.analytics,
         builder: (_, __) => const AnalyticsScreen(),
+      ),
+      GoRoute(
+        path: StaffRoutes.team,
+        builder: (_, __) => const TeamScreen(),
+      ),
+      GoRoute(
+        path: StaffRoutes.schedule,
+        builder: (_, __) => const ScheduleScreen(),
+      ),
+      GoRoute(
+        path: StaffRoutes.stock,
+        builder: (_, __) => const StockCountScreen(),
       ),
       GoRoute(
         path: StaffRoutes.guests,
