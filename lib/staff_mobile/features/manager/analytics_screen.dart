@@ -6,6 +6,7 @@ import '../../data/restaurant_repository.dart';
 import '../../data/sales_summary.dart';
 import '../../session/staff_session.dart';
 import '../../theme/staff_theme.dart';
+import '../../data/money.dart';
 
 /// How far back to summarise.
 enum _Window { today, week, month }
@@ -98,6 +99,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
 
   Widget _body(SalesSummary summary) {
     final scheme = Theme.of(context).colorScheme;
+    final money = ref.watch(moneyProvider);
 
     if (summary.orderCount == 0) {
       return ListView(children: [
@@ -148,7 +150,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                       color: scheme.onSurfaceVariant,
                     )),
                 const SizedBox(height: 6),
-                Text(summary.revenue.toStringAsFixed(2),
+                Text(money.format(summary.revenue),
                     style: const TextStyle(
                         fontSize: 40,
                         fontWeight: FontWeight.w800,
@@ -204,7 +206,7 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
                     child: Text(item.name,
                         style: const TextStyle(fontSize: 15)),
                   ),
-                  Text(item.revenue.toStringAsFixed(2),
+                  Text(money.format(item.revenue),
                       style: const TextStyle(
                           fontSize: 14, fontWeight: FontWeight.w600)),
                 ],
@@ -237,13 +239,13 @@ class _AnalyticsScreenState extends ConsumerState<AnalyticsScreen> {
   }
 }
 
-class _Mini extends StatelessWidget {
+class _Mini extends ConsumerWidget {
   final String label;
   final String value;
   const _Mini({required this.label, required this.value});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'order_cart.dart';
+import '../../data/money.dart';
 
 /// Reviews and edits the round before it is fired.
 ///
@@ -17,20 +19,21 @@ Future<OrderCart?> showCartSheet(
   );
 }
 
-class _CartSheet extends StatefulWidget {
+class _CartSheet extends ConsumerStatefulWidget {
   final OrderCart cart;
   const _CartSheet({required this.cart});
 
   @override
-  State<_CartSheet> createState() => _CartSheetState();
+  ConsumerState<_CartSheet> createState() => _CartSheetState();
 }
 
-class _CartSheetState extends State<_CartSheet> {
+class _CartSheetState extends ConsumerState<_CartSheet> {
   late OrderCart _cart = widget.cart;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final money = ref.watch(moneyProvider);
 
     return ConstrainedBox(
       constraints: BoxConstraints(
@@ -140,7 +143,7 @@ class _CartSheetState extends State<_CartSheet> {
                                     Padding(
                                       padding: const EdgeInsets.only(top: 3),
                                       child: Text(
-                                        line.subtotal.toStringAsFixed(2),
+                                        money.format(line.subtotal),
                                         style: TextStyle(
                                           fontSize: 13,
                                           color: scheme.onSurfaceVariant,
@@ -181,7 +184,7 @@ class _CartSheetState extends State<_CartSheet> {
                               color: scheme.onSurfaceVariant,
                             )),
                         Text(
-                          _cart.subtotal.toStringAsFixed(2),
+                          money.format(_cart.subtotal),
                           style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,

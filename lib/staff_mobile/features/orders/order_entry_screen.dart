@@ -14,6 +14,7 @@ import '../shell/staff_tabs.dart';
 import 'cart_sheet.dart';
 import 'modifier_sheet.dart';
 import 'order_cart.dart';
+import '../../data/money.dart';
 
 const _uuid = Uuid();
 
@@ -487,12 +488,13 @@ class _OrderEntryScreenState extends ConsumerState<OrderEntryScreen> {
 }
 
 /// Summary of what the table already owes, shown when adding a second round.
-class _RunningTab extends StatelessWidget {
+class _RunningTab extends ConsumerWidget {
   final TableFloorEntry entry;
   const _RunningTab({required this.entry});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final money = ref.watch(moneyProvider);
     final scheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
@@ -515,7 +517,7 @@ class _RunningTab extends StatelessWidget {
             ),
           ),
           Text(
-            entry.openTotal.toStringAsFixed(2),
+            money.format(entry.openTotal),
             style: TextStyle(
               color: scheme.onSecondaryContainer,
               fontWeight: FontWeight.w800,
@@ -599,7 +601,7 @@ class _CategoryRail extends StatelessWidget {
   }
 }
 
-class _MenuRow extends StatelessWidget {
+class _MenuRow extends ConsumerWidget {
   final MenuItem item;
   final int inCart;
   final VoidCallback onTap;
@@ -613,7 +615,8 @@ class _MenuRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final money = ref.watch(moneyProvider);
     final scheme = Theme.of(context).colorScheme;
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -653,7 +656,7 @@ class _MenuRow extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Text(
-                item.price.toStringAsFixed(2),
+                money.format(item.price),
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
@@ -689,7 +692,7 @@ class _MenuRow extends StatelessWidget {
 }
 
 /// Persistent bar showing the round being built, with the fire action.
-class _CartBar extends StatelessWidget {
+class _CartBar extends ConsumerWidget {
   final OrderCart cart;
   final bool sending;
   final bool isSecondRound;
@@ -705,7 +708,8 @@ class _CartBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final money = ref.watch(moneyProvider);
     final scheme = Theme.of(context).colorScheme;
     return Material(
       color: scheme.surface,
@@ -743,7 +747,7 @@ class _CartBar extends StatelessWidget {
                           ],
                         ),
                         Text(
-                          cart.subtotal.toStringAsFixed(2),
+                          money.format(cart.subtotal),
                           style: TextStyle(
                             color: scheme.onSurfaceVariant,
                             fontSize: 13,

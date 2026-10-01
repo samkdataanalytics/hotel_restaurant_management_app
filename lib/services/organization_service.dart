@@ -280,9 +280,16 @@ const kCurrencies = [
   AppCurrency('DKK', 'Danish Krone',         'kr'),
 ];
 
-String _currencySymbol(String code) =>
+/// Symbol for an ISO currency code, falling back to the dollar sign.
+///
+/// Public so the mobile app can format money in the active property's currency
+/// without copying [kCurrencies] — a second copy would drift the moment a
+/// currency is added here.
+String currencySymbolFor(String code) =>
     kCurrencies.firstWhere((c) => c.code == code,
         orElse: () => const AppCurrency('USD', '', '\$')).symbol;
+
+String _currencySymbol(String code) => currencySymbolFor(code);
 
 // (Plan limits are fetched dynamically from the `plans` table)
 

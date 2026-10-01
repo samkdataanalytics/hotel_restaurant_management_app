@@ -6,6 +6,7 @@ import '../../data/connectivity.dart';
 import '../../data/restaurant_repository.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
+import '../../data/money.dart';
 
 final _fullMenuProvider =
     FutureProvider.autoDispose<Map<String, List<MenuItem>>>((ref) async {
@@ -165,7 +166,7 @@ class _AvailabilityScreenState extends ConsumerState<AvailabilityScreen> {
   }
 }
 
-class _ItemRow extends StatelessWidget {
+class _ItemRow extends ConsumerWidget {
   final MenuItem item;
   final bool busy;
   final bool enabled;
@@ -179,7 +180,8 @@ class _ItemRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final money = ref.watch(moneyProvider);
     final scheme = Theme.of(context).colorScheme;
     final soldOut = !item.isAvailable;
 
@@ -207,7 +209,7 @@ class _ItemRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${item.category} · ${item.price.toStringAsFixed(2)}',
+                      '${item.category} · ${money.format(item.price)}',
                       style: TextStyle(
                           fontSize: 12.5, color: scheme.onSurfaceVariant),
                     ),

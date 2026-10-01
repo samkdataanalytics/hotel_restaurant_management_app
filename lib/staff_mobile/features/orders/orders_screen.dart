@@ -12,6 +12,7 @@ import '../../data/restaurant_repository.dart';
 import '../../session/staff_session.dart';
 import '../../theme/staff_theme.dart';
 import '../../widgets/offline_banner.dart';
+import '../../data/money.dart';
 
 /// Orders plus the table numbers they belong to, resolved once.
 typedef _OrdersView = ({
@@ -252,7 +253,7 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
-class _OrderCard extends StatelessWidget {
+class _OrderCard extends ConsumerWidget {
   final RestaurantOrder order;
   final String? tableNumber;
   final bool busy;
@@ -266,7 +267,8 @@ class _OrderCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final money = ref.watch(moneyProvider);
     final scheme = Theme.of(context).colorScheme;
     final accent = _statusColour(order.status);
     final age = DateTime.now().difference(order.createdAt);
@@ -349,7 +351,7 @@ class _OrderCard extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  order.totalAmount.toStringAsFixed(2),
+                  money.format(order.totalAmount),
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,

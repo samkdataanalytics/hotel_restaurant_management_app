@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../domain/entities/menu_item.dart';
+import '../../data/money.dart';
 
 /// What the waiter chose for one item before it goes in the cart.
 class ModifierSelection {
@@ -32,15 +34,15 @@ Future<ModifierSelection?> showModifierSheet(
   );
 }
 
-class _ModifierSheet extends StatefulWidget {
+class _ModifierSheet extends ConsumerStatefulWidget {
   final MenuItem item;
   const _ModifierSheet({required this.item});
 
   @override
-  State<_ModifierSheet> createState() => _ModifierSheetState();
+  ConsumerState<_ModifierSheet> createState() => _ModifierSheetState();
 }
 
-class _ModifierSheetState extends State<_ModifierSheet> {
+class _ModifierSheetState extends ConsumerState<_ModifierSheet> {
   final _selected = <String, List<String>>{};
   final _notes = TextEditingController();
   int _quantity = 1;
@@ -115,6 +117,7 @@ class _ModifierSheetState extends State<_ModifierSheet> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final missing = _missingRequired;
+    final money = ref.watch(moneyProvider);
 
     return Padding(
       // Lift above the keyboard when the note field has focus.
@@ -191,7 +194,7 @@ class _ModifierSheetState extends State<_ModifierSheet> {
                                   ? opt.name
                                   : '${opt.name}  '
                                       '${opt.priceAdjustment > 0 ? '+' : '−'}'
-                                      '${opt.priceAdjustment.abs().toStringAsFixed(2)}',
+                                      '${money.format(opt.priceAdjustment.abs())}',
                             ),
                           ),
                       ],
@@ -238,7 +241,7 @@ class _ModifierSheetState extends State<_ModifierSheet> {
                             : null,
                         child: Text(
                           missing.isEmpty
-                              ? 'Add  ·  ${(_unitPrice * _quantity).toStringAsFixed(2)}'
+                              ? 'Add  ·  ${money.format(_unitPrice * _quantity)}'
                               : 'Choose ${missing.first}',
                         ),
                       ),

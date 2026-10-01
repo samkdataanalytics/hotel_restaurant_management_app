@@ -10,6 +10,7 @@ import '../../data/guest_documents.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
 import '../frontdesk/document_capture.dart';
+import '../../data/money.dart';
 
 const _uuid = Uuid();
 
@@ -229,7 +230,7 @@ class _ExpenseScreenState extends ConsumerState<ExpenseScreen> {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
-          content: Text('Logged ${expense.amount.toStringAsFixed(2)}'),
+          content: Text('Logged ${ref.read(moneyProvider).format(expense.amount)}'),
         ));
       Navigator.of(context).pop(true);
     } catch (e) {

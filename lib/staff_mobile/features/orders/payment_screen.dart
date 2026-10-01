@@ -11,6 +11,7 @@ import '../../data/receipt_printer.dart';
 import '../../data/restaurant_repository.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
+import '../../data/money.dart';
 
 /// Everything the settle screen needs for one table.
 typedef _PaymentContext = ({
@@ -317,6 +318,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           propertyName: session?.activeProperty?.name ?? 'HotRest',
           addressLine: session?.activeProperty?.address,
           phone: session?.activeProperty?.phone,
+          // Without this the receipt printed bare numbers, so a guest querying
+          // a bill had no idea what currency they had been charged in.
+          currencySymbol: ref.read(moneyProvider).symbol,
         ),
         orders: entry.openOrders,
         bill: bill,
@@ -371,12 +375,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   }
 }
 
-class _OrderLines extends StatelessWidget {
+class _OrderLines extends ConsumerWidget {
   final RestaurantOrder order;
   const _OrderLines({required this.order});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final money = ref.watch(moneyProvider);
     final scheme = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -411,7 +416,7 @@ class _OrderLines extends StatelessWidget {
                         child: Text(item.menuItem.name,
                             style: const TextStyle(fontSize: 14)),
                       ),
-                      Text(item.subtotal.toStringAsFixed(2),
+                      Text(money.format(item.subtotal),
                           style: const TextStyle(fontSize: 14)),
                     ],
                   ),
@@ -499,14 +504,15 @@ class _DiscountControl extends StatelessWidget {
   }
 }
 
-class _BillSummary extends StatelessWidget {
+class _BillSummary extends ConsumerWidget {
   final TableBill bill;
   final ({double taxRate, double serviceChargeRate}) charges;
 
   const _BillSummary({required this.bill, required this.charges});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final money = ref.watch(moneyProvider);
     final scheme = Theme.of(context).colorScheme;
 
     Widget row(String label, double value, {bool strong = false}) => Padding(
@@ -521,7 +527,7 @@ class _BillSummary extends StatelessWidget {
                       color: strong ? scheme.onSurface : scheme.onSurfaceVariant,
                     )),
               ),
-              Text(value.toStringAsFixed(2),
+              Text(money.signed(value),
                   style: TextStyle(
                     fontSize: strong ? 18 : 13.5,
                     fontWeight: strong ? FontWeight.w800 : FontWeight.w500,
@@ -556,7 +562,7 @@ class _BillSummary extends StatelessWidget {
   }
 }
 
-class _PayBar extends StatelessWidget {
+class _PayBar extends ConsumerWidget {
   final TableBill bill;
   final bool settling;
   final VoidCallback onCash;
@@ -570,7 +576,8 @@ class _PayBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final money = ref.watch(moneyProvider);
     return Material(
       color: Theme.of(context).colorScheme.surface,
       elevation: 8,
@@ -601,7 +608,7 @@ class _PayBar extends StatelessWidget {
                       : const Icon(Icons.check_rounded, size: 20),
                   label: Text(settling
                       ? 'Settling'
-                      : 'Mark paid  ${bill.total.toStringAsFixed(2)}'),
+                      : 'Mark paid  ${money.format(bill.total)}'),
                 ),
               ),
             ],

@@ -11,6 +11,7 @@ import '../../data/connectivity.dart';
 import '../../data/front_desk_repository.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
+import '../../data/money.dart';
 
 const _uuid = Uuid();
 
@@ -67,6 +68,7 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
     final session = ref.watch(staffSessionProvider).valueOrNull;
     final mayCreate = session?.canEdit('hotel_reservations') ?? false;
     final scheme = Theme.of(context).colorScheme;
+    final money = ref.watch(moneyProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Walk-in booking')),
@@ -229,12 +231,12 @@ class _WalkInScreenState extends ConsumerState<WalkInScreen> {
                             Expanded(
                               child: Text(
                                 '$_nights night${_nights == 1 ? '' : 's'} at '
-                                '${_room!.pricePerNight.toStringAsFixed(2)}',
+                                '${money.format(_room!.pricePerNight)}',
                                 style: TextStyle(
                                     color: scheme.onSecondaryContainer),
                               ),
                             ),
-                            Text(_estimate.toStringAsFixed(2),
+                            Text(money.format(_estimate),
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w800,

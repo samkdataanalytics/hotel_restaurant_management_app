@@ -9,6 +9,7 @@ import '../../data/connectivity.dart';
 import '../../data/front_desk_repository.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
+import '../../data/money.dart';
 
 final _folioProvider = FutureProvider.autoDispose
     .family<GuestFolio, ArrivalEntry>((ref, stay) async {
@@ -133,6 +134,7 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
 
   Widget _folioView(GuestFolio folio) {
     final scheme = Theme.of(context).colorScheme;
+    final money = ref.watch(moneyProvider);
     final booking = folio.stay.booking;
 
     return ListView(
@@ -207,7 +209,7 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
                         color: scheme.onSecondaryContainer,
                       )),
                 ),
-                Text(folio.total.toStringAsFixed(2),
+                Text(money.format(folio.total),
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
@@ -308,6 +310,7 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
 
   Future<void> _checkOut(GuestFolio folio) async {
     if (_checkingOut) return;
+    final money = ref.read(moneyProvider);
 
     // Checking out releases the room and closes the booking, and there is no
     // undo in the service. Worth one confirmation, with the balance on it.
@@ -316,7 +319,7 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Check out?'),
         content: Text(
-          '${folio.stay.guestName} owes ${folio.total.toStringAsFixed(2)}.\n\n'
+          '${folio.stay.guestName} owes ${money.format(folio.total)}.\n\n'
           'Room ${folio.stay.roomLabel} will be released and the booking '
           'closed.',
         ),
@@ -367,14 +370,15 @@ class _CheckOutScreenState extends ConsumerState<CheckOutScreen> {
   }
 }
 
-class _Section extends StatelessWidget {
+class _Section extends ConsumerWidget {
   final String title;
   final List<({String label, double amount})> rows;
 
   const _Section({required this.title, required this.rows});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final money = ref.watch(moneyProvider);
     final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
@@ -399,7 +403,7 @@ class _Section extends StatelessWidget {
                       child: Text(row.label,
                           style: const TextStyle(fontSize: 14)),
                     ),
-                    Text(row.amount.toStringAsFixed(2),
+                    Text(money.format(row.amount),
                         style: const TextStyle(
                             fontSize: 14, fontWeight: FontWeight.w600)),
                   ],
@@ -412,7 +416,7 @@ class _Section extends StatelessWidget {
   }
 }
 
-class _CheckOutBar extends StatelessWidget {
+class _CheckOutBar extends ConsumerWidget {
   final GuestFolio folio;
   final bool busy;
   final bool enabled;
@@ -426,7 +430,8 @@ class _CheckOutBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final money = ref.watch(moneyProvider);
     return Material(
       color: Theme.of(context).colorScheme.surface,
       elevation: 8,
@@ -446,7 +451,7 @@ class _CheckOutBar extends StatelessWidget {
             label: Text(busy
                 ? 'Checking out'
                 : enabled
-                    ? 'Check out  ${folio.total.toStringAsFixed(2)}'
+                    ? 'Check out  ${money.format(folio.total)}'
                     : 'View only'),
           ),
         ),

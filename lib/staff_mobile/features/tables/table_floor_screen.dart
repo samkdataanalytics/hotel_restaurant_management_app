@@ -11,6 +11,7 @@ import '../../router/staff_router.dart';
 import '../../session/staff_session.dart';
 import '../../theme/staff_theme.dart';
 import '../shell/staff_tabs.dart';
+import '../../data/money.dart';
 
 /// The floor board: every table with its live order state.
 ///
@@ -413,13 +414,14 @@ class _StaleNotice extends StatelessWidget {
 enum _TableAction { addItems, settle }
 
 /// What can be done with a table that already has open orders.
-class _TableActions extends StatelessWidget {
+class _TableActions extends ConsumerWidget {
   final TableFloorEntry entry;
   const _TableActions({required this.entry});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
+    final money = ref.watch(moneyProvider);
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -433,7 +435,7 @@ class _TableActions extends StatelessWidget {
                       style: Theme.of(context).textTheme.titleLarge),
                 ),
                 Text(
-                  entry.openTotal.toStringAsFixed(2),
+                  money.format(entry.openTotal),
                   style: const TextStyle(
                       fontSize: 17, fontWeight: FontWeight.w800),
                 ),

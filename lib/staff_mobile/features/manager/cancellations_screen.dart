@@ -10,6 +10,7 @@ import '../../data/orders_realtime.dart';
 import '../../data/restaurant_repository.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
+import '../../data/money.dart';
 
 typedef _VoidableView = ({
   List<RestaurantOrder> orders,
@@ -231,7 +232,7 @@ class _CancellationsScreenState extends ConsumerState<CancellationsScreen> {
   }
 }
 
-class _OrderCard extends StatelessWidget {
+class _OrderCard extends ConsumerWidget {
   final RestaurantOrder order;
   final String? tableNumber;
   final DateFormat time;
@@ -251,7 +252,8 @@ class _OrderCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final money = ref.watch(moneyProvider);
     final scheme = Theme.of(context).colorScheme;
     final paid = order.paymentStatus == PaymentStatus.paid ||
         order.paymentStatus == PaymentStatus.chargedToRoom;
@@ -285,7 +287,7 @@ class _OrderCard extends StatelessWidget {
             ),
             Text(
               '#${order.orderNumber} · ${time.format(order.createdAt)} · '
-              '${order.totalAmount.toStringAsFixed(2)}',
+              '${money.format(order.totalAmount)}',
               style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
             ),
             const SizedBox(height: 10),
