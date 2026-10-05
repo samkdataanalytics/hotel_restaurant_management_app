@@ -30,10 +30,12 @@ class _OnboardingProfileScreenState extends ConsumerState<OnboardingProfileScree
       final existing = await OrganizationService().getMyOrganization();
       if (existing == null) {
         await OrganizationService().createOrganization(
-          name:    orgData['name']    ?? '',
-          slug:    orgData['slug']    ?? '',
-          country: orgData['country'] ?? '',
-          phone:   orgData['phone']   ?? '',
+          name:        orgData['name']        ?? '',
+          slug:        orgData['slug']        ?? '',
+          country:     orgData['country']     ?? '',
+          countryCode: orgData['countryCode'] ?? '',
+          phone:       orgData['phone']       ?? '',
+          email:       orgData['email']       ?? '',
         );
       }
 

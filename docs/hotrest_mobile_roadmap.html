@@ -1,0 +1,1345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Prioritised feature backlog for the HotRest staff mobile app.">
+<style>html{color-scheme:light dark}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>HotRest Mobile Roadmap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  :root {
+    --ground:      #F2F4F3;
+    --surface:     #FFFFFF;
+    --surface-2:   #E9EDEB;
+    --ink:         #101A19;
+    --ink-2:       #3B4C49;
+    --muted:       #5F716D;
+    --hairline:    #D5DEDB;
+    --hairline-2:  #C2CFCB;
+    --accent:      #0E6E5E;
+    --accent-soft: #DCEDE8;
+    --hot:         #C2410C;
+    --hot-soft:    #FBE7DC;
+    --amber:       #8A6100;
+    --amber-soft:  #F6EDD4;
+    --cool:        #2F5E86;
+    --cool-soft:   #E0EAF2;
+
+    --f-display: "Bricolage Grotesque", "Trebuchet MS", sans-serif;
+    --f-body:    "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --f-mono:    "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+    --wrap: 1080px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0B1211;
+      --surface:     #121D1B;
+      --surface-2:   #1A2725;
+      --ink:         #E7EFEC;
+      --ink-2:       #BACAC6;
+      --muted:       #8B9E99;
+      --hairline:    #24332F;
+      --hairline-2:  #33453F;
+      --accent:      #56C4AB;
+      --accent-soft: #10312B;
+      --hot:         #F9834A;
+      --hot-soft:    #351A0D;
+      --amber:       #D9AA3C;
+      --amber-soft:  #2E2510;
+      --cool:        #7FB2DA;
+      --cool-soft:   #14252F;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0B1211;
+    --surface:     #121D1B;
+    --surface-2:   #1A2725;
+    --ink:         #E7EFEC;
+    --ink-2:       #BACAC6;
+    --muted:       #8B9E99;
+    --hairline:    #24332F;
+    --hairline-2:  #33453F;
+    --accent:      #56C4AB;
+    --accent-soft: #10312B;
+    --hot:         #F9834A;
+    --hot-soft:    #351A0D;
+    --amber:       #D9AA3C;
+    --amber-soft:  #2E2510;
+    --cool:        #7FB2DA;
+    --cool-soft:   #14252F;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: var(--wrap);
+    margin: 0 auto;
+    padding-inline: 24px;
+    padding-block: 0;
+  }
+
+  p { margin: 0; }
+  h1, h2, h3, h4 { margin: 0; font-family: var(--f-display); text-wrap: balance; }
+
+  code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+  /* ── Masthead ─────────────────────────────────────────── */
+
+  .masthead {
+    border-bottom: 1px solid var(--hairline);
+    background: var(--surface);
+  }
+  .masthead .wrap {
+    padding-block: 44px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  h1 {
+    font-size: clamp(34px, 6vw, 54px);
+    font-weight: 800;
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+  }
+  .standfirst {
+    font-size: 17px;
+    color: var(--ink-2);
+    max-width: 62ch;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 28px;
+    padding-top: 6px;
+    border-top: 1px solid var(--hairline);
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+  .meta b {
+    color: var(--ink-2);
+    font-weight: 600;
+    font-family: var(--f-mono);
+    font-size: 12px;
+  }
+
+  /* ── Generic section ──────────────────────────────────── */
+
+  section { padding-block: 44px; }
+  section + section { border-top: 1px solid var(--hairline); }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .sec-head h2 {
+    font-size: 25px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  .sec-head .note {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .lede {
+    max-width: 68ch;
+    color: var(--ink-2);
+    margin-bottom: 22px;
+  }
+
+  /* ── The call-out (recommendation) ────────────────────── */
+
+  .verdict {
+    background: var(--surface);
+    border: 1px solid var(--hairline-2);
+    border-left: 4px solid var(--accent);
+    padding: 24px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .verdict h3 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .verdict p { max-width: 70ch; color: var(--ink-2); }
+  .verdict strong { color: var(--ink); font-weight: 600; }
+
+  .fork {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+    margin-top: 4px;
+  }
+  .fork > div {
+    background: var(--surface);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .fork .who {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .fork .call {
+    font-family: var(--f-display);
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .fork .call.yes { color: var(--accent); }
+  .fork .call.no  { color: var(--muted); }
+  .fork .why { font-size: 13px; color: var(--ink-2); }
+
+  /* ── Inventory of what exists ─────────────────────────── */
+
+  .inventory {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 22px 34px;
+  }
+  .inv-col h4 {
+    font-size: 12px;
+    font-family: var(--f-mono);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--hairline-2);
+  }
+  .inv-col ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .inv-col li {
+    font-size: 13.5px;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+  .inv-col li span.f {
+    display: block;
+    font-family: var(--f-mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+  }
+
+  /* ── Phase overview strip ─────────────────────────────── */
+
+  .phases {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 1px;
+    background: var(--hairline);
+    border: 1px solid var(--hairline);
+  }
+  .ph {
+    background: var(--surface);
+    padding: 16px 18px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-top: 3px solid var(--tier, var(--hairline-2));
+  }
+  .ph .n {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .ph .name {
+    font-family: var(--f-display);
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+  .ph .days {
+    font-family: var(--f-mono);
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-2);
+    margin-top: 4px;
+  }
+  .ph .goal { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+
+  /* ── Phase blocks + tickets ───────────────────────────── */
+
+  .phase-block { margin-bottom: 40px; }
+  .phase-block:last-child { margin-bottom: 0; }
+
+  .phase-bar {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--tier, var(--accent));
+    margin-bottom: 0;
+  }
+  .tier-chip {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    color: var(--ground);
+    background: var(--tier, var(--accent));
+  }
+  .phase-bar h3 {
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  .phase-bar .est {
+    margin-left: auto;
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+  .phase-goal {
+    font-size: 13.5px;
+    color: var(--muted);
+    padding: 10px 0 4px;
+    max-width: 74ch;
+  }
+
+  .tickets {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--hairline);
+  }
+  .t {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr) 150px 62px;
+    gap: 4px 18px;
+    align-items: start;
+    padding: 15px 0 16px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .t .id {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--tier, var(--accent));
+    padding-top: 2px;
+    letter-spacing: -0.01em;
+  }
+  .t .body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .t .title {
+    font-family: var(--f-display);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.005em;
+  }
+  .t .desc { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+  .t .src {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--muted);
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding-top: 3px;
+  }
+  .t .src em {
+    font-style: normal;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .t .src .new {
+    color: var(--hot);
+    font-weight: 500;
+  }
+  .t .eff {
+    font-family: var(--f-mono);
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--ink-2);
+    padding-top: 3px;
+  }
+
+  @media (max-width: 780px) {
+    .t {
+      grid-template-columns: 54px minmax(0, 1fr) auto;
+    }
+    .t .body { grid-column: 2 / 4; }
+    .t .src  { grid-column: 2 / 4; padding-top: 2px; }
+    .t .eff  { grid-column: 3; grid-row: 1; }
+    .t .id   { grid-row: 1; }
+  }
+
+  /* ── Notes list ───────────────────────────────────────── */
+
+  .notes {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--hairline);
+  }
+  .note-row {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 16px;
+    padding: 14px 0 15px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .note-row .num {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    padding-top: 3px;
+  }
+  .note-row h4 {
+    font-size: 15.5px;
+    font-weight: 700;
+    margin-bottom: 3px;
+    letter-spacing: -0.005em;
+  }
+  .note-row p { font-size: 13.5px; color: var(--ink-2); max-width: 76ch; }
+  .note-row code {
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+
+  /* ── Package table ────────────────────────────────────── */
+
+  .table-scroll { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    min-width: 520px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 14px 9px 0;
+    border-bottom: 1px solid var(--hairline);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+    border-bottom-color: var(--hairline-2);
+  }
+  td.pkg { font-family: var(--f-mono); font-size: 12px; color: var(--ink); white-space: nowrap; }
+  td.for { color: var(--ink-2); }
+  td.ph-tag { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+
+  /* ── Excluded ─────────────────────────────────────────── */
+
+  .excluded {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 18px;
+  }
+  .ex {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    padding: 15px 17px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .ex .what { font-family: var(--f-display); font-size: 15px; font-weight: 700; }
+  .ex .why  { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+  /* ── Questions ────────────────────────────────────────── */
+
+  .qs { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--hairline); }
+  .q {
+    padding: 13px 0 14px;
+    border-bottom: 1px solid var(--hairline);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 18px;
+    align-items: baseline;
+  }
+  .q .ask { font-size: 14.5px; font-weight: 500; }
+  .q .blocks {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .q .ctx { grid-column: 1 / -1; font-size: 13px; color: var(--muted); max-width: 76ch; }
+
+  footer {
+    border-top: 1px solid var(--hairline);
+    background: var(--surface);
+  }
+  footer .wrap {
+    padding-block: 26px 34px;
+    font-size: 12.5px;
+    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  footer .mono { font-size: 11.5px; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    a { transition: color 120ms ease; }
+  }
+</style>
+
+</head>
+<body>
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">HotRest Management &nbsp;/&nbsp; Mobile Scope &nbsp;/&nbsp; v1 for build</div>
+    <h1>Mobile Roadmap</h1>
+    <p class="standfirst">
+      A prioritised build order for the HotRest companion app — what to ship, in what order,
+      and which parts of the existing Flutter&nbsp;+&nbsp;Supabase codebase each feature reuses
+      rather than rebuilds.
+    </p>
+    <div class="meta">
+      <span>Repo <b>proj_1</b></span>
+      <span>Branch <b>dev_v1</b></span>
+      <span>Platform <b>Flutter (Android + iOS)</b></span>
+      <span>Backend <b>Supabase — 76 migrations, RLS live</b></span>
+      <span>Audience <b>Mobile developer</b></span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ══ 1. THE DECISION ══════════════════════════════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Start here — who the app is for</h2>
+      <span class="note">This decision shapes everything below</span>
+    </div>
+
+    <div class="verdict">
+      <h3>Build a staff operations app. Do not build a guest app.</h3>
+      <p>
+        The product already serves guests well over the web: a guest scans a table QR and lands on
+        <code>/guest-menu/:propertyId/:tableId</code>, or a room QR for
+        <code>/room-service/:propertyId/:roomNumber</code>, with no install step. Asking a guest who is
+        staying two nights to download an app is friction that will lose more orders than it wins.
+      </p>
+      <p>
+        Staff are the opposite case. A waiter, housekeeper or duty manager is on their feet for an
+        eight-hour shift and cannot carry a laptop. Everything they need — taking an order at the table,
+        flipping a room to clean, checking a guest in at the door — is currently only reachable through a
+        desktop-shaped web panel. <strong>That gap is the whole opportunity.</strong>
+      </p>
+      <div class="fork">
+        <div>
+          <span class="who">Waiters &amp; kitchen</span>
+          <span class="call yes">Build — phase 1</span>
+          <span class="why">Highest daily usage, clearest ROI, order entry at the table.</span>
+        </div>
+        <div>
+          <span class="who">Front desk &amp; housekeeping</span>
+          <span class="call yes">Build — phase 2</span>
+          <span class="why">Check-in at the door; room status updated from the corridor.</span>
+        </div>
+        <div>
+          <span class="who">Owners &amp; managers</span>
+          <span class="call yes">Build — phase 3</span>
+          <span class="why">Read-mostly. Approvals and today's numbers off-site.</span>
+        </div>
+        <div>
+          <span class="who">Guests</span>
+          <span class="call no">Skip — keep QR web</span>
+          <span class="why">Already shipped and install-free. Revisit only as a PWA prompt.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 2. WHAT ALREADY EXISTS ═══════════════════════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>What the backend already gives you</h2>
+      <span class="note">Reuse, don't rebuild</span>
+    </div>
+    <p class="lede">
+      Nearly all business logic already lives in platform-agnostic service classes that talk to Supabase
+      directly. The mobile app should import these unchanged and build only new UI. The screens are the
+      throwaway part; the services are not.
+    </p>
+
+    <div class="inventory">
+      <div class="inv-col">
+        <h4>Ready to call as-is</h4>
+        <ul>
+          <li>Order lifecycle — create, append, discount, split-pay, settle, refund, cancel
+            <span class="f">restaurant_service.dart · 958 lines</span></li>
+          <li>Check-in / check-out, rooms, reservations, guests, expenses
+            <span class="f">booking_service.dart</span></li>
+          <li>Clock-in / clock-out with an open-record lookup
+            <span class="f">shift_service.dart · clockIn, clockOut, getMyActiveRecord</span></li>
+          <li>Notification feed with a live stream
+            <span class="f">notification_service.dart · watchNotifications()</span></li>
+          <li>Org, property list and membership resolution
+            <span class="f">organization_service.dart · get_my_properties()</span></li>
+          <li>Invoices, menu PDFs, PayHere payments
+            <span class="f">invoice_service · menu_pdf_service · payhere_service</span></li>
+        </ul>
+      </div>
+      <div class="inv-col">
+        <h4>Already enforced server-side</h4>
+        <ul>
+          <li>Row-level security on every tenant table — the app inherits it with no extra work</li>
+          <li>Roles: owner / manager / staff, plus a per-section privilege map of none / view / edit</li>
+          <li>Thirteen permission sections, keyed and already named
+            <span class="f">hotel_dashboard … restaurant_cancellations</span></li>
+          <li>Plan limits — max properties, users, rooms, tables; trials and subscription state</li>
+          <li>Soft delete, rate locking, booking-channel attribution, menu modifiers</li>
+        </ul>
+      </div>
+      <div class="inv-col">
+        <h4>Live realtime today</h4>
+        <ul>
+          <li>Kitchen order stream with audio alerting
+            <span class="f">kitchen_screen.dart · channel('kitchen_orders_rt')</span></li>
+          <li>Table floor order changes
+            <span class="f">table_floor_screen.dart</span></li>
+          <li>Notifications and the guest menu feed</li>
+          <li><span class="f new">Gap: only restaurant_orders is in the realtime publication. Bookings, rooms and check_ins need adding for phase 2.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 3. PHASE STRIP ═══════════════════════════════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Build order at a glance</h2>
+      <span class="note">Estimates are dev-days for one experienced Flutter developer, excluding QA</span>
+    </div>
+
+    <div class="phases">
+      <div class="ph" style="--tier: var(--cool)">
+        <span class="n">Phase 0</span>
+        <span class="name">Foundation</span>
+        <span class="days">23 days</span>
+        <span class="goal">Nothing ships to a user, but nothing else can be built without it.</span>
+      </div>
+      <div class="ph" style="--tier: var(--hot)">
+        <span class="n">Phase 1</span>
+        <span class="name">Restaurant Floor</span>
+        <span class="days">26 days</span>
+        <span class="goal">First releasable app. A waiter can run a full table without a terminal.</span>
+      </div>
+      <div class="ph" style="--tier: var(--accent)">
+        <span class="n">Phase 2</span>
+        <span class="name">Front Desk</span>
+        <span class="days">19 days</span>
+        <span class="goal">Hotel side reaches parity: arrivals, check-in, room and housekeeping status.</span>
+      </div>
+      <div class="ph" style="--tier: var(--amber)">
+        <span class="n">Phase 3</span>
+        <span class="name">Manager Tools</span>
+        <span class="days">16 days</span>
+        <span class="goal">Oversight and approvals from off-site. Staff self-service.</span>
+      </div>
+      <div class="ph" style="--tier: var(--muted)">
+        <span class="n">Phase 4</span>
+        <span class="name">Differentiators</span>
+        <span class="days">Backlog</span>
+        <span class="goal">Sequence against customer demand once the app is in daily use.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 4. THE FEATURES ══════════════════════════════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Feature backlog</h2>
+      <span class="note">Green = existing code to reuse &nbsp;·&nbsp; Orange = genuinely new work</span>
+    </div>
+
+    <!-- PHASE 0 -->
+    <div class="phase-block" style="--tier: var(--cool)">
+      <div class="phase-bar">
+        <span class="tier-chip">P0</span>
+        <h3>Foundation</h3>
+        <span class="est">23 dev-days</span>
+      </div>
+      <p class="phase-goal">
+        Invisible to users and tempting to short-cut. Skipping the offline layer in particular will
+        force a rewrite once the app meets a real kitchen basement or a lift shaft.
+      </p>
+      <div class="tickets">
+
+        <div class="t">
+          <span class="id">F-01</span>
+          <div class="body">
+            <span class="title">Split the mobile entry point</span>
+            <span class="desc">Today every non-web build boots straight into the legacy guest check-in flow. Introduce a proper staff shell with build flavours so guest and staff targets can coexist or the guest target can be retired.</span>
+          </div>
+          <div class="src"><em>main.dart</em> · <em>router.dart</em> · <span class="new">new shell</span></div>
+          <span class="eff">2d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">F-02</span>
+          <div class="body">
+            <span class="title">Staff sign-in and session</span>
+            <span class="desc">Email and username login both exist server-side. Add encrypted token storage, biometric unlock for shift handovers on a shared device, and a fast re-auth path.</span>
+          </div>
+          <div class="src"><em>app_auth_provider.dart</em> · <span class="new">secure storage, local_auth</span></div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">F-03</span>
+          <div class="body">
+            <span class="title">Property switcher</span>
+            <span class="desc">Staff can be attached to several properties. A compact switcher must re-scope every service and cached dataset on change — the desktop shell already does this on switch and is the reference.</span>
+          </div>
+          <div class="src"><em>get_my_properties()</em> · <em>app_shell.dart</em></div>
+          <span class="eff">2d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">F-04</span>
+          <div class="body">
+            <span class="title">Permission-driven navigation</span>
+            <span class="desc">Build the tab bar from the user's privilege map, never a fixed list, and land each role on a sensible default screen. A waiter with only POS access should never see an empty dashboard.</span>
+          </div>
+          <div class="src"><em>staff_permission.dart</em> · <em>PrivilegeLevel</em> · 13 section keys</div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">F-05</span>
+          <div class="body">
+            <span class="title">Offline cache and write queue</span>
+            <span class="desc">Read-through cache for menu, tables, rooms and today's bookings, plus an outbox that queues order writes and replays them in order on reconnect. Conflict rule needs deciding — see open questions.</span>
+          </div>
+          <div class="src"><span class="new">drift or hive + connectivity_plus</span></div>
+          <span class="eff">8d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">F-06</span>
+          <div class="body">
+            <span class="title">Push notifications</span>
+            <span class="desc">The notifications table and its event types already exist but only surface in-app. Add FCM/APNs delivery driven by an insert trigger, plus deep links so tapping an alert opens the right order or booking.</span>
+          </div>
+          <div class="src"><em>notifications table</em> · <span class="new">FCM + edge function</span></div>
+          <span class="eff">5d</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- PHASE 1 -->
+    <div class="phase-block" style="--tier: var(--hot)">
+      <div class="phase-bar">
+        <span class="tier-chip">P1</span>
+        <h3>Restaurant Floor</h3>
+        <span class="est">26 dev-days</span>
+      </div>
+      <p class="phase-goal">
+        The first build worth putting in a customer's hands. Target a waiter taking an order at the table
+        and a kitchen bumping tickets on a wall tablet. Do not port the desktop screens — the POS screen
+        alone is 3,014 lines built for a mouse.
+      </p>
+      <div class="tickets">
+
+        <div class="t">
+          <span class="id">R-01</span>
+          <div class="body">
+            <span class="title">Live table floor</span>
+            <span class="desc">Grid of tables colour-coded by state — free, seated, order in kitchen, bill requested. Realtime already pushes order changes, so the board stays live without polling.</span>
+          </div>
+          <div class="src"><em>getTables()</em> · <em>getActiveOrderForTable()</em> · realtime</div>
+          <span class="eff">4d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">R-02</span>
+          <div class="body">
+            <span class="title">Order entry</span>
+            <span class="desc">The core screen: pick table, browse or search the menu by category, apply modifiers, set covers, add kitchen notes, fire to kitchen. Optimise for thumb reach and one-handed use while standing.</span>
+          </div>
+          <div class="src"><em>createTableOrder()</em> · <em>getMenuItems()</em> · menu_modifiers</div>
+          <span class="eff">7d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">R-03</span>
+          <div class="body">
+            <span class="title">Running tab and second rounds</span>
+            <span class="desc">Append courses to an open order, view the tab so far, and handle several open orders on one table — the settle-all path already exists server-side.</span>
+          </div>
+          <div class="src"><em>addItemsToOrder()</em> · <em>getOpenOrdersForTable()</em></div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">R-04</span>
+          <div class="body">
+            <span class="title">Take payment</span>
+            <span class="desc">Split payments, percentage or fixed discount, service charge and tax from property settings, and charge-to-room for in-house guests. All four paths are already implemented and tested on web.</span>
+          </div>
+          <div class="src"><em>collectTablePayment()</em> · <em>settleAllTableOrders()</em> · <em>getChargeSettings()</em></div>
+          <span class="eff">5d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">R-05</span>
+          <div class="body">
+            <span class="title">Kitchen display, tablet layout</span>
+            <span class="desc">Landscape-first ticket rail with per-item ready toggles, order ageing and the existing audio alert. Screen stays awake; large touch targets for wet or gloved hands.</span>
+          </div>
+          <div class="src"><em>kitchen_screen.dart</em> logic · realtime channel</div>
+          <span class="eff">4d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">R-06</span>
+          <div class="body">
+            <span class="title">Bluetooth receipt printing</span>
+            <span class="desc">The web app prints PDFs via a browser dialog, which is useless on a phone. Needs native ESC/POS over Bluetooth for 58mm and 80mm rolls, plus a saved-printer setting per device.</span>
+          </div>
+          <div class="src"><em>invoice_service.dart</em> data · <span class="new">ESC/POS + BLE</span></div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">R-07</span>
+          <div class="body">
+            <span class="title">Mark an item off</span>
+            <span class="desc">One tap to 86 a sold-out dish from the floor, reflected instantly on the guest QR menu and every other device. Small feature, disproportionate daily value.</span>
+          </div>
+          <div class="src"><em>saveMenuItem()</em> · <em>adjustStock()</em></div>
+          <span class="eff">1d</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- PHASE 2 -->
+    <div class="phase-block" style="--tier: var(--accent)">
+      <div class="phase-bar">
+        <span class="tier-chip">P2</span>
+        <h3>Front Desk &amp; Housekeeping</h3>
+        <span class="est">19 dev-days</span>
+      </div>
+      <p class="phase-goal">
+        Brings the hotel half of the product onto the phone. Note the realtime publication currently
+        covers restaurant orders only — extend it to bookings, rooms and check-ins before starting H-01.
+      </p>
+      <div class="tickets">
+
+        <div class="t">
+          <span class="id">H-01</span>
+          <div class="body">
+            <span class="title">Arrivals and departures board</span>
+            <span class="desc">Today's expected arrivals, in-house guests and due departures in one scrollable list with a pending-arrivals count. The natural home screen for front-desk staff.</span>
+          </div>
+          <div class="src"><em>getEnrichedCheckIns()</em> · <em>countPendingArrivalsToday()</em></div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">H-02</span>
+          <div class="body">
+            <span class="title">Check a guest in</span>
+            <span class="desc">Look up by booking reference, confirm guest details, capture ID by camera instead of a photocopier, take a signature, assign the room. The camera is the reason this belongs on mobile.</span>
+          </div>
+          <div class="src"><em>performCheckIn()</em> · <em>lookupBooking()</em> · <span class="new">camera, signature</span></div>
+          <span class="eff">5d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">H-03</span>
+          <div class="body">
+            <span class="title">Check out and settle the folio</span>
+            <span class="desc">Show room charges and any restaurant orders billed to the room, settle the balance, and issue the invoice. The folio assembly logic already exists.</span>
+          </div>
+          <div class="src"><em>performCheckOut()</em> · <em>getChargedToRoomOrders()</em> · <em>invoice_service</em></div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">H-04</span>
+          <div class="body">
+            <span class="title">Room and housekeeping board</span>
+            <span class="desc">Housekeepers update status from the corridor — dirty, cleaning, inspected, ready. Low effort, and it removes a paper round from the daily routine.</span>
+          </div>
+          <div class="src"><em>getAllRooms()</em> · <em>toggleRoomStatus()</em> · housekeeping column</div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">H-05</span>
+          <div class="body">
+            <span class="title">Room service queue</span>
+            <span class="desc">Orders placed from the guest room QR arrive as a push, are acknowledged, prepared and marked delivered against a room number. Closes the loop on a flow that already half exists.</span>
+          </div>
+          <div class="src"><em>notifyRoomServiceOrder()</em> · order type roomService</div>
+          <span class="eff">2d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">H-06</span>
+          <div class="body">
+            <span class="title">Reservations — view and quick create</span>
+            <span class="desc">Read-first: calendar and list of upcoming bookings, plus a fast walk-in create. Keep channel attribution and locked rates intact; leave complex edits on desktop for now.</span>
+          </div>
+          <div class="src"><em>getEnrichedBookings()</em> · <em>addReservation()</em> · rate locking</div>
+          <span class="eff">3d</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- PHASE 3 -->
+    <div class="phase-block" style="--tier: var(--amber)">
+      <div class="phase-bar">
+        <span class="tier-chip">P3</span>
+        <h3>Manager &amp; Staff Self-Service</h3>
+        <span class="est">16 dev-days</span>
+      </div>
+      <p class="phase-goal">
+        Mostly read and approve. M-02 is the standout — the backend is already written, so it is close to
+        free, and it gives every staff member a daily reason to open the app.
+      </p>
+      <div class="tickets">
+
+        <div class="t">
+          <span class="id">M-01</span>
+          <div class="body">
+            <span class="title">Today at a glance</span>
+            <span class="desc">Occupancy, arrivals, covers and revenue for the current day, with the previous period alongside. Owners will open this more than any other screen.</span>
+          </div>
+          <div class="src"><em>getDashboardStats()</em> · <em>fl_chart</em></div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">M-02</span>
+          <div class="body">
+            <span class="title">Clock in, clock out, my shifts</span>
+            <span class="desc">Staff start and end shifts on their own phone and see the week ahead. Optionally verify location or a premises QR to stop off-site clock-ins. Backend is complete already.</span>
+          </div>
+          <div class="src"><em>shift_service.dart</em> — clockIn, clockOut, getShiftsForRange</div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">M-03</span>
+          <div class="body">
+            <span class="title">Expense capture with receipt photo</span>
+            <span class="desc">Log a purchase where it happens and attach the receipt image rather than carrying paper back to the office. Supports both general and room-linked expenses.</span>
+          </div>
+          <div class="src"><em>addExpense()</em> · <em>getRoomExpenses()</em> · <span class="new">camera + storage</span></div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">M-04</span>
+          <div class="body">
+            <span class="title">Cancellation and refund approvals</span>
+            <span class="desc">A manager approves a void or refund from their phone instead of walking to the office. Item-level and whole-order paths both exist, including inventory restoration.</span>
+          </div>
+          <div class="src"><em>cancelOrderItem()</em> · <em>refundOrderItem()</em> · <em>cancelOrder()</em></div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">M-05</span>
+          <div class="body">
+            <span class="title">Notification inbox</span>
+            <span class="desc">History behind the pushes — new reservations, check-ins and outs, low availability, room service, shift changes, housekeeping. Read state syncs with web.</span>
+          </div>
+          <div class="src"><em>watchNotifications()</em> · <em>markAllAsRead()</em></div>
+          <span class="eff">2d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">M-06</span>
+          <div class="body">
+            <span class="title">Sales analytics, mobile cut</span>
+            <span class="desc">Top-selling items, revenue trend and covers by daypart. Pick three or four charts that survive a phone screen rather than porting the desktop analytics wholesale.</span>
+          </div>
+          <div class="src"><em>restaurant_analytics_screen.dart</em> queries</div>
+          <span class="eff">2d</span>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- PHASE 4 -->
+    <div class="phase-block" style="--tier: var(--muted)">
+      <div class="phase-bar">
+        <span class="tier-chip">P4</span>
+        <h3>Differentiators</h3>
+        <span class="est">Backlog — sequence on demand</span>
+      </div>
+      <p class="phase-goal">
+        Real value, but none of it blocks a launch. Order these against what customers ask for once the
+        app is in daily use.
+      </p>
+      <div class="tickets">
+
+        <div class="t">
+          <span class="id">X-01</span>
+          <div class="body">
+            <span class="title">QR and barcode scanning</span>
+            <span class="desc">The app generates QR codes today but cannot read one. Scanning a table, room or booking reference removes most manual lookup across every flow above.</span>
+          </div>
+          <div class="src"><span class="new">mobile_scanner</span></div>
+          <span class="eff">2d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">X-02</span>
+          <div class="body">
+            <span class="title">Delivery order intake</span>
+            <span class="desc">Manual entry of UberEats, PickMe and other platform orders with their reference, so delivery revenue lands in the same reporting as everything else.</span>
+          </div>
+          <div class="src"><em>delivery_platform</em> · <em>delivery_order_ref</em> columns</div>
+          <span class="eff">2d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">X-03</span>
+          <div class="body">
+            <span class="title">Team and permission management</span>
+            <span class="desc">Invite a staff member and set their section privileges from the phone. Owner-only, and the invite flow already exists end to end.</span>
+          </div>
+          <div class="src"><em>staff_service.dart</em> · staff_invites</div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">X-04</span>
+          <div class="body">
+            <span class="title">Shift scheduling</span>
+            <span class="desc">Build next week's rota, including the copy-previous-week shortcut. Genuinely hard to fit on a phone — consider tablet-only.</span>
+          </div>
+          <div class="src"><em>copyWeek()</em> · <em>addShift()</em></div>
+          <span class="eff">4d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">X-05</span>
+          <div class="body">
+            <span class="title">Stock count mode</span>
+            <span class="desc">Walk the store room entering counts against ingredients, with variance against expected stock. Costing and deduction logic is already in place.</span>
+          </div>
+          <div class="src"><em>getInventory()</em> · <em>adjustStock()</em></div>
+          <span class="eff">3d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">X-06</span>
+          <div class="body">
+            <span class="title">Language and currency</span>
+            <span class="desc">Per-property currency already exists in the schema; the interface is English-only. Needed for any market where floor staff are not comfortable in English.</span>
+          </div>
+          <div class="src"><em>hotels.currency</em> · <span class="new">flutter_localizations</span></div>
+          <span class="eff">4d</span>
+        </div>
+
+        <div class="t">
+          <span class="id">X-07</span>
+          <div class="body">
+            <span class="title">Guest history</span>
+            <span class="desc">Past stays, spend and preferences on the guest record, so a returning guest can be recognised at check-in. Data is there; the view is not.</span>
+          </div>
+          <div class="src"><em>getAllGuests()</em> · bookings history</div>
+          <span class="eff">3d</span>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ══ 5. ENGINEERING NOTES ═════════════════════════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Notes for the developer</h2>
+      <span class="note">Read before estimating</span>
+    </div>
+
+    <div class="notes">
+
+      <div class="note-row">
+        <span class="num">01</span>
+        <div>
+          <h4>Share the services, fork the screens</h4>
+          <p>
+            Everything under <code>lib/services/</code> is plain Dart against Supabase with no widget
+            dependencies — import it directly and it will work. The web screens are the opposite:
+            <code>restaurant_management_screen.dart</code> is 3,538 lines and
+            <code>pos_screen.dart</code> is 3,014, both built around wide layouts and hover. Rebuild the
+            UI under <code>lib/presentation/mobile/</code>. Any business rule you find yourself
+            reimplementing is a signal it belongs in a service instead.
+          </p>
+        </div>
+      </div>
+
+      <div class="note-row">
+        <span class="num">02</span>
+        <div>
+          <h4>The existing mobile folder is not a starting point</h4>
+          <p>
+            <code>lib/mobile/</code> holds a five-screen guest self check-in flow on the old
+            Navigator plus <code>HotelSession</code> pattern, predating GoRouter and Riverpod. Decide
+            early whether to retire it or port it; leaving it in place while building a second mobile
+            app on the newer pattern will confuse everyone who joins the project.
+          </p>
+        </div>
+      </div>
+
+      <div class="note-row">
+        <span class="num">03</span>
+        <div>
+          <h4>Extend the realtime publication before phase 2</h4>
+          <p>
+            Only <code>restaurant_orders</code> is published for realtime. The arrivals board and room
+            status screens need <code>bookings</code>, <code>check_ins</code> and <code>rooms</code>
+            added too, or they will fall back to polling and drain battery. One migration.
+          </p>
+        </div>
+      </div>
+
+      <div class="note-row">
+        <span class="num">04</span>
+        <div>
+          <h4>Push needs a server-side trigger, not just a client</h4>
+          <p>
+            Notification rows are written by the app today and read back over a stream. Real push means
+            an edge function on insert that resolves the target device tokens and calls FCM. Budget for
+            a device-token table and the token refresh lifecycle — it is the part that usually overruns.
+          </p>
+        </div>
+      </div>
+
+      <div class="note-row">
+        <span class="num">05</span>
+        <div>
+          <h4>Security is already handled — do not re-implement it</h4>
+          <p>
+            Tenancy is enforced by row-level security, hardened across several migrations. The app signs
+            in with the same anon key and a user JWT, and sees only its own property's rows. Never add a
+            service-role key to a mobile binary; anything needing elevated rights must go through an
+            existing RPC.
+          </p>
+        </div>
+      </div>
+
+      <div class="note-row">
+        <span class="num">06</span>
+        <div>
+          <h4>Two device classes, not one</h4>
+          <p>
+            Order entry, housekeeping and clock-in are phone features. The kitchen display and shift
+            rota are tablet features and will not compress to 400px honestly. Agree the target devices
+            before layout work starts, and keep the kitchen screen landscape-locked with the wake lock held.
+          </p>
+        </div>
+      </div>
+
+      <div class="note-row">
+        <span class="num">07</span>
+        <div>
+          <h4>Keep subscription purchase out of the app</h4>
+          <p>
+            PayHere is wired up on web. Selling or upgrading a plan inside the binary pulls both stores'
+            in-app purchase rules into scope. Show plan state and limits read-only, and send upgrades to
+            the web checkout.
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══ 6. PACKAGES ══════════════════════════════════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Dependencies to add</h2>
+      <span class="note">Current pubspec has none of the native capability packages a mobile build needs</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Capability</th>
+            <th scope="col">Package</th>
+            <th scope="col">Needed for</th>
+            <th scope="col">Phase</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class="for">Push delivery</td><td class="pkg">firebase_core, firebase_messaging</td><td class="for">Order and booking alerts</td><td class="ph-tag">0</td></tr>
+          <tr><td class="for">Local alerts</td><td class="pkg">flutter_local_notifications</td><td class="for">Kitchen ticket sound, foreground banners</td><td class="ph-tag">0</td></tr>
+          <tr><td class="for">Offline store</td><td class="pkg">drift <em>or</em> hive</td><td class="for">Cached menu, rooms, order outbox</td><td class="ph-tag">0</td></tr>
+          <tr><td class="for">Network state</td><td class="pkg">connectivity_plus</td><td class="for">Queue replay, offline banner</td><td class="ph-tag">0</td></tr>
+          <tr><td class="for">Token storage</td><td class="pkg">flutter_secure_storage</td><td class="for">Session persistence</td><td class="ph-tag">0</td></tr>
+          <tr><td class="for">Biometrics</td><td class="pkg">local_auth</td><td class="for">Fast unlock on shared devices</td><td class="ph-tag">0</td></tr>
+          <tr><td class="for">Screen wake</td><td class="pkg">wakelock_plus</td><td class="for">Kitchen display stays on</td><td class="ph-tag">1</td></tr>
+          <tr><td class="for">Thermal print</td><td class="pkg">esc_pos_utils_plus + print_bluetooth_thermal</td><td class="for">58mm / 80mm receipts</td><td class="ph-tag">1</td></tr>
+          <tr><td class="for">Camera</td><td class="pkg">image_picker</td><td class="for">Guest ID, receipt photos</td><td class="ph-tag">2</td></tr>
+          <tr><td class="for">Signature</td><td class="pkg">signature</td><td class="for">Check-in registration card</td><td class="ph-tag">2</td></tr>
+          <tr><td class="for">Location</td><td class="pkg">geolocator</td><td class="for">Verified clock-in, if adopted</td><td class="ph-tag">3</td></tr>
+          <tr><td class="for">Scanning</td><td class="pkg">mobile_scanner</td><td class="for">Table, room and booking QR</td><td class="ph-tag">4</td></tr>
+          <tr><td class="for">Crash reporting</td><td class="pkg">sentry_flutter</td><td class="for">Field diagnostics — add before the first pilot</td><td class="ph-tag">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 7. OUT OF SCOPE ══════════════════════════════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Deliberately not building</h2>
+      <span class="note">Written down so it is a decision, not an oversight</span>
+    </div>
+    <div class="excluded">
+      <div class="ex">
+        <span class="what">A guest-facing app</span>
+        <span class="why">The QR web flows already cover menu, room service and check-in with no install. Revisit only as an install prompt on the existing web pages.</span>
+      </div>
+      <div class="ex">
+        <span class="what">Superadmin on mobile</span>
+        <span class="why">Internal tooling used by a handful of people who all have laptops. No case for the build cost.</span>
+      </div>
+      <div class="ex">
+        <span class="what">In-app plan purchase</span>
+        <span class="why">Triggers store in-app purchase rules and their commission. Keep checkout on web and link out.</span>
+      </div>
+      <div class="ex">
+        <span class="what">Full desktop parity</span>
+        <span class="why">Menu engineering, ingredient costing and property configuration are desk work. Leave them on web permanently.</span>
+      </div>
+      <div class="ex">
+        <span class="what">Channel manager sync</span>
+        <span class="why">Booking channels are recorded as attribution only. Live OTA sync is a backend product decision, not a mobile one.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 8. QUESTIONS ═════════════════════════════════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>Decisions needed before phase 0 starts</h2>
+    </div>
+    <div class="qs">
+      <div class="q">
+        <span class="ask">How deep does offline have to go?</span>
+        <span class="blocks">Blocks F-05</span>
+        <span class="ctx">Read-only cache is a fraction of the cost of a full write queue. Taking orders with no signal is the expensive version — worth it only if venues actually have dead zones.</span>
+      </div>
+      <div class="q">
+        <span class="ask">iOS and Android together, or Android first?</span>
+        <span class="blocks">Blocks F-01</span>
+        <span class="ctx">Android-first cuts release overhead and store review from the pilot. Flutter makes the second platform cheap later, but the App Store account and device testing are not free.</span>
+      </div>
+      <div class="q">
+        <span class="ask">Which receipt printers must be supported?</span>
+        <span class="blocks">Blocks R-06</span>
+        <span class="ctx">Named models let this be a three-day task. "Whatever the customer owns" turns it into an open-ended compatibility exercise.</span>
+      </div>
+      <div class="q">
+        <span class="ask">Is verified clock-in wanted, and by what method?</span>
+        <span class="blocks">Blocks M-02</span>
+        <span class="ctx">Location adds a permission prompt and a privacy conversation. A premises QR achieves most of the same control with neither.</span>
+      </div>
+      <div class="q">
+        <span class="ask">Retire or port the existing guest check-in flow?</span>
+        <span class="blocks">Blocks F-01</span>
+        <span class="ctx">It currently owns the mobile entry point, so something has to happen to it in the first ticket either way.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Estimates assume one experienced Flutter developer already familiar with this codebase, and exclude QA, store submission and pilot support.</p>
+    <p class="mono">Phases 0–3 · 84 dev-days · roughly 17 weeks solo, or 9–10 weeks with two developers working in parallel from phase 1.</p>
+  </div>
+</footer>
+
+</body>
+</html>
