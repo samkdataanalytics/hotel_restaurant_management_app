@@ -10,8 +10,10 @@ class Organization {
   final String id;
   final String name;
   final String slug;
-  final String country;
+  final String country;      // display name, e.g. 'Sri Lanka'
+  final String countryCode;  // ISO 3166-1 alpha-2, e.g. 'LK'
   final String phone;
+  final String email;        // company contact/billing address
   final String logoUrl;
   final String plan;   // growth | starter | pro | enterprise
   final String status; // active | suspended | trialing | trial_expired
@@ -33,7 +35,9 @@ class Organization {
     required this.name,
     required this.slug,
     required this.country,
+    this.countryCode = '',
     required this.phone,
+    this.email = '',
     required this.logoUrl,
     required this.plan,
     required this.status,
@@ -50,7 +54,9 @@ class Organization {
         name:                 r['name']                  as String,
         slug:                 r['slug']                  as String,
         country:              r['country']               as String? ?? '',
+        countryCode:          r['country_code']          as String? ?? '',
         phone:                r['phone']                 as String? ?? '',
+        email:                r['email']                 as String? ?? '',
         logoUrl:              r['logo_url']              as String? ?? '',
         plan:                 r['plan']                  as String? ?? 'starter',
         status:               r['status']                as String? ?? 'active',
@@ -126,7 +132,8 @@ class Organization {
 
   Organization copyWithCounts({int? propertyCount, int? memberCount}) {
     final copy = Organization(
-      id: id, name: name, slug: slug, country: country, phone: phone,
+      id: id, name: name, slug: slug, country: country,
+      countryCode: countryCode, phone: phone, email: email,
       logoUrl: logoUrl, plan: plan, status: status, createdAt: createdAt,
       trialEndsAt: trialEndsAt,
       customPriceMonthly: customPriceMonthly,
@@ -234,6 +241,89 @@ class OrgMember {
       );
 }
 
+// ─── Countries ────────────────────────────────────────────────────────────────
+
+/// A selectable country. [code] is ISO 3166-1 alpha-2 and is what gets stored
+/// in organizations.country_code; [name] is the display string kept in
+/// organizations.country so existing screens keep rendering a readable value.
+class AppCountry {
+  final String code;
+  final String name;
+  final String dialCode;
+  const AppCountry(this.code, this.name, this.dialCode);
+}
+
+/// Markets served first, then the rest alphabetically. Kept as a const list to
+/// match the existing [kCurrencies] pattern — no extra dependency needed.
+const kCountries = [
+  AppCountry('LK', 'Sri Lanka',            '+94'),
+  AppCountry('IN', 'India',                '+91'),
+  AppCountry('MV', 'Maldives',             '+960'),
+  AppCountry('SG', 'Singapore',            '+65'),
+  AppCountry('AE', 'United Arab Emirates', '+971'),
+  AppCountry('AU', 'Australia',            '+61'),
+  AppCountry('BD', 'Bangladesh',           '+880'),
+  AppCountry('CA', 'Canada',               '+1'),
+  AppCountry('CN', 'China',                '+86'),
+  AppCountry('FR', 'France',               '+33'),
+  AppCountry('DE', 'Germany',              '+49'),
+  AppCountry('HK', 'Hong Kong',            '+852'),
+  AppCountry('ID', 'Indonesia',            '+62'),
+  AppCountry('IE', 'Ireland',              '+353'),
+  AppCountry('IT', 'Italy',                '+39'),
+  AppCountry('JP', 'Japan',                '+81'),
+  AppCountry('MY', 'Malaysia',             '+60'),
+  AppCountry('NL', 'Netherlands',          '+31'),
+  AppCountry('NZ', 'New Zealand',          '+64'),
+  AppCountry('NP', 'Nepal',                '+977'),
+  AppCountry('PK', 'Pakistan',             '+92'),
+  AppCountry('PH', 'Philippines',          '+63'),
+  AppCountry('QA', 'Qatar',                '+974'),
+  AppCountry('SA', 'Saudi Arabia',         '+966'),
+  AppCountry('ZA', 'South Africa',         '+27'),
+  AppCountry('ES', 'Spain',                '+34'),
+  AppCountry('CH', 'Switzerland',          '+41'),
+  AppCountry('TH', 'Thailand',             '+66'),
+  AppCountry('GB', 'United Kingdom',       '+44'),
+  AppCountry('US', 'United States',        '+1'),
+  AppCountry('VN', 'Vietnam',              '+84'),
+];
+
+AppCountry? countryByCode(String code) {
+  final c = code.trim().toUpperCase();
+  for (final country in kCountries) {
+    if (country.code == c) return country;
+  }
+  return null;
+}
+
+// ─── Contact-detail validation ────────────────────────────────────────────────
+// Mirrors the CHECK constraints and the RPC guards in migration 066. Keep the
+// three in step: form, RPC and constraint must agree or a user hits a server
+// error after passing client validation.
+
+final RegExp _kEmailRe = RegExp(r'^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$');
+
+/// Returns null when [value] is a usable company email, else an error message.
+String? validateCompanyEmail(String? value) {
+  final v = (value ?? '').trim();
+  if (v.isEmpty) return 'Company email is required';
+  if (!_kEmailRe.hasMatch(v)) return 'Enter a valid email address';
+  return null;
+}
+
+/// Returns null when [value] holds 7-15 digits (the E.164 range) once +, spaces,
+/// dashes and parentheses are stripped, else an error message.
+String? validateCompanyPhone(String? value) {
+  final v = (value ?? '').trim();
+  if (v.isEmpty) return 'Phone number is required';
+  final digits = v.replaceAll(RegExp(r'[^0-9]'), '');
+  if (digits.length < 7 || digits.length > 15) {
+    return 'Enter a valid phone number (7–15 digits)';
+  }
+  return null;
+}
+
 // ─── Currency helpers ─────────────────────────────────────────────────────────
 
 class AppCurrency {
@@ -317,17 +407,23 @@ class OrganizationService {
     required String name,
     required String slug,
     required String country,
+    required String countryCode,
     required String phone,
+    required String email,
     String logoUrl = '',
   }) async {
     // SECURITY DEFINER RPC handles org + membership atomically and recovers
     // orphaned orgs (org row created but membership INSERT failed previously).
+    // It also re-validates email/phone/country, so a direct RPC call cannot
+    // bypass the form validators below.
     final rows = await _db.rpc('create_or_recover_organization', params: {
-      'p_name':     name,
-      'p_slug':     slug,
-      'p_country':  country,
-      'p_phone':    phone,
-      'p_logo_url': logoUrl,
+      'p_name':         name,
+      'p_slug':         slug,
+      'p_country':      country,
+      'p_country_code': countryCode,
+      'p_phone':        phone,
+      'p_email':        email,
+      'p_logo_url':     logoUrl,
     });
 
     final row = (rows as List).first as Map<String, dynamic>;

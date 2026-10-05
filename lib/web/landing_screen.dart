@@ -409,7 +409,7 @@ class _HeroSection extends StatelessWidget {
             child: Text(
               'Independent hotels and restaurants waste hours every day '
               'juggling check-ins on WhatsApp, menus on paper, and finances in Excel. '
-              'HotRest replaces all of it � one beautiful dashboard for every department.',
+              'HotRest replaces all of it — one beautiful dashboard for every department.',
               textAlign: TextAlign.center,
               style: TextStyle(color: _C.subtext, fontSize: isMobile ? 15 : 17, height: 1.65),
             ),
@@ -656,7 +656,7 @@ class _HowItWorksSection extends StatelessWidget {
           const SizedBox(height: 56),
           isMobile
               ? Column(children: [
-                  _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff � all in one onboarding flow.'),
+                  _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff — all in one onboarding flow.'),
                   const SizedBox(height: 32),
                   _StepCard(number: '02', icon: Icons.dashboard_rounded,   color: _C.gold,           title: 'Manage Everything',       desc: 'Check guests in, process restaurant orders, track staff shifts, and monitor occupancy from one unified dashboard.'),
                   const SizedBox(height: 32),
@@ -665,7 +665,7 @@ class _HowItWorksSection extends StatelessWidget {
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff � all in one onboarding flow.')),
+                    Expanded(child: _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff — all in one onboarding flow.')),
                     Padding(
                       padding: const EdgeInsets.only(top: 52),
                       child: Icon(Icons.arrow_forward_rounded, color: _C.border, size: 28),
@@ -1009,7 +1009,7 @@ class _FeaturesSection extends StatelessWidget {
     (icon: Icons.point_of_sale_rounded, color: Color(0xFFF97316), title: 'Restaurant POS',
       bullets: ['Table-side & counter ordering', 'Live kitchen display system (KDS)', 'Menu & category management', 'Split bills & multiple payment modes', 'Real-time sales analytics']),
     (icon: Icons.qr_code_2_rounded,   color: Color(0xFF22C55E), title: 'Guest Portal',
-      bullets: ['QR-based self check-in & check-out', 'Room service ordering via phone', 'Digital menus � no app download', 'Booking lookup & stay details', 'Direct messaging with front desk']),
+      bullets: ['QR-based self check-in & check-out', 'Room service ordering via phone', 'Digital menus — no app download', 'Booking lookup & stay details', 'Direct messaging with front desk']),
     (icon: Icons.palette_rounded,     color: Color(0xFFD4A853), title: 'White-Label Ready',
       bullets: ['Custom brand colors & logo', 'Property name on all guest screens', 'Branded QR codes & menus', 'No HotRest branding visible to guests', 'Multi-property brand profiles']),
     (icon: Icons.people_alt_rounded,  color: Color(0xFF8B5CF6), title: 'Staff & Shifts',
@@ -1042,7 +1042,7 @@ class _FeaturesSection extends StatelessWidget {
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 540),
             child: const Text(
-              'Purpose-built for hotels and restaurants � not a bloated ERP. '
+              'Purpose-built for hotels and restaurants — not a bloated ERP. '
               'Every tool you need, none you don\'t.',
               textAlign: TextAlign.center,
               style: TextStyle(color: _C.subtext, fontSize: 15.5, height: 1.55),
@@ -1407,7 +1407,7 @@ class _PricingSectionState extends ConsumerState<_PricingSection> {
               children: [
                 Icon(Icons.local_fire_department_rounded, color: Color(0xFFEF4444), size: 14),
                 SizedBox(width: 7),
-                Text('Early-Access Pricing � Rates locked in for life when you sign up now',
+                Text('Early-Access Pricing — Rates locked in for life when you sign up now',
                     style: TextStyle(color: Color(0xFFEF4444), fontSize: 12, fontWeight: FontWeight.w700)),
               ],
             ),
@@ -1675,7 +1675,7 @@ class _FaqSection extends StatelessWidget {
   static const _faqs = [
     (
       q: 'Do you offer a free trial?',
-      a: 'Yes! Every new account starts with a 45-day free trial with full access to every feature - properties, rooms, restaurant tables, staff accounts, the guest portal and white-label branding. No credit card required � just sign up and start managing.',
+      a: 'Yes! Every new account starts with a 45-day free trial with full access to every feature - properties, rooms, restaurant tables, staff accounts, the guest portal and white-label branding. No credit card required — just sign up and start managing.',
     ),
     (
       q: 'Can I manage multiple properties?',
@@ -1683,7 +1683,7 @@ class _FaqSection extends StatelessWidget {
     ),
     (
       q: 'Do guests need to download an app?',
-      a: 'No. The guest portal works entirely via QR code in any mobile browser. Guests can check in, browse the restaurant menu, order room service, and check out � no download required.',
+      a: 'No. The guest portal works entirely via QR code in any mobile browser. Guests can check in, browse the restaurant menu, order room service, and check out — no download required.',
     ),
     (
       q: 'How secure is guest and payment data?',
@@ -1691,7 +1691,7 @@ class _FaqSection extends StatelessWidget {
     ),
     (
       q: 'Can I white-label the guest portal?',
-      a: 'Yes, on Pro and Enterprise plans. You can set your own logo, brand colours, and property name. Guests see your brand � not ours.',
+      a: 'Yes, on Pro and Enterprise plans. You can set your own logo, brand colours, and property name. Guests see your brand — not ours.',
     ),
     (
       q: 'Can I cancel or downgrade anytime?',
@@ -2001,7 +2001,7 @@ class _Footer extends StatelessWidget {
   );
 
   Widget _copyright() => Text(
-    '� 2025 HotRest. All rights reserved.',
+    '© 2025 HotRest. All rights reserved.',
     style: TextStyle(color: Colors.white.withAlpha(80), fontSize: 12),
   );
 
@@ -2145,21 +2145,21 @@ class _DemoDialogState extends State<_DemoDialog> {
 
   static const _highlights = [
     [
-      (icon: Icons.how_to_reg_rounded,   color: Color(0xFF3B82F6), title: 'One-click check-in',        desc: 'Front desk checks in a guest in under 10 seconds � folio auto-generated, room assigned, key ready.'),
+      (icon: Icons.how_to_reg_rounded,   color: Color(0xFF3B82F6), title: 'One-click check-in',        desc: 'Front desk checks in a guest in under 10 seconds — folio auto-generated, room assigned, key ready.'),
       (icon: Icons.king_bed_rounded,      color: Color(0xFF22C55E), title: 'Live room availability',    desc: 'Color-coded room grid shows occupied, available, and maintenance rooms in real time.'),
-      (icon: Icons.receipt_long_rounded,  color: Color(0xFFD4A853), title: 'Instant folio billing',     desc: 'Auto-calculates room charges, extras and taxes � export to PDF with one click.'),
-      (icon: Icons.people_alt_rounded,    color: Color(0xFF8B5CF6), title: 'Staff shift management',    desc: 'Assign and track shifts, clock-ins and attendance � no third-party HR tool needed.'),
+      (icon: Icons.receipt_long_rounded,  color: Color(0xFFD4A853), title: 'Instant folio billing',     desc: 'Auto-calculates room charges, extras and taxes — export to PDF with one click.'),
+      (icon: Icons.people_alt_rounded,    color: Color(0xFF8B5CF6), title: 'Staff shift management',    desc: 'Assign and track shifts, clock-ins and attendance — no third-party HR tool needed.'),
     ],
     [
-      (icon: Icons.point_of_sale_rounded, color: Color(0xFFF97316), title: 'Table-side ordering',       desc: 'Waiters take orders on any device � sent instantly to the kitchen display, no paper tickets.'),
+      (icon: Icons.point_of_sale_rounded, color: Color(0xFFF97316), title: 'Table-side ordering',       desc: 'Waiters take orders on any device — sent instantly to the kitchen display, no paper tickets.'),
       (icon: Icons.kitchen_rounded,       color: Color(0xFFEF4444), title: 'Kitchen display system',    desc: 'KDS shows orders in real time, with timers and priority flags so chefs never miss a ticket.'),
-      (icon: Icons.splitscreen_rounded,   color: Color(0xFF22C55E), title: 'Split bills & payments',    desc: 'Split any bill by item or equally across guests � supports cash, card and mixed payments.'),
+      (icon: Icons.splitscreen_rounded,   color: Color(0xFF22C55E), title: 'Split bills & payments',    desc: 'Split any bill by item or equally across guests — supports cash, card and mixed payments.'),
       (icon: Icons.analytics_rounded,     color: Color(0xFF06B6D4), title: 'Sales analytics',           desc: 'See your top-selling dishes, peak hours, and daily revenue at a glance.'),
     ],
     [
-      (icon: Icons.qr_code_2_rounded,    color: Color(0xFF22C55E), title: 'QR self check-in',          desc: 'Guests scan a QR at reception, fill in details on their phone and check in � no queue, no paperwork.'),
-      (icon: Icons.room_service_rounded,  color: Color(0xFFD4A853), title: 'Room service on phone',     desc: 'Guests order food from their room by scanning a QR � order goes straight to the kitchen.'),
-      (icon: Icons.restaurant_menu_rounded, color: Color(0xFF3B82F6), title: 'Digital table menu',      desc: 'Diners scan a table QR, browse the menu and order � no app download required.'),
+      (icon: Icons.qr_code_2_rounded,    color: Color(0xFF22C55E), title: 'QR self check-in',          desc: 'Guests scan a QR at reception, fill in details on their phone and check in — no queue, no paperwork.'),
+      (icon: Icons.room_service_rounded,  color: Color(0xFFD4A853), title: 'Room service on phone',     desc: 'Guests order food from their room by scanning a QR — order goes straight to the kitchen.'),
+      (icon: Icons.restaurant_menu_rounded, color: Color(0xFF3B82F6), title: 'Digital table menu',      desc: 'Diners scan a table QR, browse the menu and order — no app download required.'),
       (icon: Icons.no_accounts_rounded,   color: Color(0xFF8B5CF6), title: 'No app needed',             desc: 'Everything runs in the mobile browser. Guests do not install anything.'),
     ],
   ];
@@ -2187,7 +2187,7 @@ class _DemoDialogState extends State<_DemoDialog> {
                         Text('See HotRest in Action',
                             style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _C.text)),
                         SizedBox(height: 4),
-                        Text('What you get � out of the box, day one.',
+                        Text('What you get — out of the box, day one.',
                             style: TextStyle(color: _C.subtext, fontSize: 13)),
                       ],
                     ),
@@ -2287,7 +2287,7 @@ class _DemoDialogState extends State<_DemoDialog> {
                     elevation: 0,
                   ),
                   icon: const Icon(Icons.rocket_launch_rounded, size: 16),
-                  label: const Text('Start 45-Day Free Trial � No Credit Card',
+                  label: const Text('Start 45-Day Free Trial — No Credit Card',
                       style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                 ),
               ),
@@ -2376,7 +2376,7 @@ class _EnterpriseContactDialogState extends ConsumerState<_EnterpriseContactDial
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _C.text)),
       const SizedBox(height: 10),
       const Text(
-        'Thank you for reaching out. Our team will contact you within 1�2 business days to discuss your requirements.',
+        'Thank you for reaching out. Our team will contact you within 1–2 business days to discuss your requirements.',
         textAlign: TextAlign.center,
         style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.5),
       ),
@@ -2508,7 +2508,7 @@ class _PainSection extends StatelessWidget {
   static const _after = [
     (icon: Icons.dashboard_rounded,          text: 'One dashboard for front desk, kitchen & finance'),
     (icon: Icons.cloud_sync_rounded,         text: 'Real-time sync across all departments'),
-    (icon: Icons.kitchen_rounded,            text: 'Digital kitchen display � zero lost tickets'),
+    (icon: Icons.kitchen_rounded,            text: 'Digital kitchen display — zero lost tickets'),
     (icon: Icons.task_alt_rounded,           text: 'Every staff member knows their tasks instantly'),
     (icon: Icons.flash_on_rounded,           text: 'Save 4+ hours of admin work every single day'),
     (icon: Icons.qr_code_2_rounded,          text: 'Guests self-check-in in under 30 seconds'),
@@ -2546,7 +2546,7 @@ class _PainSection extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 540),
             child: const Text(
               "Sound familiar? You're not alone. Most independent hotels and "
-              'restaurants operate the same way � until they find HotRest.',
+              'restaurants operate the same way — until they find HotRest.',
               textAlign: TextAlign.center,
               style: TextStyle(color: _C.subtext, fontSize: 15.5, height: 1.55),
             ),
@@ -2658,7 +2658,10 @@ class _ComparisonSection extends ConsumerStatefulWidget {
 class _ComparisonSectionState extends ConsumerState<_ComparisonSection> {
   bool get isMobile => widget.isMobile;
 
-  String _startingPrice = 'Free / from LKR 3,450';
+  // No 'Free /' prefix: there is no free plan. Migration 059 removed it —
+  // organizations.plan is CHECK'd against (growth|starter|pro|enterprise), so
+  // a free tier cannot even be stored. Every account is trial-then-paid.
+  String _startingPrice = 'From LKR 3,999/mo';
 
   static const _features = [
     'Starting price',
@@ -2669,12 +2672,12 @@ class _ComparisonSectionState extends ConsumerState<_ComparisonSection> {
     'Digital guest menu',
     'Multi-property support',
     'White-label branding',
-    'Free plan available',
+    'Free trial',
   ];
 
-  List<dynamic> get _hotrest => [_startingPrice, '< 20 min', true, true, true, true, true, true, true];
-  static const _trad   = ['LKR 20,000+/mo',        'Days–Weeks', false, false, false, false, true, false, false];
-  static const _manual = ['Ongoing hidden costs', 'Never done',   false, false, false, false, false, false, true];
+  List<dynamic> get _hotrest => [_startingPrice, '< 20 min', true, true, true, true, true, true, '45 days, no card'];
+  static const _trad   = ['LKR 20,000+/mo',        'Days–Weeks', false, false, false, false, true, false, '14 days or none'];
+  static const _manual = ['Ongoing hidden costs', 'Never done',   false, false, false, false, false, false, '—'];
 
   @override
   void initState() {
@@ -2690,7 +2693,7 @@ class _ComparisonSectionState extends ConsumerState<_ComparisonSection> {
         final price = starter.priceMonthly.toInt();
         final formatted = price.toString().replaceAllMapped(
             RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
-        setState(() => _startingPrice = 'Free / LKR $formatted');
+        setState(() => _startingPrice = 'From LKR $formatted/mo');
       }
     } catch (_) {}
   }
