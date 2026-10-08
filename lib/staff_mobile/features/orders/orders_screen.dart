@@ -12,6 +12,7 @@ import '../../data/restaurant_repository.dart';
 import '../../session/staff_session.dart';
 import '../../theme/staff_theme.dart';
 import '../../widgets/offline_banner.dart';
+import 'order_filter_bar.dart';
 import '../../data/money.dart';
 
 /// Orders plus the table numbers they belong to, resolved once.
@@ -43,9 +44,6 @@ final _ordersProvider = FutureProvider.autoDispose<_OrdersView>((ref) async {
   );
 });
 
-/// Which slice of the order list is showing.
-enum _Filter { active, roomService, today, all }
-
 /// Live order list — what the kitchen is working on, and what it has finished.
 ///
 /// The floor board answers "what is happening at table 6". This answers "what
@@ -59,7 +57,7 @@ class OrdersScreen extends ConsumerStatefulWidget {
 }
 
 class _OrdersScreenState extends ConsumerState<OrdersScreen> {
-  _Filter _filter = _Filter.active;
+  OrderFilter _filter = OrderFilter.active;
   Timer? _ageTicker;
   final _busy = <String>{};
 
@@ -85,7 +83,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
 
     return Column(
       children: [
-        _FilterBar(
+        OrderFilterBar(
           filter: _filter,
           onChanged: (f) => setState(() => _filter = f),
         ),
@@ -106,16 +104,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                   return _Message(
                     icon: Icons.receipt_long_outlined,
                     title: switch (_filter) {
-                      _Filter.active => 'Nothing in the kitchen',
-                      _Filter.roomService => 'No room service orders',
-                      _Filter.today => 'No orders today',
-                      _Filter.all => 'No orders yet',
+                      OrderFilter.active => 'Nothing in the kitchen',
+                      OrderFilter.roomService => 'No room service orders',
+                      OrderFilter.today => 'No orders today',
+                      OrderFilter.all => 'No orders yet',
                     },
                     body: switch (_filter) {
-                      _Filter.active =>
+                      OrderFilter.active =>
                         'Orders fired from the floor appear here until they '
                             'are served.',
-                      _Filter.roomService =>
+                      OrderFilter.roomService =>
                         'Orders placed from an in-room QR code appear here '
                             'until they are delivered.',
                       _ => 'Orders will show here once they are taken.',
@@ -149,13 +147,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     );
   }
 
-  List<RestaurantOrder> _apply(_Filter filter, List<RestaurantOrder> all) {
+  List<RestaurantOrder> _apply(OrderFilter filter, List<RestaurantOrder> all) {
     // Cancelled orders are never shown here — they belong in the web
     // cancellations screen, which has the refund context this list lacks.
     final live = all.where((o) => o.status != OrderStatus.cancelled);
 
     switch (filter) {
-      case _Filter.active:
+      case OrderFilter.active:
         return live
             .where((o) =>
                 o.status == OrderStatus.pending ||
@@ -165,7 +163,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             .toList()
             .reversed
             .toList();
-      case _Filter.roomService:
+      case OrderFilter.roomService:
         // H-05: the room service queue. These orders arrive from the in-room
         // QR and are worked the same way as any other ticket — acknowledged,
         // prepared, marked delivered — so they need a view keyed to the room
@@ -176,11 +174,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             .toList()
             .reversed
             .toList();
-      case _Filter.today:
+      case OrderFilter.today:
         final now = DateTime.now();
         final start = DateTime(now.year, now.month, now.day);
         return live.where((o) => o.createdAt.isAfter(start)).toList();
-      case _Filter.all:
+      case OrderFilter.all:
         return live.toList();
     }
   }
@@ -219,37 +217,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         action: 'Updating the order',
       );
     }
-  }
-}
-
-class _FilterBar extends StatelessWidget {
-  final _Filter filter;
-  final ValueChanged<_Filter> onChanged;
-
-  const _FilterBar({required this.filter, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Row(
-        children: [
-          for (final (f, label) in const [
-            (_Filter.active, 'In the kitchen'),
-            (_Filter.roomService, 'Room service'),
-            (_Filter.today, 'Today'),
-            (_Filter.all, 'All'),
-          ]) ...[
-            ChoiceChip(
-              label: Text(label),
-              selected: filter == f,
-              onSelected: (_) => onChanged(f),
-            ),
-            const SizedBox(width: 8),
-          ],
-        ],
-      ),
-    );
   }
 }
 
@@ -316,11 +283,17 @@ class _OrderCard extends ConsumerWidget {
             const SizedBox(height: 2),
             Row(
               children: [
-                Text(
-                  '#${order.orderNumber}',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: scheme.onSurfaceVariant,
+                // The age beside it is the field the kitchen reads, so the
+                // order number is the one that gives way if space runs short.
+                Flexible(
+                  child: Text(
+                    '#${order.orderNumber}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -350,11 +323,18 @@ class _OrderCard extends ConsumerWidget {
             const SizedBox(height: 6),
             Row(
               children: [
-                Text(
-                  money.format(order.totalAmount),
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                // Flexible, not bare: currencies with no decimal shortening —
+                // "LKR 1,250,000" and the like — are long enough to collide
+                // with the advance button on a narrow phone.
+                Flexible(
+                  child: Text(
+                    money.format(order.totalAmount),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 if (order.paymentStatus == PaymentStatus.paid) ...[
@@ -368,6 +348,7 @@ class _OrderCard extends ConsumerWidget {
                     ),
                   ),
                 ],
+                const SizedBox(width: 8),
                 const Spacer(),
                 if (onAdvance != null)
                   FilledButton.tonal(

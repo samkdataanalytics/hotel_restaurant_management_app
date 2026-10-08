@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../session/staff_session.dart';
+import '../../widgets/brand_logo.dart';
 import '../property/property_switcher_sheet.dart';
 
 /// Shown when the account is valid but the staff app cannot proceed:
@@ -26,9 +27,11 @@ class SetupRequiredScreen extends ConsumerWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              const BrandLogo(width: 190),
+              const SizedBox(height: 28),
               Icon(Icons.open_in_browser_rounded,
-                  size: 64, color: scheme.primary),
-              const SizedBox(height: 24),
+                  size: 40, color: scheme.primary),
+              const SizedBox(height: 14),
               Text(
                 'One more step on the web',
                 style: Theme.of(context).textTheme.headlineSmall,

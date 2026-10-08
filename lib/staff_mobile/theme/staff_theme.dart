@@ -26,10 +26,30 @@ class StaffTheme {
   static const double gap = 12.0;
 
   // ─── Brand ────────────────────────────────────────────────────────────────
-  // Teal rather than the web panel's burnt orange: orange collides with the
-  // "order is late" ageing colour on the floor and kitchen screens.
-  static const _seedLight = Color(0xFF0E6E5E);
-  static const _seedDark = Color(0xFF56C4AB);
+  // Sampled from assets/images/hotrest_logo_new.png: the mark is navy with a
+  // teal ribbon through it, and those two are the whole palette.
+  //
+  // Still not the web panel's burnt orange — orange collides with the "order
+  // is late" ageing colour on the floor and kitchen screens.
+
+  /// The navy of the mark and wordmark. 13.98:1 on white, so it carries body
+  /// text and white-on-navy buttons comfortably.
+  static const brandNavy = Color(0xFF012C58);
+
+  /// The teal of the ribbon. Only **3.42:1** on white, which fails WCAG AA for
+  /// body text — so this is the colour of the mark and of large accents, never
+  /// of a surface that has small white text on it. Use [brandTealInk] there.
+  static const brandTeal = Color(0xFF0D9B94);
+
+  /// The ribbon teal darkened to 4.98:1 on white: same hue, same family,
+  /// but legible under small text. This is what interactive teal surfaces use.
+  static const brandTealInk = Color(0xFF0A7D77);
+
+  static const _seedLight = brandNavy;
+
+  // Dark theme keeps a lifted teal: navy on a near-black ground has almost no
+  // separation, so the brand reads through the accent rather than the primary.
+  static const _seedDark = Color(0xFF5FC9C1);
 
   // ─── Table status ─────────────────────────────────────────────────────────
   // The colour language of the floor. Kept as an explicit map rather than
@@ -45,17 +65,31 @@ class StaffTheme {
   static ThemeData get dark => _build(Brightness.dark, _seedDark);
 
   static ThemeData _build(Brightness brightness, Color seed) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: seed,
-      brightness: brightness,
-    );
     final isDark = brightness == Brightness.dark;
+
+    // Material generates a harmonious tonal palette from the seed, then the
+    // brand colours are pinned back on top of it in light mode. Without the
+    // override, M3 lightens the navy into a mid-blue that is recognisably not
+    // the logo. Dark mode keeps the generated tones: the real navy is unusable
+    // as a primary on a near-black surface.
+    final base = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
+    final scheme = isDark
+        ? base
+        : base.copyWith(
+            primary: brandNavy,
+            onPrimary: Colors.white,
+            secondary: brandTealInk,
+            onSecondary: Colors.white,
+            tertiary: brandTeal,
+          );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
+      // Light stays light — only the tint moves, from the old teal-leaning
+      // neutral to one that sits under navy without looking green.
       scaffoldBackgroundColor:
-          isDark ? const Color(0xFF0B1211) : const Color(0xFFF2F4F3),
+          isDark ? const Color(0xFF0B1013) : const Color(0xFFF3F5F8),
       fontFamily: 'Inter',
 
       // Larger base sizes than the web panel: this is read at arm's length.

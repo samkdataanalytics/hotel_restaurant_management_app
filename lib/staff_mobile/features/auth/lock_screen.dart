@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../session/app_lock.dart';
+import '../../widgets/brand_logo.dart';
 import '../property/property_switcher_sheet.dart';
 
 /// Covers the app when it resumes after being backgrounded past the lock
@@ -54,8 +55,10 @@ class _LockScreenState extends ConsumerState<LockScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.lock_outline_rounded, size: 64, color: scheme.primary),
-              const SizedBox(height: 24),
+              const BrandLogo(width: 190),
+              const SizedBox(height: 28),
+              Icon(Icons.lock_outline_rounded, size: 40, color: scheme.primary),
+              const SizedBox(height: 14),
               Text(
                 'Locked',
                 style: Theme.of(context).textTheme.headlineSmall,

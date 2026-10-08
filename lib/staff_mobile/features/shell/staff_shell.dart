@@ -8,6 +8,7 @@ import '../../router/staff_router.dart';
 import '../manager/my_shift_screen.dart';
 import '../../session/app_lock.dart';
 import '../../session/staff_session.dart';
+import '../../widgets/brand_splash.dart';
 import '../../widgets/offline_banner.dart';
 import '../../widgets/outbox_banner.dart';
 import '../property/property_switcher_sheet.dart';
@@ -38,9 +39,9 @@ class _StaffShellState extends ConsumerState<StaffShell> {
     ref.watch(orderAlertListenerProvider);
 
     return sessionAsync.when(
-      loading: () => const _ShellScaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      // Continues the native launch screen rather than cutting to a spinner
+      // under an app bar — same lockup, same white ground.
+      loading: () => const BrandSplash(),
       error: (e, _) => _ShellScaffold(body: _SessionError(error: e)),
       data: (session) {
         final tabs = visibleTabsFor(session);

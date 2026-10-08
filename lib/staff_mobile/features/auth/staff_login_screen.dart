@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../providers/app_auth_provider.dart';
 import '../../../services/auth_identity.dart';
+import '../../widgets/brand_logo.dart';
 
 /// Staff sign-in.
 ///
@@ -98,10 +99,10 @@ class _StaffLoginScreenState extends ConsumerState<StaffLoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(Icons.restaurant_rounded, size: 56, color: scheme.primary),
-                  const SizedBox(height: 20),
+                  const Center(child: BrandLogo(width: 220)),
+                  const SizedBox(height: 18),
                   Text(
-                    'HotRest Staff',
+                    'Staff',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
