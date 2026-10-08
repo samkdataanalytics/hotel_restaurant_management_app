@@ -8,7 +8,7 @@ import '../session/staff_session.dart';
 /// Emits a tick whenever bookings, check-ins or rooms change for the active
 /// property.
 ///
-/// Depends on migration 20260915000001, which adds these three tables to the
+/// Depends on migration 20261008160951, which adds these three tables to the
 /// `supabase_realtime` publication and sets REPLICA IDENTITY FULL on them.
 /// Before that migration is applied the subscription simply never fires and the
 /// boards fall back to pull-to-refresh — which is what they did previously, so

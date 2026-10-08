@@ -15,8 +15,8 @@ final _arrivalsProvider =
   ref.watch(
       staffSessionProvider.select((s) => s.valueOrNull?.activeProperty?.id));
 
-  // Live once migration 20260915000001 publishes these tables; a no-op and
-  // harmless before that.
+  // Live: migration 20261008160951 publishes these tables. A no-op against
+  // a database without it, so this degrades to pull-to-refresh.
   ref.watch(frontDeskRealtimeProvider);
   return ref.watch(frontDeskRepositoryProvider).loadArrivals();
 });
