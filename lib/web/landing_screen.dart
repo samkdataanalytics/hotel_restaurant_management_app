@@ -1939,30 +1939,34 @@ class _PlanCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          // Wrap, not Row: on the annual toggle the period becomes
+          // "/mo, billed annually", which is wider than the space left beside
+          // the figure. In a Row the price was the flexible child, so it was
+          // the one that shrank — every card rendered "LKR …" with the number
+          // ellipsised away. Here each keeps its intrinsic width and the
+          // period drops to its own line when it cannot sit alongside.
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.end,
+            spacing: 7,
+            runSpacing: 2,
             children: [
-              Flexible(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 280),
-                  child: Text(
-                    price,
-                    key: ValueKey(price),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      color: featured ? Colors.white : LK.ink,
-                      fontSize: enterprise ? 28 : 36,
-                      fontWeight: FontWeight.w800,
-                      height: 1.05,
-                      letterSpacing: -1.4,
-                    ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 280),
+                child: Text(
+                  price,
+                  key: ValueKey(price),
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    color: featured ? Colors.white : LK.ink,
+                    fontSize: enterprise ? 28 : 36,
+                    fontWeight: FontWeight.w800,
+                    height: 1.05,
+                    letterSpacing: -1.4,
                   ),
                 ),
               ),
-              if (period.isNotEmpty) ...[
-                const SizedBox(width: 7),
+              if (period.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 5),
                   child: Text(
@@ -1973,7 +1977,6 @@ class _PlanCard extends StatelessWidget {
                     ),
                   ),
                 ),
-              ],
             ],
           ),
           const SizedBox(height: 22),
