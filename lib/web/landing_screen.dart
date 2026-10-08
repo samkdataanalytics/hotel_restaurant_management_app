@@ -7,11 +7,11 @@ import 'package:go_router/go_router.dart';
 import '../providers/service_providers.dart';
 import '../services/plan_service.dart';
 import 'landing/landing_dialogs.dart';
-import 'landing/landing_kit.dart';
+import 'brand_kit.dart';
 
 /// Public marketing site.
 ///
-/// Composition only — tokens and atoms live in `landing/landing_kit.dart`, and
+/// Composition only — tokens and atoms live in `brand_kit.dart`, and
 /// the two lead-capture dialogs in `landing/landing_dialogs.dart`.
 ///
 /// The dynamic parts are unchanged from the previous version: pricing comes

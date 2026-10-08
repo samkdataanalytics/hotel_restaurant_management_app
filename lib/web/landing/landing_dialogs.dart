@@ -6,7 +6,7 @@ import 'package:web/web.dart' as webpkg;
 
 import '../../providers/service_providers.dart';
 import '../../services/lead_service.dart';
-import 'landing_kit.dart';
+import '../brand_kit.dart';
 
 typedef _Highlight = ({IconData icon, Color color, String title, String desc});
 

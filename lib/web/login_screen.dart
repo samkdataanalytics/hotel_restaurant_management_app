@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' hide ChangeNotifierProvider;
 import 'package:go_router/go_router.dart';
-import '../app_theme.dart';
+
 import '../providers/app_auth_provider.dart';
 import '../router.dart';
-import '../providers/service_providers.dart';
 import '../services/auth_identity.dart';
+import 'auth/auth_scaffold.dart';
+import 'brand_kit.dart';
 
+/// Staff and owner sign-in.
+///
+/// Light, on the brand palette, sharing [AuthScaffold] with signup so the two
+/// screens cannot drift apart.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -14,45 +19,28 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen>
-    with SingleTickerProviderStateMixin {
-  final _emailController    = TextEditingController();
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _passwordFocus = FocusNode();
   bool _obscurePassword = true;
   bool _isLoading = false;
   String? _error;
-
-  late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeOut,
-    );
-    _fadeController.forward();
-  }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _fadeController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
-    final input    = _emailController.text.trim();
+    final input = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
     if (input.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Please enter your email/username and password');
+      setState(() => _error = 'Please enter your email or username and password.');
       return;
     }
 
@@ -65,7 +53,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     // {username}@staff.internal address. Shared with the staff mobile app.
     final email = resolveSignInEmail(input);
 
-    // Sign in via Riverpod auth notifier — GoRouter redirect handles navigation
+    // Sign in via the Riverpod auth notifier — GoRouter's redirect handles
+    // navigation on success.
     final err = await ref.read(authProvider.notifier).signIn(email, password);
 
     if (!mounted) return;
@@ -81,60 +70,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       }
       _showAuthError(err);
     }
-    // On success: GoRouter listens to authProvider and redirects automatically
   }
 
+  /// Supabase messages are written for developers; these name the next action.
   void _showAuthError(String message) {
-    // Translate Supabase raw messages to friendlier text
-    final String friendly;
+    final m = message.toLowerCase();
+    final String title;
     final String detail;
-    if (message.toLowerCase().contains('invalid login') ||
-        message.toLowerCase().contains('invalid credentials') ||
-        message.toLowerCase().contains('user not found')) {
-      friendly = 'Account not found';
-      detail = 'No account matches these credentials.\n'
-          'Check your email/username and password, or create a new account.';
-    } else if (message.toLowerCase().contains('wrong password') ||
-        message.toLowerCase().contains('invalid password')) {
-      friendly = 'Incorrect password';
+
+    if (m.contains('invalid login') ||
+        m.contains('invalid credentials') ||
+        m.contains('user not found')) {
+      title = 'Account not found';
+      detail = 'No account matches these credentials. Check your email or '
+          'username and password, or create a new account.';
+    } else if (m.contains('wrong password') || m.contains('invalid password')) {
+      title = 'Incorrect password';
       detail = 'The password you entered is incorrect. Please try again.';
-    } else if (message.toLowerCase().contains('email not confirmed')) {
-      friendly = 'Email not verified';
+    } else if (m.contains('email not confirmed')) {
+      title = 'Email not verified';
       detail = 'Please verify your email address before signing in.';
     } else {
-      friendly = 'Sign-in failed';
+      title = 'Sign-in failed';
       detail = message;
     }
 
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: const Color(0xFF1E293B),
-        icon: Icon(Icons.error_outline_rounded,
-            color: AppTheme.danger, size: 40),
-        title: Text(
-          friendly,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
-          textAlign: TextAlign.center,
+        backgroundColor: LK.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        icon: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: LK.danger.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.priority_high_rounded, color: LK.danger, size: 24),
         ),
-        content: Text(
-          detail,
-          style: TextStyle(color: Colors.white.withOpacity(0.7), height: 1.5),
-          textAlign: TextAlign.center,
-        ),
+        title: Text(title, style: LK.h3(context), textAlign: TextAlign.center),
+        content: Text(detail, style: LK.small, textAlign: TextAlign.center),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.brandOnDark,
-              foregroundColor: AppTheme.onBrandOnDark,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              minimumSize: const Size(120, 40),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: CtaButton(
+              label: 'Try again',
+              onTap: () => Navigator.of(context).pop(),
             ),
-            child: const Text('OK'),
           ),
         ],
       ),
@@ -143,224 +126,54 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    // Gradient background shared by both loading and form states
-    final bg = BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          AppTheme.sidebarDark,
-          const Color(0xFF1E293B),
-          const Color(0xFF0F172A),
-        ],
+    return AuthScaffold(
+      title: 'Welcome back',
+      subtitle: 'Sign in to your management portal.',
+      footer: AuthFooterPrompt(
+        question: "Don't have an account?",
+        action: 'Create one',
+        onTap: () => context.go(AppRoutes.signup),
       ),
-    );
-
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: bg,
-        child: Center(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Container(
-              width: 420,
-              padding: const EdgeInsets.all(40),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.12)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 40,
-                    offset: const Offset(0, 16),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Logo
-                  Image.asset(
-                    'assets/images/hotrest_logo_light.png',
-                    width: 260,
-                    height: 83,
-                    fit: BoxFit.contain,
-                  ),
-                  const SizedBox(height: 8),
-
-                  Text(
-                    'Management Portal',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.white.withOpacity(0.5),
-                    ),
-                  ),
-                  const SizedBox(height: 36),
-
-                  // Email or Username
-                  TextField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Email or Username',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
-                      prefixIcon: Icon(
-                        Icons.person_outline_rounded,
-                        color: Colors.white.withOpacity(0.4),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white.withOpacity(0.06),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            BorderSide(color: Colors.white.withOpacity(0.1)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            BorderSide(color: Colors.white.withOpacity(0.1)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: AppTheme.brandOnDark),
-                      ),
-                    ),
-                    onSubmitted: (_) => _login(),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Password
-                  TextField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Password',
-                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
-                      prefixIcon: Icon(
-                        Icons.lock_outline,
-                        color: Colors.white.withOpacity(0.4),
-                      ),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                          color: Colors.white.withOpacity(0.4),
-                        ),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white.withOpacity(0.06),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            BorderSide(color: Colors.white.withOpacity(0.1)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            BorderSide(color: Colors.white.withOpacity(0.1)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: AppTheme.brandOnDark),
-                      ),
-                    ),
-                    onSubmitted: (_) => _login(),
-                  ),
-
-                  // Validation errors (empty fields) shown inline
-                  if (_error != null) ...[
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Icon(Icons.info_outline_rounded,
-                            color: AppTheme.danger, size: 16),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            _error!,
-                            style: TextStyle(
-                                color: AppTheme.danger, fontSize: 12.5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-
-                  const SizedBox(height: 24),
-
-                  // Sign up link
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        "Don't have an account? ",
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.5),
-                          fontSize: 13,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () => context.go(AppRoutes.signup),
-                        child: Text(
-                          'Create one',
-                          style: TextStyle(
-                            color: AppTheme.brandOnDark,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Login button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _login,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.brandOnDark,
-                        foregroundColor: AppTheme.onBrandOnDark,
-                        disabledBackgroundColor: AppTheme.brandOnDark.withOpacity(0.6),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Sign In',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
+      children: [
+        AuthField(
+          controller: _emailController,
+          label: 'Email or username',
+          icon: Icons.person_outline_rounded,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          onSubmitted: (_) => _passwordFocus.requestFocus(),
+        ),
+        const SizedBox(height: 14),
+        AuthField(
+          controller: _passwordController,
+          focusNode: _passwordFocus,
+          label: 'Password',
+          icon: Icons.lock_outline_rounded,
+          obscure: _obscurePassword,
+          textInputAction: TextInputAction.go,
+          onSubmitted: (_) => _isLoading ? null : _login(),
+          trailing: IconButton(
+            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+            icon: Icon(
+              _obscurePassword
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+              color: LK.muted,
+              size: 20,
             ),
+            tooltip: _obscurePassword ? 'Show password' : 'Hide password',
           ),
         ),
-      ),
+        if (_error != null) ...[
+          const SizedBox(height: 14),
+          AuthInlineError(_error!),
+        ],
+        const SizedBox(height: 24),
+        if (_isLoading)
+          const AuthBusyButton()
+        else
+          CtaButton(label: 'Sign in', expand: true, onTap: _login),
+      ],
     );
   }
 }
