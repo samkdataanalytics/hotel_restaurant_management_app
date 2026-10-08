@@ -47,11 +47,12 @@ class OrderChange {
 /// orders; this one does not. That web screen works and is deliberately left
 /// alone.
 ///
-/// `restaurant_orders` is the only table in the `supabase_realtime`
-/// publication, and it is set to `REPLICA IDENTITY FULL`, so status-only
-/// updates still carry `hotel_id` and survive the RLS check on the realtime
-/// path. `restaurant_tables`, `bookings` and `rooms` are NOT published —
-/// those screens pull to refresh instead.
+/// `restaurant_orders` is `REPLICA IDENTITY FULL`, so status-only updates
+/// still carry `hotel_id` and survive the RLS check on the realtime path.
+///
+/// It was once the only published table. The front-desk tables followed in
+/// 20261008160951 and the rest in 20261008164027; see `front_desk_realtime.dart`
+/// and `table_realtime.dart` for those.
 final ordersRealtimeProvider =
     StreamProvider.autoDispose<OrderChange>((ref) {
   final propertyId =

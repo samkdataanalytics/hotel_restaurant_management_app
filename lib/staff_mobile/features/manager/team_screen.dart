@@ -6,12 +6,15 @@ import '../../../providers/service_providers.dart';
 import '../../data/connectivity.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
+import '../../data/table_realtime.dart';
 
 final _teamProvider =
     FutureProvider.autoDispose<List<PropertyStaffMember>>((ref) async {
   final propertyId = ref.watch(
       staffSessionProvider.select((s) => s.valueOrNull?.activeProperty?.id));
   if (propertyId == null) return const [];
+
+  ref.watch(tableRealtimeProvider('property_staff'));
   return ref.watch(staffServiceProvider).getPropertyStaff(propertyId);
 });
 

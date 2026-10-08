@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/notifications_feed.dart';
 import '../../data/order_alerts.dart';
 import '../../router/staff_router.dart';
 import '../manager/my_shift_screen.dart';
@@ -155,9 +156,18 @@ class _PropertyButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final lock = ref.watch(appLockProvider);
     final alertsOn = ref.watch(orderAlertsProvider);
+    final unread = ref.watch(unreadNotificationCountProvider);
 
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert),
+      // Badged on the closed menu too. Notifications live behind an overflow
+      // item, so without a mark on the anchor itself a housekeeping alert can
+      // sit unseen for a whole shift.
+      icon: unread == 0
+          ? const Icon(Icons.more_vert)
+          : Badge.count(
+              count: unread,
+              child: const Icon(Icons.more_vert),
+            ),
       onSelected: (value) async {
         switch (value) {
           case 'switch':
@@ -312,12 +322,19 @@ class _PropertyButton extends ConsumerWidget {
             subtitle: Text('Clock in and out'),
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'notifications',
           child: ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.notifications_none_rounded),
-            title: Text('Notifications'),
+            leading: Icon(
+              unread > 0
+                  ? Icons.notifications_active_rounded
+                  : Icons.notifications_none_rounded,
+            ),
+            title: const Text('Notifications'),
+            // The count, not just a dot: "3 waiting" and "30 waiting" warrant
+            // different urgency, and the menu has room to say which.
+            trailing: unread == 0 ? null : _UnreadPill(count: unread),
           ),
         ),
         if (session.canEdit('hotel_expenses'))
@@ -467,6 +484,35 @@ class _SessionError extends ConsumerWidget {
               label: const Text('Try again'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Unread count shown beside the Notifications menu row.
+class _UnreadPill extends StatelessWidget {
+  final int count;
+  const _UnreadPill({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.error,
+        borderRadius: BorderRadius.circular(11),
+      ),
+      // Caps the label, not the value: a three-digit pill would push the menu
+      // row's title out of shape, and past a point the exact number stops
+      // changing what anyone does about it.
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        style: TextStyle(
+          color: scheme.onError,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );

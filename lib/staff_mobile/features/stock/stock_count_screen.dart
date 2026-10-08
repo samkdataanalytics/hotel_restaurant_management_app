@@ -7,10 +7,16 @@ import '../../data/restaurant_repository.dart';
 import '../../session/staff_session.dart';
 import '../../theme/staff_theme.dart';
 import '../../widgets/offline_banner.dart';
+import '../../data/table_realtime.dart';
 
 final _stockProvider = FutureProvider.autoDispose<List<StockLine>>((ref) async {
   ref.watch(
       staffSessionProvider.select((s) => s.valueOrNull?.activeProperty?.id));
+
+  // Two tables: counts live in `inventory`, names and reorder levels in
+  // `ingredients`. A stocktake split across two people has to converge.
+  ref.watch(tableRealtimeProvider('inventory'));
+  ref.watch(tableRealtimeProvider('ingredients'));
   return ref.watch(restaurantRepositoryProvider).loadStock();
 });
 

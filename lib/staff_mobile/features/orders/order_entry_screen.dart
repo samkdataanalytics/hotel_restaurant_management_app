@@ -15,6 +15,7 @@ import 'cart_sheet.dart';
 import 'modifier_sheet.dart';
 import 'order_cart.dart';
 import '../../data/money.dart';
+import '../../data/table_realtime.dart';
 
 const _uuid = Uuid();
 
@@ -28,6 +29,9 @@ typedef _OrderContext = ({
 /// Menu only, for an order with no table behind it.
 final _menuOnlyProvider =
     FutureProvider.autoDispose<Map<String, List<MenuItem>>>((ref) async {
+  // An item 86'd mid-service must stop being orderable here, not at the
+  // point the kitchen rejects the ticket.
+  ref.watch(tableRealtimeProvider('menu_items'));
   final cached =
       await ref.watch(restaurantRepositoryProvider).loadMenuByCategory();
   return cached.value;

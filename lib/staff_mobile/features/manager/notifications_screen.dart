@@ -5,27 +5,20 @@ import 'package:intl/intl.dart';
 import '../../../services/notification_service.dart';
 import '../../data/connectivity.dart';
 import '../../data/manager_repository.dart';
-import '../../session/staff_session.dart';
+import '../../data/notifications_feed.dart';
 import '../../theme/staff_theme.dart';
 import '../../widgets/offline_banner.dart';
-
-final _notificationsProvider =
-    FutureProvider.autoDispose<List<AppNotification>>((ref) async {
-  ref.watch(
-      staffSessionProvider.select((s) => s.valueOrNull?.activeProperty?.id));
-  return ref.watch(managerRepositoryProvider).loadNotifications();
-});
 
 /// The history behind the alerts.
 ///
 /// Read state is shared with the web panel — both write `is_read` on the same
 /// rows — so clearing the inbox on a phone clears the bell on the desktop.
 ///
-/// Polled on open and on pull, not streamed. `notification_service` exposes a
-/// `.stream()`, but the notifications table was never in the realtime
-/// publication, so that stream has only ever emitted its first snapshot. The
-/// pending migration publishes it; until that is applied a stream here would
-/// look live and silently not be, which is worse than an honest refresh.
+/// Live: backed by [notificationsFeedProvider], which the shell also watches
+/// for its badge, so the two cannot disagree. Migration 20261008160951 put
+/// `notifications` in the realtime publication — before that it was poll-only,
+/// because `notification_service`'s `.stream()` sat on an unpublished table and
+/// never emitted past its first snapshot.
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -40,7 +33,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final async = ref.watch(_notificationsProvider);
+    final async = ref.watch(notificationsFeedProvider);
     final unread = async.valueOrNull?.where((n) => !n.isRead).length ?? 0;
 
     return Scaffold(
@@ -60,7 +53,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async =>
-                  ref.refresh(_notificationsProvider.future),
+                  ref.refresh(notificationsFeedProvider.future),
               child: async.when(
                 loading: () =>
                     const Center(child: CircularProgressIndicator()),
@@ -118,7 +111,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     if (item.isRead) return;
     try {
       await ref.read(managerRepositoryProvider).markNotificationRead(item.id);
-      if (mounted) ref.invalidate(_notificationsProvider);
+      if (mounted) ref.invalidate(notificationsFeedProvider);
     } catch (e) {
       if (!mounted) return;
       showWriteFailure(
@@ -136,7 +129,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       await ref.read(managerRepositoryProvider).markAllNotificationsRead();
       if (!mounted) return;
       setState(() => _busy = false);
-      ref.invalidate(_notificationsProvider);
+      ref.invalidate(notificationsFeedProvider);
     } catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);

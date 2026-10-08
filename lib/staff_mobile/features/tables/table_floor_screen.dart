@@ -12,6 +12,7 @@ import '../../session/staff_session.dart';
 import '../../theme/staff_theme.dart';
 import '../shell/staff_tabs.dart';
 import '../../data/money.dart';
+import '../../data/table_realtime.dart';
 
 /// The floor board: every table with its live order state.
 ///
@@ -23,6 +24,10 @@ final _floorProvider =
   // Re-read whenever an order changes for this property. Watching the stream's
   // tick rather than patching rows keeps one source of truth.
   ref.watch(ordersRealtimeProvider);
+
+  // Table configuration itself, which is edited on the web panel — a table
+  // added or renamed there should appear on the floor without a reinstall.
+  ref.watch(tableRealtimeProvider('restaurant_tables'));
 
   // Also rebuild on property switch.
   ref.watch(staffSessionProvider.select((s) => s.valueOrNull?.activeProperty?.id));

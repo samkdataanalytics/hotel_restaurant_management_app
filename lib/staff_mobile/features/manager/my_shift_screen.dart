@@ -10,6 +10,7 @@ import '../../data/connectivity.dart';
 import '../../data/manager_repository.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
+import '../../data/table_realtime.dart';
 
 typedef _ShiftView = ({
   TimeRecord? active,
@@ -20,6 +21,9 @@ typedef _ShiftView = ({
 final _myShiftProvider = FutureProvider.autoDispose<_ShiftView>((ref) async {
   ref.watch(
       staffSessionProvider.select((s) => s.valueOrNull?.activeProperty?.id));
+
+  // A manager editing the rota, or a clock-out from another device.
+  ref.watch(tableRealtimeProvider('staff_shifts'));
 
   final userId = ref.watch(authProvider).valueOrNull?.userId;
   final repo = ref.watch(managerRepositoryProvider);

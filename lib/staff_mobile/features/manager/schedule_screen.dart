@@ -11,6 +11,7 @@ import '../../data/connectivity.dart';
 import '../../data/manager_repository.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
+import '../../data/table_realtime.dart';
 
 const _uuid = Uuid();
 
@@ -26,6 +27,10 @@ final _rotaProvider =
   if (propertyId == null) {
     return (shifts: <StaffShift>[], team: <PropertyStaffMember>[]);
   }
+
+  // Both halves of the rota: the shifts themselves, and who can be rostered.
+  ref.watch(tableRealtimeProvider('staff_shifts'));
+  ref.watch(tableRealtimeProvider('property_staff'));
 
   final anchor =
       DateTime.now().add(Duration(days: 7 * weekOffset));

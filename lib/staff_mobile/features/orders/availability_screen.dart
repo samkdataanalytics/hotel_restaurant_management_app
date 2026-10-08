@@ -7,11 +7,15 @@ import '../../data/restaurant_repository.dart';
 import '../../session/staff_session.dart';
 import '../../widgets/offline_banner.dart';
 import '../../data/money.dart';
+import '../../data/table_realtime.dart';
 
 final _fullMenuProvider =
     FutureProvider.autoDispose<Map<String, List<MenuItem>>>((ref) async {
   ref.watch(
       staffSessionProvider.select((s) => s.valueOrNull?.activeProperty?.id));
+
+  // A toggle made on the web panel, or by another manager, lands here.
+  ref.watch(tableRealtimeProvider('menu_items'));
   return ref.watch(restaurantRepositoryProvider).loadFullMenuByCategory();
 });
 
