@@ -338,6 +338,24 @@ class AppTheme {
   static const Color statusBlue   = Color(0xFF2563EB);   // info / hotel accent
   static const Color statusPurple = Color(0xFF8B5CF6);   // payment due
 
+  /// A child ticket added onto an open tab.
+  ///
+  /// Slate, not the teal it used to be. That teal (#009688) sat 11.4 dE from
+  /// the brand accent once the brand went teal, so an add-on chip read as
+  /// brand chrome. Slate is 25.3 dE from the nearest colour in this language
+  /// and 7.58:1 on white, so it still carries chip text. It also says
+  /// "subordinate", which is what an add-on is.
+  static const Color statusAddOn  = Color(0xFF475569);
+
+  /// An order that has been fired and is with the kitchen.
+  ///
+  /// Deliberately the same blue the kitchen board gives its "Preparing" lane
+  /// (kitchen_screen.dart), so the floor and the board agree. The POS and
+  /// table screens previously used a second hardcoded teal here, which after
+  /// the rebrand was 9.9 dE from the brand accent beside it -- the two states
+  /// could not be told apart.
+  static const Color statusInKitchen = statusBlue;
+
   // ─── Page Background ─────────────────────────────────────────────────────────
 
   static const Color pageBg = Color(0xFFF5F7FA);

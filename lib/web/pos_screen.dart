@@ -1996,9 +1996,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    backgroundColor: const Color(0xFF0D9488),
+                    backgroundColor: AppTheme.statusInKitchen,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: const Color(0xFF0D9488).withOpacity(0.35),
+                    disabledBackgroundColor: AppTheme.statusInKitchen.withOpacity(0.35),
                     disabledForegroundColor: Colors.white70,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
@@ -2077,8 +2077,12 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
     const kPurple = Color(0xFF8B5CF6);
     const kPurpleBg = Color(0xFFF5F3FF);
-    const kTeal = Color(0xFF0D9488);
-    const kTealBg = Color(0xFFF0FDFA);
+    // Was Color(0xFF0D9488) -- a second teal that, once the brand turned teal,
+    // sat 9.9 dE from the _kAccent used for "ACTIVE" a few lines below. Staff
+    // could not tell an active tab from one already in the kitchen. This is
+    // the blue the kitchen board gives its Preparing lane.
+    const kTeal = AppTheme.statusInKitchen;
+    const kTealBg = Color(0xFFEFF6FF);
 
     // Determine state based on latest order
     final allServedUnpaid = openOrders.every((o) =>
@@ -2236,8 +2240,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     icon: const Icon(Icons.playlist_add_rounded, size: 13),
                     label: const Text('Add Cart to Tab', style: TextStyle(fontSize: 11)),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.teal,
-                      side: const BorderSide(color: Colors.teal),
+                      foregroundColor: AppTheme.statusAddOn,
+                      side: const BorderSide(color: AppTheme.statusAddOn),
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -2404,7 +2408,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           content: Text(openOrders.isEmpty 
               ? 'Order sent to kitchen for Table $tableNum.'
               : 'Add-on order sent to kitchen for Table $tableNum.'),
-          backgroundColor: const Color(0xFF0D9488),
+          backgroundColor: AppTheme.statusInKitchen,
           duration: const Duration(seconds: 4),
           action: SnackBarAction(
             label: 'View',

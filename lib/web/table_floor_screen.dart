@@ -1756,7 +1756,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: isChild
-                      ? Colors.teal.shade50
+                      ? const Color(0xFFF1F5F9)
                       : Colors.blue.shade50,
                   borderRadius: BorderRadius.circular(6),
                 ),
@@ -1772,7 +1772,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                     color: order.type == OrderType.takeaway
                         ? Colors.amber.shade700
                         : isChild
-                            ? Colors.teal.shade700
+                            ? AppTheme.statusAddOn
                             : Colors.blue.shade700,
                   ),
                 ),
@@ -2331,7 +2331,10 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
           final btnColor = (isMixedCart || allTakeawayCart)
               ? Colors.amber.shade700
               : isAddOn
-                  ? const Color(0xFF0D9488)
+                  // Was Color(0xFF0D9488), 9.9 dE from the _kAccent on the
+                  // other arm of this ternary -- the distinction that decides
+                  // whether a kitchen ticket fires had gone invisible.
+                  ? AppTheme.statusInKitchen
                   : _kAccent;
 
           return Container(

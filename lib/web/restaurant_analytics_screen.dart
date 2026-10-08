@@ -726,7 +726,7 @@ class _RestaurantAnalyticsScreenState
         SizedBox(
           width: 180,
           child: _kpiCard('Dine-in Covers', '$_periodCovers',
-              Icons.people_rounded, Colors.teal),
+              Icons.people_rounded, AppTheme.adminPrimary),
         ),
         SizedBox(
           width: 180,

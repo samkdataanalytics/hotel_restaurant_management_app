@@ -2513,7 +2513,7 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
   Color _orderStatusColor(OrderStatus status) {
     switch (status) {
       case OrderStatus.pending: return _RC.preparing;
-      case OrderStatus.preparing: return AppTheme.adminPrimary;
+      case OrderStatus.preparing: return AppTheme.statusInKitchen;
       case OrderStatus.ready: return _RC.available;
       case OrderStatus.served: return Colors.grey;
       case OrderStatus.cancelled: return _RC.occupied;
@@ -2542,7 +2542,7 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
     }
     switch (order.status) {
       case OrderStatus.pending:    return _RC.preparing;
-      case OrderStatus.preparing:  return AppTheme.adminPrimary;
+      case OrderStatus.preparing:  return AppTheme.statusInKitchen;
       case OrderStatus.ready:      return _RC.available;
       case OrderStatus.served:     return Colors.grey;
       case OrderStatus.cancelled:  return _RC.occupied;
@@ -2721,7 +2721,7 @@ class _TableOrderDialog extends StatelessWidget {
     }
     switch (order.status) {
       case OrderStatus.pending:   return _RC.preparing;
-      case OrderStatus.preparing: return AppTheme.adminPrimary;
+      case OrderStatus.preparing: return AppTheme.statusInKitchen;
       case OrderStatus.ready:     return _RC.available;
       case OrderStatus.served:    return Colors.grey;
       case OrderStatus.cancelled: return _RC.occupied;

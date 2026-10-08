@@ -270,21 +270,26 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
           Container(
             width: 56,
             height: 56,
+            // This header sits on sidebarDark. adminPrimary is 1.28:1 there,
+            // so the initial and its tile were already invisible before this
+            // change -- brandOnDark is 7.78:1. Note the light/dark boundary is
+            // mid-file: the TabBar below is on white and its navy is correct,
+            // so this file must not be swept wholesale.
             decoration: BoxDecoration(
-              color: AppTheme.adminPrimary.withOpacity(0.15),
+              color: AppTheme.brandOnDark.withOpacity(0.15),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                  color: AppTheme.adminPrimary.withOpacity(0.3)),
+                  color: AppTheme.brandOnDark.withOpacity(0.35)),
             ),
             child: Center(
               child: Text(
                 widget.org.name.isNotEmpty
                     ? widget.org.name[0].toUpperCase()
                     : '?',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
-                  color: AppTheme.adminPrimary,
+                  color: AppTheme.brandOnDark,
                 ),
               ),
             ),

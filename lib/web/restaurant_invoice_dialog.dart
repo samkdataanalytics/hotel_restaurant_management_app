@@ -199,7 +199,7 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                                       horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
                                     color: o.parentOrderId != null
-                                        ? Colors.teal.shade50
+                                        ? const Color(0xFFF1F5F9)
                                         : Colors.blue.shade50,
                                     borderRadius: BorderRadius.circular(5),
                                   ),
@@ -211,7 +211,7 @@ class RestaurantInvoiceDialog extends StatelessWidget {
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
                                       color: o.parentOrderId != null
-                                          ? Colors.teal.shade700
+                                          ? AppTheme.statusAddOn
                                           : Colors.blue.shade700,
                                     ),
                                   ),

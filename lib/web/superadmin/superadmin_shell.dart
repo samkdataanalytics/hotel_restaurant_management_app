@@ -93,7 +93,7 @@ class _SuperadminShellState extends ConsumerState<SuperadminShell> {
                             width: 3,
                             height: 14,
                             decoration: BoxDecoration(
-                              color: AppTheme.goldPrimary,
+                              color: AppTheme.brandOnDark,
                               borderRadius: BorderRadius.circular(2),
                             ),
                           ),
@@ -101,7 +101,7 @@ class _SuperadminShellState extends ConsumerState<SuperadminShell> {
                           Text(
                             'SUPERADMIN',
                             style: TextStyle(
-                              color: AppTheme.goldPrimary.withOpacity(0.9),
+                              color: AppTheme.brandOnDark.withOpacity(0.9),
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 1.2,
@@ -117,7 +117,7 @@ class _SuperadminShellState extends ConsumerState<SuperadminShell> {
                         child: Container(
                           width: 28,
                           height: 1.5,
-                          color: AppTheme.goldPrimary.withOpacity(0.3),
+                          color: AppTheme.brandOnDark.withOpacity(0.3),
                         ),
                       ),
                     ),
@@ -174,7 +174,7 @@ class _SuperadminShellState extends ConsumerState<SuperadminShell> {
                   Text(
                     'SuperAdmin',
                     style: TextStyle(
-                      color: Color(0xFFD4A853),
+                      color: AppTheme.brandOnDark,
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 0.5,
@@ -191,8 +191,11 @@ class _SuperadminShellState extends ConsumerState<SuperadminShell> {
 
   Widget _buildNavItem(_NavItem item) {
     final isSelected = _selectedIndex == item.pageIndex;
-    const accent = Color(0xFFD4A853);
-    const accentBg = Color(0x1AD4A853);
+    // The sidebar ground is #0F172A. adminPrimary (navy) is 1.28:1 there --
+    // it would disappear. brandOnDark is 7.78:1, matching the gold it
+    // replaces (8.10:1).
+    const accent = AppTheme.brandOnDark;
+    const accentBg = Color(0x1A3FBDB4);
 
     return Padding(
       padding: EdgeInsets.symmetric(

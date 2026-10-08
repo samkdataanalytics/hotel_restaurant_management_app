@@ -238,7 +238,7 @@ class _CancellationsRefundsScreenState
           _kpiDivider(),
           _kpi('Inventory Restored',
               '$_inventoryRestoredCount / $_totalCancellations',
-              Icons.inventory_2_outlined, Colors.teal),
+              Icons.inventory_2_outlined, AppTheme.statusGreen),
           _kpiDivider(),
           _kpi('Refund Lines', '$_totalRefundLines',
               Icons.undo_rounded, _kAccent),

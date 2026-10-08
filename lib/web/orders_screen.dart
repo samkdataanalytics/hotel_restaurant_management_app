@@ -592,7 +592,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.teal.shade100, width: 1.5),
+        border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withOpacity(0.04),
@@ -626,7 +626,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(
-                    color: Colors.teal.shade50,
+                    color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -634,13 +634,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
-                        color: Colors.teal.shade700),
+                        color: AppTheme.statusAddOn),
                   ),
                 ),
                 const SizedBox(width: 8),
               ],
               _chip('${children.length} ADD-ON${children.length == 1 ? "" : "S"}',
-                  Colors.teal.shade700, icon: Icons.add_circle_outline_rounded),
+                  AppTheme.statusAddOn, icon: Icons.add_circle_outline_rounded),
               const SizedBox(width: 6),
               _chip(_paymentLbl(parent.paymentStatus),
                   _paymentColor(parent.paymentStatus),
@@ -666,7 +666,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: o.parentOrderId != null
-                              ? Colors.teal.shade100
+                              ? const Color(0xFFCBD5E1)
                               : Colors.grey.shade200,
                         ),
                         borderRadius: BorderRadius.circular(10),
