@@ -31,8 +31,8 @@ import 'restaurant_invoice_dialog.dart';
 import 'widgets/split_payment_inputs.dart';
 
 // ─── Restaurant brand colors — sourced from AppTheme ─────────────────────────
-const _kOrange = AppTheme.restaurantAccent;
-const _kOrangeBg = AppTheme.restaurantAccentBg;
+const _kAccent = AppTheme.restaurantAccent;
+const _kAccentBg = AppTheme.restaurantAccentBg;
 
 class PosScreen extends ConsumerStatefulWidget {
   const PosScreen({super.key});
@@ -310,7 +310,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                                             style: TextStyle(
                                                 fontSize: 15,
                                                 fontWeight: FontWeight.w700,
-                                                color: optQty > 0 ? _kOrange : Colors.black26)),
+                                                color: optQty > 0 ? _kAccent : Colors.black26)),
                                       ),
                                       _qtyBtn(
                                         icon: Icons.add_rounded,
@@ -330,7 +330,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                                       children: [
                                         Icon(
                                           isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                                          color: isSelected ? _kOrange : Colors.grey.shade400,
+                                          color: isSelected ? _kAccent : Colors.grey.shade400,
                                           size: 20,
                                         ),
                                         const SizedBox(width: 10),
@@ -368,7 +368,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
                 onPressed: isValid ? () => Navigator.pop(ctx, (mods: selections, qty: qty)) : null,
-                style: ElevatedButton.styleFrom(backgroundColor: _kOrange, foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(backgroundColor: _kAccent, foregroundColor: Colors.white),
                 child: Text('Add $qty to Cart'),
               )
             ],
@@ -391,10 +391,10 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: enabled ? _kOrange.withOpacity(0.12) : Colors.grey.shade100,
+          color: enabled ? _kAccent.withOpacity(0.12) : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(icon, size: 18, color: enabled ? _kOrange : Colors.grey.shade400),
+        child: Icon(icon, size: 18, color: enabled ? _kAccent : Colors.grey.shade400),
       ),
     );
   }
@@ -778,8 +778,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         children: [
           Container(
             width: 40, height: 40,
-            decoration: BoxDecoration(color: _kOrangeBg, borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.point_of_sale_rounded, color: _kOrange, size: 22),
+            decoration: BoxDecoration(color: _kAccentBg, borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.point_of_sale_rounded, color: _kAccent, size: 22),
           ),
           const SizedBox(width: 14),
           Text('Restaurant POS', style: Theme.of(context).textTheme.displayMedium),
@@ -873,7 +873,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                               fontSize: 13)),
                       selected: isSel,
                       onSelected: (_) => setState(() => _selectedCategory = cat),
-                      selectedColor: _kOrange,
+                      selectedColor: _kAccent,
                       labelStyle: TextStyle(color: isSel ? Colors.white : Colors.black87),
                       backgroundColor: Colors.grey.shade100,
                     ),
@@ -975,7 +975,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                             : _currencyFormat.format(item.price),
                     style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: unavailable ? Colors.red.shade400 : _kOrange,
+                        color: unavailable ? Colors.red.shade400 : _kAccent,
                         fontSize: 13),
                   ),
                   if (item.modifiers.isNotEmpty) ...[
@@ -1080,7 +1080,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     Stack(clipBehavior: Clip.none, children: [
                       Icon(Icons.shopping_cart_outlined,
                           size: 22,
-                          color: hasItems ? _kOrange : Colors.grey.shade300),
+                          color: hasItems ? _kAccent : Colors.grey.shade300),
                       if (hasItems)
                         Positioned(
                           top: -4,
@@ -1089,7 +1089,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                             width: 17,
                             height: 17,
                             decoration: const BoxDecoration(
-                                color: _kOrange, shape: BoxShape.circle),
+                                color: _kAccent, shape: BoxShape.circle),
                             child: Center(
                               child: Text(
                                 '${_cart.length}',
@@ -1117,7 +1117,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                       Text(
                         '• ${_currencyFormat.format(grandTotal)}',
                         style: const TextStyle(
-                            color: _kOrange,
+                            color: _kAccent,
                             fontWeight: FontWeight.w600,
                             fontSize: 14),
                       ),
@@ -1218,7 +1218,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                           style: const TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 20,
-                              color: _kOrange),
+                              color: _kAccent),
                         ),
                       ],
                     ),
@@ -1379,13 +1379,13 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   decoration: BoxDecoration(
                     color: _cart.isEmpty
                         ? Colors.grey.shade100
-                        : _kOrange.withOpacity(0.1),
+                        : _kAccent.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     _cart.isEmpty ? 'Empty' : '${_cart.length} items',
                     style: TextStyle(
-                      color: _cart.isEmpty ? Colors.grey.shade400 : _kOrange,
+                      color: _cart.isEmpty ? Colors.grey.shade400 : _kAccent,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
@@ -1432,14 +1432,14 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 5, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _kOrange.withOpacity(0.12),
+                            color: _kAccent.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text('ACTIVE TAB',
                               style: TextStyle(
                                   fontSize: 9,
                                   fontWeight: FontWeight.w800,
-                                  color: _kOrange)),
+                                  color: _kAccent)),
                         ),
                       ],
                     ],
@@ -1473,7 +1473,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       icon: Icon(icon, size: 15),
       label: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
       style: ElevatedButton.styleFrom(
-        backgroundColor: sel ? _kOrange : Colors.grey.shade100,
+        backgroundColor: sel ? _kAccent : Colors.grey.shade100,
         foregroundColor: sel ? Colors.white : Colors.black54,
         elevation: 0,
         padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1681,7 +1681,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.notes_rounded, size: 12, color: _kOrange),
+                const Icon(Icons.notes_rounded, size: 12, color: _kAccent),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(item.notes,
@@ -1721,7 +1721,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _kOrange, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: _kAccent, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Save'),
           ),
@@ -1880,7 +1880,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             children: [
               Text('Total', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade500)),
               Text(_currencyFormat.format(grandTotal),
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _kOrange)),
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _kAccent)),
             ],
           ),
           const SizedBox(height: 14),
@@ -2047,8 +2047,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   label: const Text('Invoice', style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    foregroundColor: _kOrange,
-                    side: const BorderSide(color: _kOrange),
+                    foregroundColor: _kAccent,
+                    side: const BorderSide(color: _kAccent),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
@@ -2105,8 +2105,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
       headerIcon = Icons.restaurant_rounded;
       statusBadge = latestOrder.status == OrderStatus.preparing ? 'PREPARING' : 'READY';
     } else {
-      accentColor = _kOrange; bgColor = _kOrangeBg;
-      borderColor = _kOrange.withOpacity(0.35);
+      accentColor = _kAccent; bgColor = _kAccentBg;
+      borderColor = _kAccent.withOpacity(0.35);
       headerIcon = Icons.receipt_long_rounded; statusBadge = 'ACTIVE';
     }
 
@@ -2221,8 +2221,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   icon: const Icon(Icons.receipt_outlined, size: 13),
                   label: const Text('View Invoice', style: TextStyle(fontSize: 11)),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: _kOrange,
-                    side: const BorderSide(color: _kOrange),
+                    foregroundColor: _kAccent,
+                    side: const BorderSide(color: _kAccent),
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -2353,7 +2353,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         SnackBar(
           content: Text(
               '${newItems.length} item(s) added to Table ${_tables.firstWhere((t) => t.id == _selectedTableId, orElse: () => RestaurantTable(id: '', tableNumber: '?', capacity: 0)).tableNumber} tab.'),
-          backgroundColor: _kOrange,
+          backgroundColor: _kAccent,
         ),
       );
     } catch (e) {
@@ -2790,7 +2790,7 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
                   _methodTile(Icons.credit_card_rounded, 'Card', 'card', Colors.blue.shade600),
                   if (widget.isHotelProperty) ...[
                     const SizedBox(width: 10),
-                    _methodTile(Icons.hotel_rounded, 'Room Charge', 'room', _kOrange),
+                    _methodTile(Icons.hotel_rounded, 'Room Charge', 'room', _kAccent),
                   ],
                 ],
               ),
@@ -2888,15 +2888,15 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
                                 return ListTile(
                                   dense: true,
                                   selected: isSelected,
-                                  selectedColor: _kOrange,
-                                  selectedTileColor: _kOrange.withOpacity(0.06),
+                                  selectedColor: _kAccent,
+                                  selectedTileColor: _kAccent.withOpacity(0.06),
                                   shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(8)),
                                   leading: CircleAvatar(
                                     radius: 16,
-                                    backgroundColor: _kOrange.withOpacity(0.1),
+                                    backgroundColor: _kAccent.withOpacity(0.1),
                                     child: const Icon(Icons.person_rounded,
-                                        size: 16, color: _kOrange),
+                                        size: 16, color: _kAccent),
                                   ),
                                   title: Text(guest.fullName,
                                       style: const TextStyle(
@@ -2907,7 +2907,7 @@ class _PosPaymentDialogState extends State<_PosPaymentDialog> {
                                           fontSize: 11, color: Colors.grey.shade500)),
                                   trailing: isSelected
                                       ? const Icon(Icons.check_circle_rounded,
-                                          color: _kOrange, size: 18)
+                                          color: _kAccent, size: 18)
                                       : null,
                                   onTap: () => setState(() => _selectedGuest = d),
                                 );
@@ -2996,7 +2996,7 @@ class _DiscountTypeToggle extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: active ? _kOrange : Colors.transparent,
+          color: active ? _kAccent : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
         ),
         alignment: Alignment.center,

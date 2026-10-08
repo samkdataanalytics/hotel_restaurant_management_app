@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 /// The HotRest lockup, from `assets/images/hotrest_logo_new.png`.
 ///
-/// Deliberately a different file from the `hotrest_logo.webp` the web panel
-/// uses in ten places — that one is a square mark sized for a sidebar, and
-/// repointing it would repaint web chrome.
+/// The web panel now shares this identity, but not this file: its slots are
+/// square, so it uses `hotrest_mark.png` and `hotrest_mark_light.png`, plus
+/// `hotrest_logo_light.png` for the reversed lockup on its dark auth screens.
 ///
 /// The asset is navy on a transparent ground, so it needs a light surface
 /// behind it. Every placement here is on `surface` or white.

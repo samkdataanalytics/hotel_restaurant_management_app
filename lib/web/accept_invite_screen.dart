@@ -181,7 +181,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen>
                   height: 56,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                        colors: [Color(0xFFD4A853), Color(0xFFE8C97A)]),
+                        colors: [Color(0xFF0D9B94), Color(0xFF3FBDB4)]),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(Icons.hotel_rounded,
@@ -238,7 +238,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen>
                         text: propertyName,
                         style: TextStyle(
                             fontWeight: FontWeight.w700,
-                            color: AppTheme.adminPrimary),
+                            color: AppTheme.brandOnDark),
                       ),
                       const TextSpan(
                           text: ' as a team member.'),
@@ -269,7 +269,7 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen>
                         blurRadius: 4)
                   ],
                 ),
-                labelColor: AppTheme.adminPrimary,
+                labelColor: AppTheme.brandOnDark,
                 unselectedLabelColor: Colors.black45,
                 labelStyle: const TextStyle(
                     fontWeight: FontWeight.w600, fontSize: 13),
@@ -351,7 +351,8 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen>
             child: ElevatedButton(
               onPressed: _submitting ? null : _signUp,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.adminPrimary,
+                backgroundColor: AppTheme.brandOnDark,
+                foregroundColor: AppTheme.onBrandOnDark,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
@@ -399,7 +400,8 @@ class _AcceptInviteScreenState extends ConsumerState<AcceptInviteScreen>
             child: ElevatedButton(
               onPressed: _submitting ? null : _logIn,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.adminPrimary,
+                backgroundColor: AppTheme.brandOnDark,
+                foregroundColor: AppTheme.onBrandOnDark,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),

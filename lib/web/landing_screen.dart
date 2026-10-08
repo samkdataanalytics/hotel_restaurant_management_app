@@ -14,8 +14,8 @@ class _C {
   static const surface   = Color(0xFFF8FAFC);
   static const card      = Color(0xFFFFFFFF);
   static const border    = Color(0xFFE2E8F0);
-  static const gold      = Color(0xFFD4A853);
-  static const goldLight = Color(0xFFEDD07A);
+  static const gold      = Color(0xFF0A7D77);
+  static const goldLight = Color(0xFF0D9B94);
   static const text      = Color(0xFF0F172A);
   static const subtext   = Color(0xFF64748B);
   static const muted     = Color(0xFF94A3B8);
@@ -339,7 +339,7 @@ class _AnimatedLogoState extends State<_AnimatedLogo> with SingleTickerProviderS
                 BoxShadow(color: _C.goldLight.withAlpha(outerAlpha), blurRadius: blurOuter, spreadRadius: spreadOuter),
               ],
             ),
-            child: Image.asset('assets/images/hotrest_logo.webp',
+            child: Image.asset('assets/images/hotrest_mark.png',
                 width: widget.size, height: widget.size, fit: BoxFit.contain),
           ),
         );
@@ -1980,7 +1980,7 @@ class _Footer extends StatelessWidget {
         shape: BoxShape.circle,
         boxShadow: [BoxShadow(color: _C.gold.withAlpha(80), blurRadius: 12, spreadRadius: 1)],
       ),
-      child: Image.asset('assets/images/hotrest_logo.webp', width: 40, height: 40, fit: BoxFit.contain),
+      child: Image.asset('assets/images/hotrest_mark.png', width: 40, height: 40, fit: BoxFit.contain),
     ),
     const SizedBox(width: 10),
     ShaderMask(

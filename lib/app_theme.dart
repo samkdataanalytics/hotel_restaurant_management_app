@@ -94,8 +94,41 @@ class AppTheme {
 
   // ─── Web Admin Theme ─────────────────────────────────────
 
-  static const _adminPrimary = Color(0xFFE65100);       // Elevate: Burnt Orange
-  static const _adminPrimaryLight = Color(0xFFFF9800);  // Elevate: Lighter Orange
+  // ─── Brand ───────────────────────────────────────────────────────────────
+  // Sampled from assets/images/hotrest_logo_new.png — the mark is a navy H
+  // with a teal ribbon through it, and those two are the whole palette. They
+  // replaced the previous burnt orange when the new logo was adopted.
+
+  /// The navy of the mark and wordmark. 13.98:1 on white.
+  static const brandNavy = Color(0xFF012C58);
+
+  /// The teal of the ribbon, as drawn. Only 3.42:1 on white, so this is for
+  /// the logo and large fills — never small text. Use [brandTeal] for that.
+  static const brandTealPure = Color(0xFF0D9B94);
+
+  /// The ribbon teal darkened to 4.98:1 on white: same hue, legible under
+  /// body text and safe to put white text on. This is the usable teal.
+  static const brandTeal = Color(0xFF0A7D77);
+
+  /// Teal lifted for dark grounds. The pure teal is only 4.4:1 on the sidebar
+  /// navy; this is 6.6:1 there and 7.8:1 on the darker auth gradients.
+  static const brandTealOnDark = Color(0xFF3FBDB4);
+
+  /// Brand accent for the dark screens — login, signup, invite, verify,
+  /// onboarding and the guest QR pages.
+  ///
+  /// [adminPrimary] is navy and all but disappears there: 1.22:1 against the
+  /// login card, where the burnt orange it replaced was 3.02:1. This is 4.99:1.
+  static const brandOnDark = brandTealOnDark;
+
+  /// Label colour for anything filled with [brandOnDark]: 6.09:1 on it, where
+  /// white would be 2.30:1. No single teal clears both the 3:1 the fill needs
+  /// against a dark card and the 4.5:1 a white label needs on the fill — the
+  /// two ranges do not overlap — so dark labels are the way out.
+  static const onBrandOnDark = brandNavy;
+
+  static const _adminPrimary = brandNavy;
+  static const _adminPrimaryLight = brandTeal;
   static const _adminBgDark = Color(0xFF0F172A);
   static const _adminSidebar = Color(0xFF101828);       // Elevate: Deeper Midnight
   static const _adminContent = Color(0xFFF8FAFC);       // Elevate: Soft Slate 50
@@ -286,9 +319,16 @@ class AppTheme {
 
   // ─── Restaurant Section (const — safe in const expressions) ─────────────────
 
-  static const Color restaurantAccent    = Color(0xFFF97316);
-  static const Color restaurantAccentBg  = Color(0xFFFFF7ED);
-  static const Color restaurantAccentMid = Color(0xFFFFEDD5);
+  // Teal, not the former orange: with navy as the brand primary the restaurant
+  // side now reads as the ribbon through the mark, and orange was left looking
+  // like the one survivor of the old palette. The hotel side keeps using each
+  // property's own configurable colour, so the two halves stay distinguishable.
+  //
+  // restaurantAccent on restaurantAccentBg is 4.61:1 — the lightest tint that
+  // still carries body text.
+  static const Color restaurantAccent    = brandTeal;
+  static const Color restaurantAccentBg  = Color(0xFFEFF8F7);
+  static const Color restaurantAccentMid = Color(0xFFD5EDEB);
 
   // ─── Semantic Status Colors (const) ─────────────────────────────────────────
 

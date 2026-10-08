@@ -145,7 +145,7 @@ class _SuperadminShellState extends ConsumerState<SuperadminShell> {
             height: 40,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFD4A853), Color(0xFFE8C97A)],
+                colors: [Color(0xFF0D9B94), Color(0xFF3FBDB4)],
               ),
               borderRadius: BorderRadius.circular(10),
             ),

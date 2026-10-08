@@ -21,7 +21,7 @@ class _GuestRegistrationScreenState extends ConsumerState<GuestRegistrationScree
   BookingService get _bookingService => ref.read(bookingServiceProvider);
   bool _isLoading = true;
   String? _error;
-  Color _accent = AppTheme.adminPrimary; // overridden after booking lookup
+  Color _accent = AppTheme.brandOnDark; // overridden after booking lookup
   String _propertyName = '';
 
   Booking? _booking;

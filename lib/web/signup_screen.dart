@@ -190,9 +190,9 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
       children: [
         // Logo
         Image.asset(
-          'assets/images/hotrest_logo.webp',
-          width: 140,
-          height: 140,
+          'assets/images/hotrest_logo_light.png',
+          width: 220,
+          height: 71,
           fit: BoxFit.contain,
         ),
         const SizedBox(height: 24),
@@ -216,14 +216,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFFEDD07A), Color(0xFFD4A853)],
+              colors: [Color(0xFF3FBDB4), Color(0xFF0D9B94)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFD4A853).withOpacity(0.45),
+                color: const Color(0xFF0D9B94).withOpacity(0.45),
                 blurRadius: 18,
                 offset: const Offset(0, 6),
               ),
@@ -326,7 +326,8 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
           child: ElevatedButton(
             onPressed: _isLoading ? null : _signup,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.adminPrimary,
+              backgroundColor: AppTheme.brandOnDark,
+              foregroundColor: AppTheme.onBrandOnDark,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             child: _isLoading
@@ -357,7 +358,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
               child: Text(
                 'Sign in',
                 style: TextStyle(
-                  color: AppTheme.adminPrimary,
+                  color: AppTheme.brandOnDark,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -455,7 +456,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppTheme.adminPrimary),
+          borderSide: BorderSide(color: AppTheme.brandOnDark),
         ),
       ),
     );

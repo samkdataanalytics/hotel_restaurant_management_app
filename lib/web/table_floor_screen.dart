@@ -28,8 +28,8 @@ import '../di/injection_container.dart';
 import 'widgets/split_payment_inputs.dart';
 import 'widgets/responsive_dialog.dart';
 
-const _kOrange = AppTheme.restaurantAccent;
-const _kOrangeBg = AppTheme.restaurantAccentBg;
+const _kAccent = AppTheme.restaurantAccent;
+const _kAccentBg = AppTheme.restaurantAccentBg;
 const _kGreen = Color(0xFF22C55E);
 const _kGreenBg = Color(0xFFF0FFF4);
 
@@ -173,7 +173,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: active ? _kOrange : Colors.transparent,
+          color: active ? _kAccent : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
         ),
         child: Text(
@@ -346,7 +346,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: _kOrangeBg,
+                  color: _kAccentBg,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -385,7 +385,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                             style: const TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w800,
-                                color: _kOrange)),
+                                color: _kAccent)),
                       ],
                     ),
                   ],
@@ -430,7 +430,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                   const SizedBox(width: 10),
                   if (widget.isHotelProperty)
                     _methodTile(Icons.hotel_rounded, 'Room Charge', 'room',
-                        _kOrange),
+                        _kAccent),
                 ],
               ),
 
@@ -487,18 +487,18 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                                 return ListTile(
                                   dense: true,
                                   selected: isSelected,
-                                  selectedColor: _kOrange,
+                                  selectedColor: _kAccent,
                                   selectedTileColor:
-                                      _kOrange.withOpacity(0.06),
+                                      _kAccent.withOpacity(0.06),
                                   shape: RoundedRectangleBorder(
                                       borderRadius:
                                           BorderRadius.circular(8)),
                                   leading: CircleAvatar(
                                     radius: 16,
                                     backgroundColor:
-                                        _kOrange.withOpacity(0.1),
+                                        _kAccent.withOpacity(0.1),
                                     child: const Icon(Icons.person_rounded,
-                                        size: 16, color: _kOrange),
+                                        size: 16, color: _kAccent),
                                   ),
                                   title: Text(
                                     guest.fullName,
@@ -515,7 +515,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                                   trailing: isSelected
                                       ? const Icon(
                                           Icons.check_circle_rounded,
-                                          color: _kOrange,
+                                          color: _kAccent,
                                           size: 18)
                                       : null,
                                   onTap: () =>
@@ -744,7 +744,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                                             style: TextStyle(
                                                 fontSize: 15,
                                                 fontWeight: FontWeight.w700,
-                                                color: optQty > 0 ? _kOrange : Colors.black26)),
+                                                color: optQty > 0 ? _kAccent : Colors.black26)),
                                       ),
                                       _qtyDialogBtn(
                                         icon: Icons.add_rounded,
@@ -764,7 +764,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                                       children: [
                                         Icon(
                                           isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                                          color: isSelected ? _kOrange : Colors.grey.shade400,
+                                          color: isSelected ? _kAccent : Colors.grey.shade400,
                                           size: 20,
                                         ),
                                         const SizedBox(width: 10),
@@ -802,7 +802,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
                 onPressed: isValid ? () => Navigator.pop(ctx, (mods: selections, qty: qty)) : null,
-                style: ElevatedButton.styleFrom(backgroundColor: _kOrange, foregroundColor: Colors.white),
+                style: ElevatedButton.styleFrom(backgroundColor: _kAccent, foregroundColor: Colors.white),
                 child: Text('Add $qty to Order'),
               )
             ],
@@ -847,10 +847,10 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: enabled ? _kOrange.withOpacity(0.12) : Colors.grey.shade100,
+          color: enabled ? _kAccent.withOpacity(0.12) : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(icon, size: 18, color: enabled ? _kOrange : Colors.grey.shade400),
+        child: Icon(icon, size: 18, color: enabled ? _kAccent : Colors.grey.shade400),
       ),
     );
   }
@@ -1243,9 +1243,9 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-                color: _kOrangeBg, borderRadius: BorderRadius.circular(10)),
+                color: _kAccentBg, borderRadius: BorderRadius.circular(10)),
             child: const Icon(Icons.table_restaurant_rounded,
-                color: _kOrange, size: 20),
+                color: _kAccent, size: 20),
           ),
           const SizedBox(width: 12),
           Text('Table Floor',
@@ -1254,15 +1254,15 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
           _statPill(Icons.check_circle_outline, '$available Available',
               Colors.green.shade600),
           const SizedBox(width: 8),
-          _statPill(Icons.people_rounded, '$occupied Occupied', _kOrange),
+          _statPill(Icons.people_rounded, '$occupied Occupied', _kAccent),
           const Spacer(),
           OutlinedButton.icon(
             onPressed: _load,
             icon: const Icon(Icons.refresh_rounded, size: 16),
             label: const Text('Refresh'),
             style: OutlinedButton.styleFrom(
-                foregroundColor: _kOrange,
-                side: const BorderSide(color: _kOrange)),
+                foregroundColor: _kAccent,
+                side: const BorderSide(color: _kAccent)),
           ),
         ],
       ),
@@ -1364,12 +1364,12 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
     }
 
     final cardColor = isSelected
-        ? (isOccupied ? _kOrangeBg : _kGreenBg)
+        ? (isOccupied ? _kAccentBg : _kGreenBg)
         : Colors.white;
     final borderColor = isSelected
-        ? (isOccupied ? _kOrange : _kGreen)
+        ? (isOccupied ? _kAccent : _kGreen)
         : isOccupied
-            ? _kOrange.withOpacity(0.25)
+            ? _kAccent.withOpacity(0.25)
             : Colors.grey.shade200;
 
     return GestureDetector(
@@ -1383,7 +1383,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
           boxShadow: [
             BoxShadow(
               color: isSelected
-                  ? (isOccupied ? _kOrange : _kGreen).withOpacity(0.12)
+                  ? (isOccupied ? _kAccent : _kGreen).withOpacity(0.12)
                   : Colors.black.withOpacity(0.04),
               blurRadius: isSelected ? 12 : 6,
               offset: const Offset(0, 3),
@@ -1402,7 +1402,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                     height: 28,
                     decoration: BoxDecoration(
                       color: isOccupied
-                          ? _kOrange.withOpacity(0.12)
+                          ? _kAccent.withOpacity(0.12)
                           : Colors.green.shade50,
                       borderRadius: BorderRadius.circular(7),
                     ),
@@ -1411,7 +1411,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                           ? Icons.people_rounded
                           : Icons.table_restaurant_rounded,
                       size: 15,
-                      color: isOccupied ? _kOrange : Colors.green.shade600,
+                      color: isOccupied ? _kAccent : Colors.green.shade600,
                     ),
                   ),
                   const Spacer(),
@@ -1453,7 +1453,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                   style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      color: _kOrange),
+                      color: _kAccent),
                 ),
               ] else ...[
                 Text('Available',
@@ -1531,7 +1531,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                   color: Colors.orange.shade50,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.analytics_rounded, size: 48, color: Color(0xFFE65100)),
+                child: Icon(Icons.analytics_rounded, size: 48, color: AppTheme.adminPrimary),
               ),
               const SizedBox(height: 24),
               const Text(
@@ -1563,7 +1563,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
   Widget _buildStatColumn(String label, String value) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFFE65100))),
+        Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppTheme.adminPrimary)),
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF94A3B8))),
       ],
@@ -1639,7 +1639,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
               ),
               const Spacer(),
               // Action buttons
-              _actionBtn(Icons.add_rounded, 'Add Items', _kOrange,
+              _actionBtn(Icons.add_rounded, 'Add Items', _kAccent,
                   outlined: true,
                   onPressed: () => setState(() {
                         _isAddingItems = true;
@@ -1714,7 +1714,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 20, vertical: 14),
                 decoration: BoxDecoration(
-                  color: _kOrangeBg,
+                  color: _kAccentBg,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -1727,7 +1727,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                         style: const TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 24,
-                            color: _kOrange)),
+                            color: _kAccent)),
                   ],
                 ),
               ),
@@ -2203,7 +2203,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                         selected: _selectedCategory == null,
                         onSelected: (_) =>
                             setState(() => _selectedCategory = null),
-                        selectedColor: _kOrange,
+                        selectedColor: _kAccent,
                         backgroundColor: Colors.grey.shade100,
                         visualDensity: VisualDensity.compact,
                       ),
@@ -2221,7 +2221,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                           selected: sel,
                           onSelected: (_) =>
                               setState(() => _selectedCategory = cat),
-                          selectedColor: _kOrange,
+                          selectedColor: _kAccent,
                           backgroundColor: Colors.grey.shade100,
                           visualDensity: VisualDensity.compact,
                         ),
@@ -2332,7 +2332,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
               ? Colors.amber.shade700
               : isAddOn
                   ? const Color(0xFF0D9488)
-                  : _kOrange;
+                  : _kAccent;
 
           return Container(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
@@ -2347,14 +2347,14 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                      color: _kOrangeBg,
+                      color: _kAccentBg,
                       borderRadius: BorderRadius.circular(8)),
                   child: Text(
                     '$cartCount item${cartCount == 1 ? '' : 's'}  ·  ${_currency.format(cartTotalWithCharges)}',
                     style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: _kOrange),
+                        color: _kAccent),
                   ),
                 )
               else
@@ -2424,7 +2424,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
       child: Row(children: [
         Text('${item.quantity}×',
             style: const TextStyle(
-                fontWeight: FontWeight.w700, color: _kOrange, fontSize: 13)),
+                fontWeight: FontWeight.w700, color: _kAccent, fontSize: 13)),
         const SizedBox(width: 10),
         Expanded(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2486,7 +2486,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
               color: unavailable
                   ? Colors.grey.shade300
                   : inCart
-                      ? _kOrange
+                      ? _kAccent
                       : Colors.grey.shade200,
               width: inCart && !unavailable ? 2 : 1),
           boxShadow: unavailable
@@ -2571,7 +2571,7 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
                           style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: qty > 0 ? _kOrange : Colors.black26)),
+                              color: qty > 0 ? _kAccent : Colors.black26)),
                       _stepBtn(
                         icon: Icons.add_rounded,
                         enabled: !unavailable,
@@ -2619,11 +2619,11 @@ class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
         width: 28,
         height: 28,
         decoration: BoxDecoration(
-            color: enabled ? _kOrange.withOpacity(0.1) : Colors.grey.shade100,
+            color: enabled ? _kAccent.withOpacity(0.1) : Colors.grey.shade100,
             borderRadius: BorderRadius.circular(6)),
         child: Icon(icon,
             size: 14,
-            color: enabled ? _kOrange : Colors.grey.shade300),
+            color: enabled ? _kAccent : Colors.grey.shade300),
       ),
     );
   }

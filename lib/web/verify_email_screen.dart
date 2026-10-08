@@ -133,12 +133,12 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
                     width: 72,
                     height: 72,
                     decoration: BoxDecoration(
-                      color: AppTheme.adminPrimary.withOpacity(0.15),
+                      color: AppTheme.brandOnDark.withOpacity(0.15),
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.adminPrimary.withOpacity(0.4)),
+                      border: Border.all(color: AppTheme.brandOnDark.withOpacity(0.4)),
                     ),
                     child: Icon(Icons.mark_email_unread_rounded,
-                        color: AppTheme.adminPrimary, size: 36),
+                        color: AppTheme.brandOnDark, size: 36),
                   ),
                   const SizedBox(height: 24),
                   const Text(
@@ -211,8 +211,9 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen>
                     child: ElevatedButton(
                       onPressed: _checking ? null : _checkVerified,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.adminPrimary,
-                        disabledBackgroundColor: AppTheme.adminPrimary.withOpacity(0.5),
+                        backgroundColor: AppTheme.brandOnDark,
+                        foregroundColor: AppTheme.onBrandOnDark,
+                        disabledBackgroundColor: AppTheme.brandOnDark.withOpacity(0.5),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),

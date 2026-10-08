@@ -12,7 +12,12 @@ import 'step1_company_details.dart';
 Widget buildOnboardingBrandHeader() {
   return Column(
     children: [
-      Image.asset('assets/images/hotrest_logo.webp', width: 120, height: 120),
+      Image.asset(
+        'assets/images/hotrest_logo_light.png',
+        width: 210,
+        height: 67,
+        fit: BoxFit.contain,
+      ),
       const SizedBox(height: 8),
       const Text(
         'Welcome to HotRest',
@@ -171,7 +176,7 @@ class _StepDot extends StatelessWidget {
     final Color dotColor = isCompleted
         ? AppTheme.success
         : isActive
-            ? AppTheme.adminPrimary
+            ? AppTheme.brandOnDark
             : Colors.white.withOpacity(0.3);
 
     return Column(

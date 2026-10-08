@@ -90,8 +90,12 @@ const _hotelSection = _NavSection(
 
 const _restaurantSection = _NavSection(
   'RESTAURANT',
-  AppTheme.restaurantAccent,
-  Color(0x1AF97316),
+  // The lifted teal, not AppTheme.restaurantAccent: the sidebar is a dark navy
+  // gradient, where the accent teal is 3.05:1 — below the orange it replaced
+  // (5.42:1) and too low for a label. This is 6.6:1. The restaurant screens
+  // themselves sit on white and keep the darker accent.
+  AppTheme.brandTealOnDark,
+  Color(0x1A3FBDB4),
   [
     _NavItem(Icons.point_of_sale_rounded,         'POS',           6),
     _NavItem(Icons.table_restaurant_rounded,      'Tables',        7),
@@ -761,14 +765,14 @@ class _AppShellState extends ConsumerState<AppShell> {
                     height: logoSize,
                     fit: BoxFit.contain,
                     errorBuilder: (_, __, ___) => Image.asset(
-                      'assets/images/hotrest_logo.webp',
+                      'assets/images/hotrest_mark_light.png',
                       width: logoSize,
                       height: logoSize,
                       fit: BoxFit.contain,
                     ),
                   )
                 : Image.asset(
-                    'assets/images/hotrest_logo.webp',
+                    'assets/images/hotrest_mark_light.png',
                     width: logoSize,
                     height: logoSize,
                     fit: BoxFit.contain,

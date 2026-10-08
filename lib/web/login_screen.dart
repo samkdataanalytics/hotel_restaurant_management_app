@@ -128,7 +128,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.adminPrimary,
+              backgroundColor: AppTheme.brandOnDark,
+              foregroundColor: AppTheme.onBrandOnDark,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
               minimumSize: const Size(120, 40),
@@ -183,9 +184,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 children: [
                   // Logo
                   Image.asset(
-                    'assets/images/hotrest_logo.webp',
-                    width: 180,
-                    height: 180,
+                    'assets/images/hotrest_logo_light.png',
+                    width: 260,
+                    height: 83,
+                    fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 8),
 
@@ -224,7 +226,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: AppTheme.adminPrimary),
+                        borderSide: BorderSide(color: AppTheme.brandOnDark),
                       ),
                     ),
                     onSubmitted: (_) => _login(),
@@ -267,7 +269,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: AppTheme.adminPrimary),
+                        borderSide: BorderSide(color: AppTheme.brandOnDark),
                       ),
                     ),
                     onSubmitted: (_) => _login(),
@@ -311,7 +313,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                         child: Text(
                           'Create one',
                           style: TextStyle(
-                            color: AppTheme.adminPrimary,
+                            color: AppTheme.brandOnDark,
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
@@ -328,8 +330,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _login,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.adminPrimary,
-                        disabledBackgroundColor: AppTheme.adminPrimary.withOpacity(0.6),
+                        backgroundColor: AppTheme.brandOnDark,
+                        foregroundColor: AppTheme.onBrandOnDark,
+                        disabledBackgroundColor: AppTheme.brandOnDark.withOpacity(0.6),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),

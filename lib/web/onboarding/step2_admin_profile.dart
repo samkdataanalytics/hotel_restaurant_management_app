@@ -140,8 +140,8 @@ class _Step2AdminProfileState extends State<Step2AdminProfile> {
                   child: ElevatedButton(
                     onPressed: _submit,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.adminPrimary,
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppTheme.brandOnDark,
+                      foregroundColor: AppTheme.onBrandOnDark,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),

@@ -6,8 +6,8 @@ class _C {
   static const bg      = Color(0xFFFFFFFF);
   static const surface = Color(0xFFF8FAFC);
   static const border  = Color(0xFFE2E8F0);
-  static const gold    = Color(0xFFD4A853);
-  static const goldLight = Color(0xFFEDD07A);
+  static const gold    = Color(0xFF0A7D77);
+  static const goldLight = Color(0xFF0D9B94);
   static const text    = Color(0xFF0F172A);
   static const subtext = Color(0xFF64748B);
   static const muted   = Color(0xFF94A3B8);
@@ -54,7 +54,7 @@ class LegalScreen extends StatelessWidget {
                 GestureDetector(
                   onTap: () => context.go('/'),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Image.asset('assets/images/hotrest_logo.webp',
+                    Image.asset('assets/images/hotrest_mark.png',
                         width: 34, height: 34, fit: BoxFit.contain),
                     const SizedBox(width: 8),
                     ShaderMask(
