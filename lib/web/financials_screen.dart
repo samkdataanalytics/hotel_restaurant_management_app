@@ -238,7 +238,7 @@ class _FinancialsScreenState extends ConsumerState<FinancialsScreen> {
     }
 
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.pageBg,
       child: SingleChildScrollView(
         padding: AppTheme.screenPad(context),
         child: Column(
@@ -821,8 +821,8 @@ class _FinancialsScreenState extends ConsumerState<FinancialsScreen> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        side: const BorderSide(color: AppTheme.cardBorder),
       ),
       child: Padding(
         padding: const EdgeInsets.all(24),

@@ -392,7 +392,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
         _rooms.where((r) => r.status == RoomStatus.maintenance).length;
 
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.pageBg,
       child: SingleChildScrollView(
         padding: AppTheme.screenPad(context),
         child: Column(

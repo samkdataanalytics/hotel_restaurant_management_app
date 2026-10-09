@@ -134,7 +134,7 @@ class _ExpensesManagementScreenState extends ConsumerState<ExpensesManagementScr
     if (_isLoading) return const TableListSkeleton(rowCount: 7, cellCount: 5);
 
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.pageBg,
       child: SingleChildScrollView(
         padding: AppTheme.screenPad(context),
         child: Column(

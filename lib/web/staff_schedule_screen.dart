@@ -9,6 +9,7 @@ import '../services/shift_service.dart';
 import '../providers/service_providers.dart';
 import '../providers/app_auth_provider.dart';
 import 'widgets/responsive_dialog.dart';
+import '../app_theme.dart';
 
 // ─── Accent colours for the TEAM section ─────────────────────────────────────
 
@@ -260,7 +261,7 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
         '${DateFormat('MMM d, yyyy').format(days.last)}';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.pageBg,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -284,17 +285,17 @@ class _StaffScheduleScreenState extends ConsumerState<StaffScheduleScreen>
                           color: _kAccent, size: 22),
                     ),
                     const SizedBox(width: 14),
-                    const Column(
+                    Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Was a hardcoded 20px sans with no family, making this
+                        // the only hotel screen whose page title was not the
+                        // DM Serif every other one uses.
                         Text('Shift Schedule',
-                            style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1E293B))),
+                            style: Theme.of(context).textTheme.displayMedium),
                         Text('Schedule shifts and track working hours',
                             style: TextStyle(
-                                fontSize: 13, color: Color(0xFF64748B))),
+                                fontSize: 13, color: AppTheme.adminTextMuted)),
                       ],
                     ),
                   ],

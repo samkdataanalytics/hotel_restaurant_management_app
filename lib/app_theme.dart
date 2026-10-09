@@ -168,8 +168,8 @@ class AppTheme {
         elevation: 0,
         shadowColor: Colors.black12,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFFE8EDF3)),
+          borderRadius: BorderRadius.circular(cardRadius),
+          side: const BorderSide(color: cardBorder),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -206,13 +206,13 @@ class AppTheme {
       dataTableTheme: DataTableThemeData(
         headingRowColor: WidgetStateProperty.all(Colors.grey.shade50),
         headingTextStyle: const TextStyle(
-          fontFamily: 'Inter',
+          fontFamily: 'Outfit',
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: _adminTextMuted,
         ),
         dataTextStyle: const TextStyle(
-          fontFamily: 'Inter',
+          fontFamily: 'Outfit',
           fontSize: 14,
           fontWeight: FontWeight.w400,
           color: _adminTextDark,
@@ -222,23 +222,6 @@ class AppTheme {
   }
 
   // ─── DM Serif Display helpers ────────────────────────────────────────────────
-
-  /// H1 — large page display titles (32 px).
-  static const TextStyle serifDisplayLarge = TextStyle(
-    fontFamily: 'DMSerifDisplay',
-    fontSize: 32,
-    fontWeight: FontWeight.w400,
-    color: _adminTextDark,
-    letterSpacing: -0.3,
-  );
-
-  /// H2 — page-level section titles and prominent dialog headings (24 px).
-  static const TextStyle serifDisplayMedium = TextStyle(
-    fontFamily: 'DMSerifDisplay',
-    fontSize: 24,
-    fontWeight: FontWeight.w400,
-    color: _adminTextDark,
-  );
 
   /// H3 — card headings and secondary dialog titles (20 px).
   static const TextStyle serifHeadingLarge = TextStyle(
@@ -265,10 +248,14 @@ class AppTheme {
   // ─── Shared Design Tokens (used by all web screens) ─────────────────────────
 
   /// Unified card border-radius.
-  static const double cardRadius = 12.0;
+  /// Card corner radius. Was 12 here and in cardTheme while 22 call sites
+  /// drew 16, so the loading skeleton did not match the screen that
+  /// replaced it. Settled on the 16 already in use.
+  static const double cardRadius = 16.0;
 
-  /// Standard horizontal page content padding.
-  static const double pagePadH = 32.0;
+  /// Card border. Was an unnamed #E8EDF3 in cardTheme and cardDecoration
+  /// while two screens drew Colors.grey.shade200 instead.
+  static const Color cardBorder = Color(0xFFE8EDF3);
 
   /// Subtle card shadow shared by hotel and restaurant cards.
   static List<BoxShadow> get cardShadow => [
@@ -279,16 +266,7 @@ class AppTheme {
   static BoxDecoration get cardDecoration => BoxDecoration(
     color: Colors.white,
     borderRadius: BorderRadius.circular(cardRadius),
-    border: Border.all(color: const Color(0xFFE8EDF3)),
-    boxShadow: cardShadow,
-  );
-
-  /// KPI card base decoration (uniform border — safe with borderRadius).
-  /// Use [kpiCard] to get the full left-accent card widget.
-  static BoxDecoration kpiDecoration(Color accent) => BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(cardRadius),
-    border: Border.all(color: const Color(0xFFE8EDF3)),
+    border: Border.all(color: cardBorder),
     boxShadow: cardShadow,
   );
 
@@ -302,7 +280,7 @@ class AppTheme {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(cardRadius),
-        border: Border.all(color: const Color(0xFFE8EDF3)),
+        border: Border.all(color: cardBorder),
         boxShadow: cardShadow,
       ),
       child: ClipRRect(
@@ -369,7 +347,11 @@ class AppTheme {
 
   // ─── Page Background ─────────────────────────────────────────────────────────
 
-  static const Color pageBg = Color(0xFFF5F7FA);
+  /// The page ground. Was declared as #F5F7FA and referenced nowhere, while
+  /// nine screens hardcoded #F8FAFC -- the value the scaffold already uses.
+  /// Re-pointed at the one in use rather than moving nine screens onto an
+  /// unused shade.
+  static const Color pageBg = Color(0xFFF8FAFC);
 
   // ─── Responsive helpers ───────────────────────────────────────────────────
 

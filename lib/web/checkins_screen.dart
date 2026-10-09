@@ -107,7 +107,7 @@ class _CheckinsScreenState extends ConsumerState<CheckinsScreen> {
     if (_isLoading) return const TableListSkeleton(rowCount: 8, cellCount: 5);
 
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.pageBg,
       child: SingleChildScrollView(
         padding: AppTheme.screenPad(context),
         child: Column(

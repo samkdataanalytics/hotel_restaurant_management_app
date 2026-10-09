@@ -345,7 +345,7 @@ class _UsersManagementScreenState
         : _staff.where((m) => !m.isPropertyOwner).toList();
 
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.pageBg,
       child: SingleChildScrollView(
         padding: AppTheme.screenPad(context),
         child: Column(
