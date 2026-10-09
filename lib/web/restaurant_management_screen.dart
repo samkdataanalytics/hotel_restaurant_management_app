@@ -2232,10 +2232,10 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF3CD),
+                      color: AppTheme.restaurantAccentBg,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.table_restaurant_rounded, color: Color(0xFFD4A853), size: 20),
+                    child: const Icon(Icons.table_restaurant_rounded, color: AppTheme.restaurantAccent, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(

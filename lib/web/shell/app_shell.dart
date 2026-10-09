@@ -16,6 +16,7 @@ import '../edit_property_dialog.dart';
 import '../../services/notification_service.dart';
 import '../widgets/notification_bell.dart';
 import '../widgets/upgrade_plan_dialog.dart';
+import '../semantic_palette.dart';
 
 // ─── Route map (pageIndex ↔ URL path) ────────────────────────────────────────
 
@@ -76,7 +77,9 @@ class _NavSection {
 
 const _hotelSection = _NavSection(
   'HOTEL',
-  Color(0xFFD4A853),
+  // Placeholder only: _hotelSectionFor() rebuilds this section with the
+  // property's own colour and keeps nothing from here but .items.
+  AppTheme.defaultPropertyColor,
   Color(0x1AD4A853),
   [
     _NavItem(Icons.dashboard_rounded,      'Dashboard',    0),
@@ -372,7 +375,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   _NavSection _hotelSectionFor(OrgProperty? property) {
     final accent = property != null
         ? hexToColor(property.primaryColor)
-        : const Color(0xFFD4A853);
+        : AppTheme.defaultPropertyColor;
     return _NavSection(
       'HOTEL',
       accent,
@@ -654,7 +657,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       currentIndex: selectedIdx.clamp(0, navItems.length),
       type: BottomNavigationBarType.fixed,
       backgroundColor: const Color(0xFF0F172A),
-      selectedItemColor: hexToColor(activeProperty?.primaryColor ?? '#D4A853'),
+      selectedItemColor: hexToColor(
+          activeProperty?.primaryColor ?? AppTheme.defaultPropertyColorHex),
       unselectedItemColor: Colors.white38,
       selectedLabelStyle:
           const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
@@ -1786,14 +1790,7 @@ class _PlanBadge extends StatelessWidget {
   final String plan;
   const _PlanBadge({required this.plan});
 
-  Color get _color {
-    switch (plan) {
-      case 'starter':    return const Color(0xFF10B981);
-      case 'pro':        return const Color(0xFFD4A853);
-      case 'enterprise': return const Color(0xFF8B5CF6);
-      default:           return const Color(0xFF94A3B8); // growth / fallback
-    }
-  }
+  Color get _color => SemanticPalette.tier(plan);
 
   @override
   Widget build(BuildContext context) {

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_checkin/app_theme.dart';
+import 'package:hotel_checkin/web/semantic_palette.dart';
 
 /// Guards the colour language against the two failures that actually happened.
 ///
@@ -100,6 +101,53 @@ void main() {
                   '${d.toStringAsFixed(1)} dE apart');
         }
       }
+    });
+  });
+
+  group('the categorical palettes stay readable and distinct', () {
+    // Tier, role and type chips all render as text on a ~12% tint of
+    // themselves. The palettes these replaced mostly failed that: the old gold
+    // managed 2.20:1.
+    Color tintOf(Color c) => Color.alphaBlend(c.withValues(alpha: 0.12), Colors.white);
+
+    const tiers = <String, Color>{
+      'free': SemanticPalette.tierFree,
+      'starter': SemanticPalette.tierStarter,
+      'growth': SemanticPalette.tierGrowth,
+      'pro': SemanticPalette.tierPro,
+      'enterprise': SemanticPalette.tierEnterprise,
+    };
+
+    for (final e in tiers.entries) {
+      test('${e.key} tier chip is legible on its own tint', () {
+        expect(contrast(e.value, tintOf(e.value)), greaterThan(4.5));
+      });
+    }
+
+    test('tiers are distinguishable from each other', () {
+      final list = tiers.entries.toList();
+      for (var i = 0; i < list.length; i++) {
+        for (var j = i + 1; j < list.length; j++) {
+          final d = deltaE(list[i].value, list[j].value);
+          expect(d, greaterThan(20.0),
+              reason: '${list[i].key} and ${list[j].key} are only '
+                  '${d.toStringAsFixed(1)} dE apart');
+        }
+      }
+    });
+
+    test('an unknown plan slug does not fall back to a brand colour', () {
+      final unknown = SemanticPalette.tier('something-new');
+      expect(unknown, isNot(AppTheme.adminPrimary));
+      expect(unknown, isNot(AppTheme.restaurantAccent));
+    });
+
+    test('booking sources keep their owners\' exact brand hexes', () {
+      // These belong to Booking.com, Airbnb and Expedia. Re-theming them would
+      // be wrong, so they are pinned rather than merely checked for contrast.
+      expect(SemanticPalette.sourceBookingCom, const Color(0xFF003580));
+      expect(SemanticPalette.sourceAirbnb, const Color(0xFFFF5A5F));
+      expect(SemanticPalette.sourceExpedia, const Color(0xFF00355F));
     });
   });
 

@@ -347,6 +347,17 @@ class AppTheme {
   /// "subordinate", which is what an add-on is.
   static const Color statusAddOn  = Color(0xFF475569);
 
+  /// Fallback brand colour for a property that has not picked one.
+  ///
+  /// Deliberately still gold, and deliberately NOT a HotRest brand colour:
+  /// this slot belongs to the operator, it is offered as the first swatch in
+  /// the property editor, and it is drawn on the dark sidebar where gold is
+  /// 8.10:1. Painting it navy would both overwrite tenant branding and
+  /// disappear (1.28:1). It lived as a bare literal in three places that could
+  /// drift; the string form exists because OrgProperty.primaryColor is hex.
+  static const Color defaultPropertyColor = Color(0xFFD4A853);
+  static const String defaultPropertyColorHex = '#D4A853';
+
   /// An order that has been fired and is with the kitchen.
   ///
   /// Deliberately the same blue the kitchen board gives its "Preparing" lane

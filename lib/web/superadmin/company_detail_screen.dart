@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app_theme.dart';
 import '../../services/organization_service.dart';
+import '../semantic_palette.dart';
 
 class CompanyDetailScreen extends StatefulWidget {
   const CompanyDetailScreen({super.key, required this.org});
@@ -247,16 +248,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
     final statusColor = isActive ? AppTheme.success : AppTheme.danger;
 
     Color planColor;
-    switch (widget.org.plan.toLowerCase()) {
-      case 'enterprise':
-        planColor = AppTheme.goldPrimary;
-        break;
-      case 'pro':
-        planColor = AppTheme.adminPrimary;
-        break;
-      default:
-        planColor = Colors.grey.shade500;
-    }
+    planColor = SemanticPalette.tier(widget.org.plan);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(28, 24, 20, 20),
@@ -538,20 +530,7 @@ class _PropertyCard extends StatelessWidget {
     final isActive = property.status.toLowerCase() == 'active';
     final statusColor = isActive ? AppTheme.success : AppTheme.danger;
 
-    Color typeColor;
-    switch (property.type.toLowerCase()) {
-      case 'hotel':
-        typeColor = AppTheme.adminPrimary;
-        break;
-      case 'resort':
-        typeColor = AppTheme.goldPrimary;
-        break;
-      case 'hostel':
-        typeColor = AppTheme.warning;
-        break;
-      default:
-        typeColor = Colors.grey.shade500;
-    }
+    final typeColor = SemanticPalette.propertyType(property.type);
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -662,20 +641,7 @@ class _MemberRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color roleColor;
-    switch (member.role.toLowerCase()) {
-      case 'owner':
-        roleColor = AppTheme.goldPrimary;
-        break;
-      case 'admin':
-        roleColor = AppTheme.adminPrimary;
-        break;
-      case 'manager':
-        roleColor = AppTheme.warning;
-        break;
-      default:
-        roleColor = Colors.grey.shade500;
-    }
+    final roleColor = SemanticPalette.role(member.role);
 
     final initials = _initials(member.fullName);
 

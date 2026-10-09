@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app_theme.dart';
 import '../../services/organization_service.dart';
+import '../semantic_palette.dart';
 
 class SuperadminDashboard extends StatefulWidget {
   const SuperadminDashboard({super.key});
@@ -204,7 +205,7 @@ class _KpiRow extends StatelessWidget {
             label: 'Total Properties',
             value: totalProperties.toString(),
             icon: Icons.apartment_rounded,
-            accent: AppTheme.goldPrimary,
+            accent: AppTheme.brandTeal,
           ),
         ),
         const SizedBox(width: 16),
@@ -573,16 +574,7 @@ class _RecentCompaniesCard extends StatelessWidget {
 
   Widget _tablePlanCell(String plan) {
     Color color;
-    switch (plan.toLowerCase()) {
-      case 'enterprise':
-        color = AppTheme.goldPrimary;
-        break;
-      case 'pro':
-        color = AppTheme.adminPrimary;
-        break;
-      default:
-        color = Colors.grey.shade500;
-    }
+    color = SemanticPalette.tier(plan);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       child: _PlanChip(label: plan, color: color),
