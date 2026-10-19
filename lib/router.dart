@@ -133,6 +133,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/app/pay-subscription';
       }
 
+      // /superadmin is for superadmins only. Without this, a signed-in user with
+      // an org and a property fell through every branch to `return null` and the
+      // superadmin shell rendered; only RLS stopped them reading anything. It is
+      // placed after the onboarding and payment checks so users who still need
+      // those keep their existing redirects.
+      if (loc.startsWith(AppRoutes.superadmin)) return AppRoutes.appDashboard;
+
       // Has org + properties → main app
       // propertySetup is intentionally NOT listed here — users can navigate
       // there from the app shell to add more properties.
