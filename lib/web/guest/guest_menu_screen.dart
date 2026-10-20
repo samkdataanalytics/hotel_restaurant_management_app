@@ -443,7 +443,7 @@ class _GuestMenuScreenState extends ConsumerState<GuestMenuScreen>
 
   Future<void> _cancelOrder(_PlacedOrder order) async {
     // Re-fetch live status to avoid stale display state
-    final live = await _service.fetchOrderStatus(order.id);
+    final live = await _service.fetchOrderStatus(order.id, widget.propertyId);
     if (!mounted) return;
 
     if (live != null && live.status != 'pending') {
@@ -617,7 +617,7 @@ class _GuestMenuScreenState extends ConsumerState<GuestMenuScreen>
           isAddOn:    effectiveParent != null,
           isTakeaway: type == 'takeaway',
         );
-        placed.sub = _service.watchOrder(id).listen((data) {
+        placed.sub = _service.watchOrder(id, widget.propertyId).listen((data) {
           if (!mounted) return;
           setState(() {
             placed.status        = data.status;

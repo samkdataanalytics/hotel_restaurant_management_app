@@ -94,7 +94,7 @@ class InvoiceService {
     final billable      = expenses.where((e) => e.isBillable && e.bookingId == booking.id).toList();
     final totalExpenses = billable.fold(0.0, (s, e) => s + e.amount);
     final paidExpenses  = billable.where((e) => e.isPaid).fold(0.0, (s, e) => s + e.amount);
-    final bookingPaid   = booking.isPaid ? booking.totalAmount : 0.0;
+    final bookingPaid   = booking.isPaid ? booking.netAmount : 0.0;
 
     // F&B: sum of non-cancelled restaurant orders charged to room
     final taxRate           = settings?.taxRate           ?? 0.0;
@@ -106,7 +106,7 @@ class InvoiceService {
         : 0.0;
     final fbTotal           = fbSubtotal + fbTax + fbService;
 
-    final subTotal    = booking.totalAmount + totalExpenses + fbTotal;
+    final subTotal    = booking.netAmount + totalExpenses + fbTotal;
     final amountPaid  = bookingPaid + paidExpenses;
     final balanceDue  = subTotal - amountPaid;
     final isFullyPaid = balanceDue <= 0.005; // tolerance for float
@@ -420,6 +420,17 @@ class InvoiceService {
         'total':  fmt.format(booking.totalAmount),
         'isPaid': booking.isPaid,
       },
+      if (booking.discountValue > 0)
+        {
+          'desc': booking.discountType == 'percentage'
+              ? 'Booking Discount (${booking.discountValue.toStringAsFixed(booking.discountValue % 1 == 0 ? 0 : 2)}%)'
+              : 'Booking Discount (flat)',
+          'qty':    '',
+          'price':  '',
+          'total':  '− ${fmt.format(booking.discountAmount)}',
+          'isPaid': false,
+          'isDiscount': true,
+        },
       ...expenses.map((e) => {
         'desc':   e.description,
         'qty':    '1',
@@ -452,9 +463,10 @@ class InvoiceService {
         ),
         // Data rows with alternating shade
         ...rowData.asMap().entries.map((entry) {
-          final idx    = entry.key;
-          final row    = entry.value;
-          final isPaid = row['isPaid'] as bool;
+          final idx        = entry.key;
+          final row        = entry.value;
+          final isPaid     = row['isPaid'] as bool;
+          final isDiscount = row['isDiscount'] as bool? ?? false;
           return pw.TableRow(
             decoration: pw.BoxDecoration(
               color: idx.isEven ? PdfColors.white : _kBg,
@@ -463,13 +475,14 @@ class InvoiceService {
               _td(
                 '${row['desc']}${isPaid ? '  ✓ paid' : ''}',
                 align: pw.TextAlign.left,
-                color: isPaid ? _kMuted : _kText,
+                color: isDiscount ? _kRed : (isPaid ? _kMuted : _kText),
               ),
               _td(row['qty'] as String, align: pw.TextAlign.center),
               _td(row['price'] as String, align: pw.TextAlign.right),
               _td(row['total'] as String,
                   align: pw.TextAlign.right,
-                  bold: true),
+                  bold: true,
+                  color: isDiscount ? _kRed : _kText),
             ],
           );
         }),

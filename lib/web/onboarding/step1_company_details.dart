@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../app_theme.dart';
+import '../../services/organization_service.dart'
+    show kCountries, validateCompanyEmail, validateCompanyPhone;
 
 class Step1CompanyDetails extends StatefulWidget {
   final void Function(Map<String, String> data) onNext;
@@ -13,8 +16,12 @@ class _Step1CompanyDetailsState extends State<Step1CompanyDetails> {
   final _formKey = GlobalKey<FormState>();
   final _nameController    = TextEditingController();
   final _slugController    = TextEditingController();
-  final _countryController = TextEditingController();
   final _phoneController   = TextEditingController();
+  final _emailController   = TextEditingController();
+
+  /// ISO 3166-1 alpha-2 of the selected country. Null until the user picks one,
+  /// which is what makes the dropdown a required field.
+  String? _countryCode;
 
   bool _slugEdited = false;
 
@@ -22,6 +29,13 @@ class _Step1CompanyDetailsState extends State<Step1CompanyDetails> {
   void initState() {
     super.initState();
     _nameController.addListener(_onNameChanged);
+
+    // Most owners we serve are small independents with no company domain —
+    // their sign-in address IS their business address. Pre-fill it so the
+    // common case is zero typing, while still leaving the field editable for
+    // anyone who bills to a separate account. Null for username-based logins.
+    _emailController.text =
+        Supabase.instance.client.auth.currentUser?.email ?? '';
   }
 
   void _onNameChanged() {
@@ -39,18 +53,21 @@ class _Step1CompanyDetailsState extends State<Step1CompanyDetails> {
     _nameController.removeListener(_onNameChanged);
     _nameController.dispose();
     _slugController.dispose();
-    _countryController.dispose();
     _phoneController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
   void _submit() {
     if (_formKey.currentState!.validate()) {
+      final country = kCountries.firstWhere((c) => c.code == _countryCode);
       widget.onNext({
-        'name':    _nameController.text.trim(),
-        'slug':    _slugController.text.trim(),
-        'country': _countryController.text.trim(),
-        'phone':   _phoneController.text.trim(),
+        'name':        _nameController.text.trim(),
+        'slug':        _slugController.text.trim(),
+        'country':     country.name,
+        'countryCode': country.code,
+        'phone':       _phoneController.text.trim(),
+        'email':       _emailController.text.trim(),
       });
     }
   }
@@ -125,30 +142,63 @@ class _Step1CompanyDetailsState extends State<Step1CompanyDetails> {
           ),
           const SizedBox(height: 18),
 
-          // Country
-          const _FieldLabel(text: 'Country'),
+          // Country — a fixed list rather than free text, so the stored value
+          // is always a valid ISO code and spellings cannot drift.
+          const _FieldLabel(text: 'Country *'),
           const SizedBox(height: 6),
-          TextFormField(
-            controller: _countryController,
+          DropdownButtonFormField<String>(
+            key: const Key('onboarding_country'),
+            initialValue: _countryCode,
+            isExpanded: true,
             decoration: const InputDecoration(
-              hintText: 'e.g. United States',
+              hintText: 'Select a country',
               prefixIcon: Icon(Icons.flag_rounded),
             ),
-            textInputAction: TextInputAction.next,
+            items: [
+              for (final c in kCountries)
+                DropdownMenuItem(value: c.code, child: Text(c.name)),
+            ],
+            // The field keeps its own display state; this mirror is what
+            // _submit() reads, so no rebuild is needed here.
+            onChanged: (v) => _countryCode = v,
+            validator: (v) =>
+                (v == null || v.isEmpty) ? 'Please select a country' : null,
           ),
           const SizedBox(height: 18),
 
           // Phone
-          const _FieldLabel(text: 'Phone'),
+          const _FieldLabel(text: 'Phone *'),
           const SizedBox(height: 6),
           TextFormField(
+            key: const Key('onboarding_phone'),
             controller: _phoneController,
             decoration: const InputDecoration(
-              hintText: 'e.g. +1 800 123 4567',
+              hintText: 'e.g. +94 77 165 3296',
               prefixIcon: Icon(Icons.phone_rounded),
             ),
             keyboardType: TextInputType.phone,
+            textInputAction: TextInputAction.next,
+            validator: validateCompanyPhone,
+          ),
+          const SizedBox(height: 18),
+
+          // Contact email — where invoices and account notices go. Stored on the
+          // organization so it survives an owner leaving. Pre-filled from the
+          // sign-in address; a personal address is perfectly valid here.
+          const _FieldLabel(text: 'Contact Email *'),
+          const SizedBox(height: 6),
+          TextFormField(
+            key: const Key('onboarding_email'),
+            controller: _emailController,
+            decoration: const InputDecoration(
+              hintText: 'e.g. yourname@gmail.com',
+              helperText: 'For invoices and account notices. '
+                  'A personal address is fine.',
+              prefixIcon: Icon(Icons.email_rounded),
+            ),
+            keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.done,
+            validator: validateCompanyEmail,
             onFieldSubmitted: (_) => _submit(),
           ),
           const SizedBox(height: 32),

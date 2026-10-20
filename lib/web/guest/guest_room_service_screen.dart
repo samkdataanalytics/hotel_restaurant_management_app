@@ -149,7 +149,7 @@ class _GuestRoomServiceScreenState extends ConsumerState<GuestRoomServiceScreen>
       bool changed = false;
       for (final order in _orders) {
         try {
-          final result = await _service.fetchOrderStatus(order.id);
+          final result = await _service.fetchOrderStatus(order.id, widget.propertyId);
           if (result == null) continue;
           if (result.status != order.status ||
               result.paymentStatus != order.paymentStatus) {
@@ -445,7 +445,7 @@ class _GuestRoomServiceScreenState extends ConsumerState<GuestRoomServiceScreen>
 
   Future<void> _cancelOrder(_PlacedOrder order) async {
     // Re-fetch live status before showing dialog — avoids stale UI state.
-    final live = await _service.fetchOrderStatus(order.id);
+    final live = await _service.fetchOrderStatus(order.id, widget.propertyId);
     if (!mounted) return;
 
     if (live != null && live.status != 'pending') {

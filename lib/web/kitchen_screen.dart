@@ -518,8 +518,8 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                             _badge('TAKEAWAY', Colors.amber.withOpacity(0.3), Colors.amber.shade300)
                           else
                             _badge(order.type.name.toUpperCase(), Colors.black38, Colors.white70),
-                          if (order.type == OrderType.roomService && order.tableId != null)
-                            _badge(_roomName(order.tableId),
+                          if (order.type == OrderType.roomService && order.roomNumber != null)
+                            _badge(_roomName(order.roomNumber),
                                 Colors.purple.withOpacity(0.2), Colors.purple.shade200)
                           else if (order.tableId != null)
                             _badge(_tableName(order.tableId),
@@ -774,7 +774,12 @@ class _KitchenScreenState extends ConsumerState<KitchenScreen> {
                 if (!orderGroup.any((o) => o.type == OrderType.dineIn ||
                     o.type == OrderType.takeaway || o.type == OrderType.roomService))
                   _badge(parent.type.name.toUpperCase(), Colors.black38, Colors.white70),
-                if (parent.tableId != null)
+                if (parent.type == OrderType.roomService && parent.roomNumber != null)
+                  _badge(
+                      _roomName(parent.roomNumber),
+                      Colors.purple.withOpacity(0.3),
+                      Colors.purple.shade200)
+                else if (parent.tableId != null)
                   _badge(
                       _tableName(parent.tableId),
                       Colors.purple.withOpacity(0.3),
