@@ -12,7 +12,7 @@ class _C {
   static const bg      = Color(0xFF0F172A);
   static const surface = Color(0xFF1E293B);
   static const card    = Color(0xFF263245);
-  static const gold    = Color(0xFFD4A853);
+  static const gold    = Color(0xFF3FBDB4);
   static const text    = Colors.white;
   static const subtext = Color(0xFF94A3B8);
   static const divider = Color(0xFF334155);
@@ -667,11 +667,11 @@ class _GuestRoomServiceScreenState extends ConsumerState<GuestRoomServiceScreen>
           width: size, height: size,
           fit: BoxFit.contain,
           errorBuilder: (_, __, ___) => Image.asset(
-            'assets/images/hotrest_logo.webp', width: size, height: size),
+            'assets/images/hotrest_mark_light.png', width: size, height: size),
         ),
       );
     }
-    return Image.asset('assets/images/hotrest_logo.webp', width: size, height: size);
+    return Image.asset('assets/images/hotrest_mark_light.png', width: size, height: size);
   }
 
   // ── Loading ───────────────────────────────────────────────────────────────────

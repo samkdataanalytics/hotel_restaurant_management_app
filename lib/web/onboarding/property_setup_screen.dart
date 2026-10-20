@@ -274,9 +274,10 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
     return Column(
       children: [
         Image.asset(
-          'assets/images/hotrest_logo.webp',
-          width: 100,
-          height: 100,
+          'assets/images/hotrest_logo_light.png',
+          width: 190,
+          height: 61,
+          fit: BoxFit.contain,
         ),
         const SizedBox(height: 8),
         Text(
@@ -386,8 +387,8 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
           child: ElevatedButton(
             onPressed: _proceedToStepB,
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.adminPrimary,
-              foregroundColor: Colors.white,
+              backgroundColor: AppTheme.brandOnDark,
+              foregroundColor: AppTheme.onBrandOnDark,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -413,7 +414,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
         ? AppTheme.restaurantAccent
         : option.value == 'both'
             ? AppTheme.goldPrimary
-            : AppTheme.adminPrimary;
+            : AppTheme.brandOnDark;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -618,7 +619,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: AppTheme.adminPrimary, width: 2),
+                borderSide: BorderSide(color: AppTheme.brandOnDark, width: 2),
               ),
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               prefixIcon: const Icon(Icons.schedule_rounded),
@@ -643,7 +644,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: AppTheme.adminPrimary, width: 2),
+                borderSide: BorderSide(color: AppTheme.brandOnDark, width: 2),
               ),
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               prefixIcon: const Icon(Icons.attach_money_rounded),
@@ -667,7 +668,7 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
                 color: Colors.grey.shade50,
                 border: Border.all(
                   color: _logoBytes != null
-                      ? AppTheme.adminPrimary.withOpacity(0.5)
+                      ? AppTheme.brandOnDark.withOpacity(0.5)
                       : Colors.grey.shade300,
                   width: 1.5,
                 ),
@@ -760,8 +761,8 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
                     // Hotel/both → go to channel step; restaurant-only → submit directly
                     onPressed: _selectedType == 'restaurant' ? _submitProperty : _proceedToStepC,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.adminPrimary,
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppTheme.brandOnDark,
+                      foregroundColor: AppTheme.onBrandOnDark,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -845,8 +846,8 @@ class _PropertySetupScreenState extends ConsumerState<PropertySetupScreen> {
                 child: ElevatedButton(
                   onPressed: _submitProperty,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.adminPrimary,
-                    foregroundColor: Colors.white,
+                    backgroundColor: AppTheme.brandOnDark,
+                    foregroundColor: AppTheme.onBrandOnDark,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     elevation: 0,
                   ),

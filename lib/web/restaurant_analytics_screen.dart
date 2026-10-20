@@ -12,8 +12,8 @@ import '../di/injection_container.dart';
 import '../domain/repositories/order_repository.dart';
 import '../domain/repositories/menu_item_repository.dart';
 
-const _kOrange = AppTheme.restaurantAccent;
-const _kOrangeBg = AppTheme.restaurantAccentBg;
+const _kAccent = AppTheme.restaurantAccent;
+const _kAccentBg = AppTheme.restaurantAccentBg;
 const _kBlue = AppTheme.statusBlue;
 const _kGreen = AppTheme.statusGreen;
 const _kPurple = AppTheme.statusPurple;
@@ -393,8 +393,8 @@ class _RestaurantAnalyticsScreenState
                 Container(
                   width: 40, height: 40,
                   decoration: BoxDecoration(
-                      color: _kOrangeBg, borderRadius: BorderRadius.circular(10)),
-                  child: const Icon(Icons.analytics_rounded, color: _kOrange, size: 22),
+                      color: _kAccentBg, borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.analytics_rounded, color: _kAccent, size: 22),
                 ),
                 const SizedBox(width: 14),
                 Text('Restaurant Analytics',
@@ -440,7 +440,7 @@ class _RestaurantAnalyticsScreenState
                           Padding(
                             padding: const EdgeInsets.only(right: 5),
                             child: Icon(Icons.calendar_month_rounded, size: 13,
-                                color: selected ? _kOrange : Colors.black45),
+                                color: selected ? _kAccent : Colors.black45),
                           ),
                         Text(
                           // Show chosen range when custom is active
@@ -450,7 +450,7 @@ class _RestaurantAnalyticsScreenState
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                            color: selected ? _kOrange : Colors.black45,
+                            color: selected ? _kAccent : Colors.black45,
                           ),
                         ),
                       ],
@@ -470,8 +470,8 @@ class _RestaurantAnalyticsScreenState
                     icon: const Icon(Icons.refresh_rounded, size: 16),
                     label: const Text('Refresh'),
                     style: OutlinedButton.styleFrom(
-                        foregroundColor: _kOrange,
-                        side: const BorderSide(color: _kOrange)),
+                        foregroundColor: _kAccent,
+                        side: const BorderSide(color: _kAccent)),
                   ),
                 ] else ...[
                   // ── Service Charge tab: custom date range picker ──
@@ -502,7 +502,7 @@ class _RestaurantAnalyticsScreenState
                 label: 'Overview',
                 icon: Icons.bar_chart_rounded,
                 selected: _selectedTab == 0,
-                accent: _kOrange,
+                accent: _kAccent,
                 onTap: () => setState(() => _selectedTab = 0),
               ),
               const SizedBox(width: 4),
@@ -537,7 +537,7 @@ class _RestaurantAnalyticsScreenState
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: Theme.of(context).colorScheme.copyWith(
-            primary: _kOrange,
+            primary: _kAccent,
             onPrimary: Colors.white,
             surface: Colors.white,
           ),
@@ -726,7 +726,7 @@ class _RestaurantAnalyticsScreenState
         SizedBox(
           width: 180,
           child: _kpiCard('Dine-in Covers', '$_periodCovers',
-              Icons.people_rounded, Colors.teal),
+              Icons.people_rounded, AppTheme.adminPrimary),
         ),
         SizedBox(
           width: 180,
@@ -826,8 +826,8 @@ class _RestaurantAnalyticsScreenState
                       BarChartRodData(
                         toY: _barData[i],
                         color: i == count - 1
-                            ? _kOrange
-                            : _kOrange.withOpacity(0.4),
+                            ? _kAccent
+                            : _kAccent.withOpacity(0.4),
                         width: barW,
                         borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(4)),
@@ -861,7 +861,7 @@ class _RestaurantAnalyticsScreenState
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: idx == count - 1 ? FontWeight.w800 : FontWeight.w400,
-                              color: idx == count - 1 ? _kOrange : Colors.black45,
+                              color: idx == count - 1 ? _kAccent : Colors.black45,
                             ),
                           ),
                         );
@@ -901,7 +901,7 @@ class _RestaurantAnalyticsScreenState
                         if (_dineInCount > 0)
                           PieChartSectionData(
                             value: _dineInCount.toDouble(),
-                            color: _kOrange,
+                            color: _kAccent,
                             title: '${(_dineInCount * 100 / total).round()}%',
                             radius: 70,
                             titleStyle: const TextStyle(
@@ -937,7 +937,7 @@ class _RestaurantAnalyticsScreenState
                   spacing: 16,
                   runSpacing: 6,
                   children: [
-                    if (_dineInCount > 0)   _legend(_kOrange,        'Dine-in ($_dineInCount)'),
+                    if (_dineInCount > 0)   _legend(_kAccent,        'Dine-in ($_dineInCount)'),
                     if (_takeawayCount > 0) _legend(_kBlue,          'Takeaway ($_takeawayCount)'),
                     if (_deliveryCount > 0) _legend(kDeliveryGreen, 'Delivery ($_deliveryCount)'),
                   ],
@@ -1037,7 +1037,7 @@ class _RestaurantAnalyticsScreenState
                               style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
-                                  color: _kOrange)),
+                                  color: _kAccent)),
                         ),
                       ],
                     ),
@@ -1078,8 +1078,8 @@ class _RestaurantAnalyticsScreenState
                       BarChartRodData(
                         toY: count.toDouble(),
                         color: isPeak
-                            ? _kOrange
-                            : _kOrange.withOpacity(0.35),
+                            ? _kAccent
+                            : _kAccent.withOpacity(0.35),
                         width: 12,
                         borderRadius: const BorderRadius.vertical(
                             top: Radius.circular(3)),
@@ -1292,7 +1292,7 @@ class _RestaurantAnalyticsScreenState
               border: Border.all(
                 color: isGood
                     ? _kGreen.withOpacity(0.3)
-                    : _kOrange.withOpacity(0.3),
+                    : _kAccent.withOpacity(0.3),
               ),
             ),
             child: Row(
@@ -1301,7 +1301,7 @@ class _RestaurantAnalyticsScreenState
                   isGood
                       ? Icons.check_circle_outline_rounded
                       : Icons.warning_amber_rounded,
-                  color: isGood ? _kGreen : _kOrange,
+                  color: isGood ? _kGreen : _kAccent,
                   size: 20,
                 ),
                 const SizedBox(width: 10),
@@ -1316,7 +1316,7 @@ class _RestaurantAnalyticsScreenState
                           text: '${avg.toStringAsFixed(1)}%',
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
-                            color: isGood ? _kGreen : _kOrange,
+                            color: isGood ? _kGreen : _kAccent,
                           ),
                         ),
                         const TextSpan(
@@ -1438,8 +1438,8 @@ class _RestaurantAnalyticsScreenState
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                    color: _kOrangeBg, borderRadius: BorderRadius.circular(8)),
-                child: Icon(icon, color: _kOrange, size: 16),
+                    color: _kAccentBg, borderRadius: BorderRadius.circular(8)),
+                child: Icon(icon, color: _kAccent, size: 16),
               ),
               const SizedBox(width: 10),
               Text(title,
@@ -1541,7 +1541,7 @@ class _RestaurantAnalyticsScreenState
             (label: 'Dine-in Orders',  value: '$_scDineInOrders',
              icon: Icons.restaurant_rounded, color: _kBlue),
             (label: 'Avg per Order',   value: _currency.format(_scAvgPerDineIn),
-             icon: Icons.speed_rounded, color: _kOrange),
+             icon: Icons.speed_rounded, color: _kAccent),
             (label: '% of Revenue',    value: '${_scPctOfRevenue.toStringAsFixed(1)}%',
              icon: Icons.pie_chart_rounded,  color: _kGreen),
           ];

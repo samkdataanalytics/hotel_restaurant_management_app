@@ -33,6 +33,18 @@ class SupabaseDataSource {
         if (hotelId != null) 'hotel_id': hotelId,
       };
 
+  Room _roomFromRow(Map<String, dynamic> r) => Room.fromMap({
+        'id': r['id'],
+        'roomNumber': r['room_number'],
+        'type': r['type'],
+        'floor': r['floor'],
+        'status': r['status'],
+        'pricePerNight': r['price_per_night'],
+        'maintenanceStart': r['maintenance_start'],
+        'maintenanceEnd': r['maintenance_end'],
+        'housekeeping': r['housekeeping_status'],
+      });
+
   Map<String, dynamic> _roomToRow(Room r) => {
         'id': r.id,
         'room_number': r.roomNumber,
@@ -42,6 +54,7 @@ class SupabaseDataSource {
         'price_per_night': r.pricePerNight,
         'maintenance_start': r.maintenanceStart?.toIso8601String(),
         'maintenance_end': r.maintenanceEnd?.toIso8601String(),
+        'housekeeping_status': r.housekeeping.name,
         if (hotelId != null) 'hotel_id': hotelId,
       };
 
@@ -67,6 +80,18 @@ class SupabaseDataSource {
         if (hotelId != null) 'hotel_id': hotelId,
       };
 
+  CheckIn _checkInFromRow(Map<String, dynamic> r) => CheckIn.fromMap({
+        'id': r['id'],
+        'bookingId': r['booking_id'],
+        'guestId': r['guest_id'],
+        'roomId': r['room_id'],
+        'checkInTime': r['check_in_time'],
+        'idVerified': r['id_verified'],
+        'keyIssued': r['key_issued'],
+        'idDocumentUrl': r['id_document_url'],
+        'signatureUrl': r['signature_url'],
+      });
+
   Map<String, dynamic> _checkInToRow(CheckIn c) => {
         'id': c.id,
         'booking_id': c.bookingId,
@@ -75,8 +100,24 @@ class SupabaseDataSource {
         'check_in_time': c.checkInTime.toIso8601String(),
         'id_verified': c.idVerified,
         'key_issued': c.keyIssued,
+        if (c.idDocumentUrl != null) 'id_document_url': c.idDocumentUrl,
+        if (c.signatureUrl != null) 'signature_url': c.signatureUrl,
         if (hotelId != null) 'hotel_id': hotelId,
       };
+
+  Expense _expenseFromRow(Map<String, dynamic> r) => Expense.fromMap({
+        'id': r['id'],
+        'description': r['description'],
+        'amount': r['amount'],
+        'category': r['category'],
+        'date': r['date'],
+        'endDate': r['end_date'],
+        'roomId': r['room_id'],
+        'isBillable': r['is_billable'] ?? false,
+        'isPaid': r['is_paid'] ?? false,
+        'bookingId': r['booking_id'],
+        'receiptUrl': r['receipt_url'],
+      });
 
   Map<String, dynamic> _expenseToRow(Expense e) => {
         'id': e.id,
@@ -89,6 +130,7 @@ class SupabaseDataSource {
         'is_billable': e.isBillable,
         'is_paid': e.isPaid,
         'booking_id': e.bookingId,
+        if (e.receiptUrl != null) 'receipt_url': e.receiptUrl,
         if (hotelId != null) 'hotel_id': hotelId,
       };
 

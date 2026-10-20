@@ -8,8 +8,8 @@ import '../di/injection_container.dart';
 import '../domain/repositories/order_repository.dart';
 import '../domain/repositories/restaurant_table_repository.dart';
 
-const _kOrange = AppTheme.restaurantAccent;
-const _kOrangeBg = AppTheme.restaurantAccentBg;
+const _kAccent = AppTheme.restaurantAccent;
+const _kAccentBg = AppTheme.restaurantAccentBg;
 
 // ─── Data models for the two lists ──────────────────────────────────────────
 
@@ -203,9 +203,9 @@ class _CancellationsRefundsScreenState
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-                color: _kOrangeBg, borderRadius: BorderRadius.circular(10)),
+                color: _kAccentBg, borderRadius: BorderRadius.circular(10)),
             child: const Icon(Icons.remove_circle_outline_rounded,
-                color: _kOrange, size: 22),
+                color: _kAccent, size: 22),
           ),
           const SizedBox(width: 14),
           Text('Cancellations & Refunds',
@@ -216,8 +216,8 @@ class _CancellationsRefundsScreenState
             icon: const Icon(Icons.refresh_rounded, size: 16),
             label: const Text('Refresh'),
             style: OutlinedButton.styleFrom(
-                foregroundColor: _kOrange,
-                side: const BorderSide(color: _kOrange)),
+                foregroundColor: _kAccent,
+                side: const BorderSide(color: _kAccent)),
           ),
         ],
       ),
@@ -238,16 +238,16 @@ class _CancellationsRefundsScreenState
           _kpiDivider(),
           _kpi('Inventory Restored',
               '$_inventoryRestoredCount / $_totalCancellations',
-              Icons.inventory_2_outlined, Colors.teal),
+              Icons.inventory_2_outlined, AppTheme.statusGreen),
           _kpiDivider(),
           _kpi('Refund Lines', '$_totalRefundLines',
-              Icons.undo_rounded, _kOrange),
+              Icons.undo_rounded, _kAccent),
           _kpiDivider(),
           _kpi('Total Refunded', _currency.format(_totalRefundedValue),
               Icons.currency_exchange_rounded, Colors.deepOrange),
           _kpiDivider(),
           _kpi('Orders Affected', '$_ordersWithRefunds',
-              Icons.receipt_long_outlined, _kOrange),
+              Icons.receipt_long_outlined, _kAccent),
         ],
       ),
     );
@@ -297,9 +297,9 @@ class _CancellationsRefundsScreenState
           const Divider(height: 1),
           TabBar(
             controller: _tabController,
-            labelColor: _kOrange,
+            labelColor: _kAccent,
             unselectedLabelColor: Colors.black45,
-            indicatorColor: _kOrange,
+            indicatorColor: _kAccent,
             tabs: [
               Tab(
                 icon: const Icon(Icons.cancel_outlined, size: 16),
@@ -522,7 +522,7 @@ class _CancellationsRefundsScreenState
             height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: _kOrangeBg,
+              color: _kAccentBg,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(r.itemEmoji,

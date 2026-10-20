@@ -6,6 +6,7 @@ import '../providers/app_auth_provider.dart';
 import '../services/plan_service.dart';
 import '../services/organization_service.dart';
 import '../providers/service_providers.dart';
+import 'semantic_palette.dart';
 
 class AccountSettingsScreen extends ConsumerStatefulWidget {
   const AccountSettingsScreen({super.key});
@@ -213,7 +214,7 @@ class _AccountSettingsScreenState extends ConsumerState<AccountSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.pageBg,
       child: SingleChildScrollView(
         padding: AppTheme.screenPad(context),
         child: Column(
@@ -393,12 +394,7 @@ class _PlanBillingCard extends ConsumerStatefulWidget {
 }
 
 class _PlanBillingCardState extends ConsumerState<_PlanBillingCard> {
-  static const _planColors = {
-    'growth':     Color(0xFF64748B),
-    'starter':    Color(0xFF2563EB),
-    'pro':        Color(0xFF7C3AED),
-    'enterprise': Color(0xFFD97706),
-  };
+  // Was a fourth, contradicting copy of the tier palette.
 
   List<OrgMember> _members = [];
   bool _loadingMembers = false;
@@ -463,7 +459,7 @@ class _PlanBillingCardState extends ConsumerState<_PlanBillingCard> {
     final auth     = ref.watch(authProvider).valueOrNull;
     final org      = auth?.organization;
     final planSlug = org?.plan ?? 'starter';
-    final accent   = _planColors[planSlug] ?? const Color(0xFF64748B);
+    final accent   = SemanticPalette.tier(planSlug);
     final isOwner  = auth?.isOrgOwner ?? false;
 
     // Members who can be granted billing access (exclude owners — they always have it)
@@ -560,7 +556,11 @@ class _PlanBillingCardState extends ConsumerState<_PlanBillingCard> {
                     icon: const Icon(Icons.rocket_launch_rounded, size: 16),
                     label: const Text('Upgrade Plan'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: accent,
+                      // Brand, not `accent`. This is the screen's primary
+                      // action; colouring it by the customer's current tier
+                      // meant the main CTA changed colour per account and was
+                      // never the brand.
+                      backgroundColor: AppTheme.adminPrimary,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -695,8 +695,8 @@ class _SectionCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor ?? Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        border: Border.all(color: borderColor ?? AppTheme.cardBorder),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),

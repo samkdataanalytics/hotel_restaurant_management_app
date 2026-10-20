@@ -12,6 +12,7 @@ import '../domain/entities/room.dart';
 import '../domain/entities/expense.dart';
 import '../services/booking_service.dart';
 import '../providers/service_providers.dart';
+import 'semantic_palette.dart';
 
 class FinancialsScreen extends ConsumerStatefulWidget {
   const FinancialsScreen({super.key});
@@ -157,13 +158,7 @@ class _FinancialsScreenState extends ConsumerState<FinancialsScreen> {
   }
 
   Color _sourceColor(BookingSource source) {
-    switch (source) {
-      case BookingSource.bookingCom: return Colors.blue.shade600;
-      case BookingSource.airbnb:     return Colors.red.shade500;
-      case BookingSource.expedia:    return const Color(0xFF00355F);
-      case BookingSource.direct:     return Colors.green.shade600;
-      case BookingSource.other:      return Colors.orange.shade500;
-    }
+    return SemanticPalette.bookingSource(source);
   }
 
   String _sourceLabel(BookingSource source) {
@@ -243,7 +238,7 @@ class _FinancialsScreenState extends ConsumerState<FinancialsScreen> {
     }
 
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.pageBg,
       child: SingleChildScrollView(
         padding: AppTheme.screenPad(context),
         child: Column(
@@ -826,8 +821,8 @@ class _FinancialsScreenState extends ConsumerState<FinancialsScreen> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
+        side: const BorderSide(color: AppTheme.cardBorder),
       ),
       child: Padding(
         padding: const EdgeInsets.all(24),

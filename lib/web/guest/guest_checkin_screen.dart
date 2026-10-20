@@ -14,7 +14,7 @@ class _C {
   static const surface = Color(0xFF1E293B);
   static const card    = Color(0xFF263245);
   // accent is now dynamic — see _GuestCheckinScreenState._accent
-  static const gold    = Color(0xFFD4A853); // fallback only
+  static const gold    = Color(0xFF3FBDB4); // fallback only
   static const text    = Colors.white;
   static const subtext = Color(0xFF94A3B8);
   static const divider = Color(0xFF334155);
@@ -235,11 +235,11 @@ class _GuestCheckinScreenState extends ConsumerState<GuestCheckinScreen> {
           width: size, height: size,
           fit: BoxFit.contain,
           errorBuilder: (_, __, ___) => Image.asset(
-            'assets/images/hotrest_logo.webp', width: size, height: size),
+            'assets/images/hotrest_mark_light.png', width: size, height: size),
         ),
       );
     }
-    return Image.asset('assets/images/hotrest_logo.webp', width: size, height: size);
+    return Image.asset('assets/images/hotrest_mark_light.png', width: size, height: size);
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────

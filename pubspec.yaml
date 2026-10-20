@@ -29,6 +29,35 @@ dependencies:
   get_it: ^9.2.1
   crypto: ^3.0.3
 
+  # ── Staff mobile app (lib/main_mobile.dart) ────────────────────────────────
+  # Only reachable from the mobile entry point; the web build never imports
+  # these. Each supports web as a no-op or stub, so adding them cannot break
+  # `flutter build web`.
+  # Pinned to v10, not v9 or v11, and both bounds matter:
+  #   * v9's web implementation uses dart:html, which fails the wasm dry run on
+  #     `flutter build web` even though no web code imports it — the plugin
+  #     registrant pulls in every declared platform implementation regardless.
+  #     v10 moved to package:web.
+  #   * v11 requires win32 ^6, which conflicts with file_picker ^8 (win32 ^5).
+  #     file_picker is used by two working web screens, so it is not moving.
+  flutter_secure_storage: ^10.3.2  # session tokens in the platform keystore
+  connectivity_plus: ^6.1.0        # offline banner + write failure messaging
+  local_auth: ^3.0.2               # biometric re-unlock on shared devices
+  # Offline layer (F-05). hive_ce rather than the unmaintained `hive`, and in
+  # preference to drift: the cached data is small reference material and an
+  # ordered outbox, so a key-value store fits without pulling in build_runner
+  # codegen. Verified not to disturb `flutter build web` or its wasm dry run.
+  hive_ce: ^2.20.0
+  hive_ce_flutter: ^2.3.4
+  path_provider: ^2.1.6           # where the Hive boxes live on device
+  flutter_local_notifications: ^22.3.1
+  wakelock_plus: ^1.5.2
+  esc_pos_utils_plus: ^2.0.4
+  print_bluetooth_thermal: ^1.2.4
+  image_picker: ^1.2.3
+  signature: ^6.4.0
+  mobile_scanner: ^7.4.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -238,12 +238,12 @@ class _LeadCard extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppTheme.goldPrimary.withOpacity(0.05),
+                      color: AppTheme.brandTeal.withOpacity(0.05),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.goldPrimary.withOpacity(0.2)),
+                      border: Border.all(color: AppTheme.brandTeal.withOpacity(0.2)),
                     ),
                     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Icon(Icons.sticky_note_2_rounded, size: 14, color: AppTheme.goldPrimary),
+                      Icon(Icons.sticky_note_2_rounded, size: 14, color: AppTheme.brandTeal),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(lead.adminNotes!,

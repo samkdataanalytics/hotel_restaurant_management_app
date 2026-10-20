@@ -209,8 +209,8 @@ class _Step1CompanyDetailsState extends State<Step1CompanyDetails> {
             child: ElevatedButton(
               onPressed: _submit,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.adminPrimary,
-                foregroundColor: Colors.white,
+                backgroundColor: AppTheme.brandOnDark,
+                foregroundColor: AppTheme.onBrandOnDark,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),

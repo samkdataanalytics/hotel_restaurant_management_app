@@ -21,6 +21,8 @@ import '../domain/entities/staff_permission.dart';
 import '../services/booking_service.dart';
 import '../services/restaurant_service.dart';
 import '../providers/service_providers.dart';
+import '../providers/invoice_provider.dart';
+import 'semantic_palette.dart';
 
 class ReservationsScreen extends ConsumerStatefulWidget {
   const ReservationsScreen({super.key});
@@ -92,13 +94,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
   }
 
   Color _sourceColor(BookingSource source) {
-    switch (source) {
-      case BookingSource.bookingCom: return const Color(0xFF003580);
-      case BookingSource.airbnb:     return const Color(0xFFFF5A5F);
-      case BookingSource.expedia:    return const Color(0xFF00355F);
-      case BookingSource.direct:     return AppTheme.success;
-      case BookingSource.other:      return AppTheme.warning;
-    }
+    return SemanticPalette.bookingSource(source);
   }
 
   IconData _sourceIcon(BookingSource source) {
@@ -248,7 +244,7 @@ class _ReservationsScreenState extends ConsumerState<ReservationsScreen> {
     if (_isLoading) return const TableListSkeleton(rowCount: 8, cellCount: 5);
 
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.pageBg,
       child: SingleChildScrollView(
         padding: AppTheme.screenPad(context),
         child: Column(
@@ -1979,13 +1975,7 @@ class _ReservationFormDialogState extends State<_ReservationFormDialog> {
   }
 
   Color _colorForSource(BookingSource source) {
-    switch (source) {
-      case BookingSource.bookingCom: return const Color(0xFF003580);
-      case BookingSource.airbnb:     return const Color(0xFFFF5A5F);
-      case BookingSource.expedia:    return const Color(0xFF00355F);
-      case BookingSource.direct:     return AppTheme.success;
-      case BookingSource.other:      return AppTheme.warning;
-    }
+    return SemanticPalette.bookingSource(source);
   }
 
   String _labelForSource(BookingSource source) {

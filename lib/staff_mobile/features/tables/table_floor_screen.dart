@@ -1,0 +1,480 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../data/orders_realtime.dart';
+import '../../data/outbox.dart';
+import '../../data/restaurant_repository.dart';
+import '../../router/staff_router.dart';
+import '../../session/staff_session.dart';
+import '../../theme/staff_theme.dart';
+import '../shell/staff_tabs.dart';
+import '../../data/money.dart';
+import '../../data/table_realtime.dart';
+
+/// The floor board: every table with its live order state.
+///
+/// Refreshed by the realtime stream on `restaurant_orders` rather than a timer,
+/// so firing an order from the web POS updates the phone within a second and an
+/// idle board costs nothing.
+final _floorProvider =
+    FutureProvider.autoDispose<Cached<List<TableFloorEntry>>>((ref) async {
+  // Re-read whenever an order changes for this property. Watching the stream's
+  // tick rather than patching rows keeps one source of truth.
+  ref.watch(ordersRealtimeProvider);
+
+  // Table configuration itself, which is edited on the web panel — a table
+  // added or renamed there should appear on the floor without a reinstall.
+  ref.watch(tableRealtimeProvider('restaurant_tables'));
+
+  // Also rebuild on property switch.
+  ref.watch(staffSessionProvider.select((s) => s.valueOrNull?.activeProperty?.id));
+
+  // A queued order should occupy its table immediately, before it syncs.
+  ref.watch(outboxProvider);
+
+  return ref.watch(restaurantRepositoryProvider).loadFloor();
+});
+
+class TableFloorScreen extends ConsumerStatefulWidget {
+  const TableFloorScreen({super.key});
+
+  @override
+  ConsumerState<TableFloorScreen> createState() => _TableFloorScreenState();
+}
+
+class _TableFloorScreenState extends ConsumerState<TableFloorScreen> {
+  Timer? _ageTicker;
+
+  @override
+  void initState() {
+    super.initState();
+    // Order ageing is the one thing that changes with no server event. A
+    // 30-second repaint keeps "waiting 12m" honest without re-querying.
+    _ageTicker = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => mounted ? setState(() {}) : null,
+    );
+  }
+
+  @override
+  void dispose() {
+    _ageTicker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final floorAsync = ref.watch(_floorProvider);
+    final session = ref.watch(staffSessionProvider).valueOrNull;
+    final mayOrder = session != null && canTakeOrders(session);
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.refresh(_floorProvider.future),
+      child: floorAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => _FloorError(
+          error: e,
+          onRetry: () => ref.invalidate(_floorProvider),
+        ),
+        data: (cached) {
+          final entries = cached.value;
+          if (entries.isEmpty) return const _NoTables();
+
+          return Column(
+            children: [
+              if (cached.isStale) _StaleNotice(age: cached.age),
+              Expanded(child: _grid(entries, mayOrder)),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _grid(List<TableFloorEntry> entries, bool mayOrder) {
+    return GridView.builder(
+            padding: const EdgeInsets.all(16),
+            physics: const AlwaysScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              // Caps at 2 columns on a phone, 3-4 on a tablet, while keeping
+              // every card comfortably above the minimum touch target.
+              maxCrossAxisExtent: 220,
+              mainAxisExtent: 132,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: entries.length,
+            itemBuilder: (_, i) => _TableCard(
+              entry: entries[i],
+              enabled: mayOrder,
+              onTap: () => _openTable(entries[i], mayOrder),
+            ),
+    );
+  }
+
+  Future<void> _openTable(TableFloorEntry entry, bool mayOrder) async {
+    if (!mayOrder) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'You have view-only access to the POS section, so you cannot '
+              'take orders.',
+            ),
+          ),
+        );
+      return;
+    }
+
+    // A free table has only one sensible action, so tapping it goes straight
+    // to order entry. An occupied one has two, and guessing wrong either loses
+    // a waiter's time or opens a bill they did not ask for.
+    if (entry.state == FloorState.free) {
+      await context.push(StaffRoutes.orderEntry(entry.table.id));
+      return;
+    }
+
+    final action = await showModalBottomSheet<_TableAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => _TableActions(entry: entry),
+    );
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case _TableAction.addItems:
+        await context.push(StaffRoutes.orderEntry(entry.table.id));
+      case _TableAction.settle:
+        await context.push(StaffRoutes.payment(entry.table.id));
+    }
+    // Settling frees the table, so the board must re-read rather than keep
+    // showing it occupied.
+    if (mounted) ref.invalidate(_floorProvider);
+  }
+}
+
+class _TableCard extends StatelessWidget {
+  final TableFloorEntry entry;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _TableCard({
+    required this.entry,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final accent = _accentFor(entry.state);
+    final isFree = entry.state == FloorState.free;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Stack(
+          children: [
+            // Status is carried by a left edge bar as well as colour, so the
+            // board stays readable for colour-blind staff.
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Container(width: 5, color: accent),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(17, 12, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          entry.table.tableNumber,
+                          style: const TextStyle(
+                            fontSize: 21,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Icon(Icons.people_outline_rounded,
+                          size: 15, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${entry.table.capacity}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      _labelFor(entry.state),
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (!isFree)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${entry.openItemCount} item'
+                            '${entry.openItemCount == 1 ? '' : 's'}',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (entry.waitingFor != null)
+                          Text(
+                            _age(entry.waitingFor!),
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              // Past 20 minutes a table is a problem, not a
+                              // status — surface it in the warning colour.
+                              color: entry.waitingFor!.inMinutes >= 20
+                                  ? StaffTheme.tableInKitchen
+                                  : scheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    )
+                  else
+                    Text(
+                      enabled ? 'Tap to start an order' : 'Free',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _age(Duration d) {
+    if (d.inMinutes < 1) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes}m';
+    return '${d.inHours}h ${d.inMinutes % 60}m';
+  }
+
+  static Color _accentFor(FloorState state) => switch (state) {
+        FloorState.free => StaffTheme.tableFree,
+        FloorState.inKitchen => StaffTheme.tableInKitchen,
+        FloorState.seated => StaffTheme.tableSeated,
+        FloorState.billDue => StaffTheme.tableBillRequested,
+      };
+
+  static String _labelFor(FloorState state) => switch (state) {
+        FloorState.free => 'FREE',
+        FloorState.inKitchen => 'IN KITCHEN',
+        FloorState.seated => 'SEATED',
+        FloorState.billDue => 'BILL DUE',
+      };
+}
+
+class _NoTables extends StatelessWidget {
+  const _NoTables();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    // Must stay scrollable so pull-to-refresh still works on an empty floor.
+    return ListView(
+      children: [
+        SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+        Icon(Icons.table_restaurant_outlined, size: 56, color: scheme.outline),
+        const SizedBox(height: 20),
+        Text('No tables yet',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Text(
+            'Tables are set up on the web panel under Restaurant.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: scheme.onSurfaceVariant, height: 1.5),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FloorError extends StatelessWidget {
+  final Object error;
+  final VoidCallback onRetry;
+  const _FloorError({required this.error, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListView(
+      children: [
+        SizedBox(height: MediaQuery.of(context).size.height * 0.18),
+        Icon(Icons.error_outline_rounded, size: 56, color: scheme.error),
+        const SizedBox(height: 20),
+        Text('Could not load the floor',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Text('$error',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant, height: 1.5)),
+        ),
+        const SizedBox(height: 28),
+        Center(
+          child: FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Try again'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Shown when the board is rendered from cache because the network read failed.
+///
+/// Stated explicitly rather than shown as an error: stale table state is still
+/// useful to a waiter, but presenting it as live would be a lie.
+class _StaleNotice extends StatelessWidget {
+  final Duration? age;
+  const _StaleNotice({required this.age});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      color: scheme.tertiaryContainer,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      child: Row(
+        children: [
+          Icon(Icons.history_rounded,
+              size: 17, color: scheme.onTertiaryContainer),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              'Showing saved data${age == null ? '' : ' from ${_ago(age!)}'} — '
+              'pull to refresh',
+              style: TextStyle(
+                color: scheme.onTertiaryContainer,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _ago(Duration d) {
+    if (d.inMinutes < 1) return 'a moment ago';
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    if (d.inHours < 24) return '${d.inHours}h ago';
+    return '${d.inDays}d ago';
+  }
+}
+
+
+enum _TableAction { addItems, settle }
+
+/// What can be done with a table that already has open orders.
+class _TableActions extends ConsumerWidget {
+  final TableFloorEntry entry;
+  const _TableActions({required this.entry});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final money = ref.watch(moneyProvider);
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text('Table ${entry.table.tableNumber}',
+                      style: Theme.of(context).textTheme.titleLarge),
+                ),
+                Text(
+                  money.format(entry.openTotal),
+                  style: const TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${entry.openItemCount} item'
+                '${entry.openItemCount == 1 ? '' : 's'} on this table',
+                style: TextStyle(
+                    fontSize: 13, color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.add_circle_outline_rounded),
+            title: const Text('Add another round'),
+            onTap: () => Navigator.of(context).pop(_TableAction.addItems),
+          ),
+          ListTile(
+            leading: Icon(Icons.receipt_long_rounded, color: scheme.primary),
+            title: Text('Settle the bill',
+                style: TextStyle(
+                    color: scheme.primary, fontWeight: FontWeight.w600)),
+            onTap: () => Navigator.of(context).pop(_TableAction.settle),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}

@@ -345,7 +345,7 @@ class _UsersManagementScreenState
         : _staff.where((m) => !m.isPropertyOwner).toList();
 
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.pageBg,
       child: SingleChildScrollView(
         padding: AppTheme.screenPad(context),
         child: Column(
@@ -1955,8 +1955,12 @@ class _PrivilegeMatrix extends StatelessWidget {
         const SizedBox(height: 8),
 
         if (isHotel) ...[
+          // Known limitation: the sidebar paints this section with the
+          // property's own colour, this header with the default, so the two
+          // disagree for an operator who has customised. Reading the property
+          // here would mean making _PrivilegeMatrix a Consumer.
           const _SectionHeader(
-              label: 'HOTEL', color: Color(0xFFD4A853)),
+              label: 'HOTEL', color: AppTheme.defaultPropertyColor),
           const SizedBox(height: 6),
           ...kHotelSectionKeys.map((key) => _SectionRow(
                 sectionKey: key,

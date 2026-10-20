@@ -2,6 +2,13 @@ enum RoomType { standard, deluxe, suite }
 
 enum RoomStatus { available, occupied, maintenance }
 
+/// Cleaning state, tracked separately from occupancy in [RoomStatus].
+///
+/// The two are genuinely independent: a room can be occupied and dirty, or
+/// available and awaiting inspection. Folding them into one column loses the
+/// information a housekeeping round is built on.
+enum HousekeepingStatus { ready, dirty, cleaning, inspected }
+
 class Room {
   final String id;
   final String roomNumber;
@@ -12,6 +19,10 @@ class Room {
   final DateTime? maintenanceStart;
   final DateTime? maintenanceEnd;
 
+  /// Defaults to ready so rows written before this column existed, and any
+  /// caller that does not set it, behave exactly as they did before.
+  final HousekeepingStatus housekeeping;
+
   Room({
     required this.id,
     required this.roomNumber,
@@ -21,6 +32,7 @@ class Room {
     required this.pricePerNight,
     this.maintenanceStart,
     this.maintenanceEnd,
+    this.housekeeping = HousekeepingStatus.ready,
   });
 
   Map<String, dynamic> toMap() {
@@ -33,6 +45,7 @@ class Room {
       'pricePerNight': pricePerNight,
       'maintenanceStart': maintenanceStart?.toIso8601String(),
       'maintenanceEnd': maintenanceEnd?.toIso8601String(),
+      'housekeeping': housekeeping.name,
     };
   }
 
@@ -50,6 +63,12 @@ class Room {
       maintenanceEnd: map['maintenanceEnd'] != null
           ? DateTime.parse(map['maintenanceEnd'] as String)
           : null,
+      // orElse rather than a bare firstWhere: an unrecognised value must not
+      // throw and take the whole room list down with it.
+      housekeeping: HousekeepingStatus.values.firstWhere(
+        (e) => e.name == map['housekeeping'],
+        orElse: () => HousekeepingStatus.ready,
+      ),
     );
   }
 
@@ -74,6 +93,7 @@ class Room {
     DateTime? maintenanceStart,
     DateTime? maintenanceEnd,
     bool clearMaintenance = false,
+    HousekeepingStatus? housekeeping,
   }) {
     return Room(
       id: id ?? this.id,
@@ -84,6 +104,7 @@ class Room {
       pricePerNight: pricePerNight ?? this.pricePerNight,
       maintenanceStart: clearMaintenance ? null : (maintenanceStart ?? this.maintenanceStart),
       maintenanceEnd: clearMaintenance ? null : (maintenanceEnd ?? this.maintenanceEnd),
+      housekeeping: housekeeping ?? this.housekeeping,
     );
   }
 
@@ -120,6 +141,19 @@ class Room {
         return 'Deluxe';
       case RoomType.suite:
         return 'Suite';
+    }
+  }
+
+  String get housekeepingLabel {
+    switch (housekeeping) {
+      case HousekeepingStatus.ready:
+        return 'Ready';
+      case HousekeepingStatus.dirty:
+        return 'Dirty';
+      case HousekeepingStatus.cleaning:
+        return 'Cleaning';
+      case HousekeepingStatus.inspected:
+        return 'Inspected';
     }
   }
 

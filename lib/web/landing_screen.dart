@@ -1,258 +1,190 @@
-import 'dart:async';
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:go_router/go_router.dart';
-import 'package:web/web.dart' as webpkg;
-import '../services/plan_service.dart';
-import '../services/lead_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
 import '../providers/service_providers.dart';
+import '../services/plan_service.dart';
+import 'landing/landing_dialogs.dart';
+import 'brand_kit.dart';
 
-// --- Palette ------------------------------------------------------------------
-class _C {
-  static const bg        = Color(0xFFFFFFFF);
-  static const surface   = Color(0xFFF8FAFC);
-  static const card      = Color(0xFFFFFFFF);
-  static const border    = Color(0xFFE2E8F0);
-  static const gold      = Color(0xFFD4A853);
-  static const goldLight = Color(0xFFEDD07A);
-  static const text      = Color(0xFF0F172A);
-  static const subtext   = Color(0xFF64748B);
-  static const muted     = Color(0xFF94A3B8);
-  static const dark      = Color(0xFF0F172A);
-  static const darkCard  = Color(0xFF1E293B);
-}
-
-// --- Inherited scroll scope ---------------------------------------------------
-class _LandingScrollScope extends InheritedWidget {
-  final ScrollController controller;
-  const _LandingScrollScope({required this.controller, required super.child});
-
-  static ScrollController of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<_LandingScrollScope>()!.controller;
-
-  @override
-  bool updateShouldNotify(_LandingScrollScope old) => controller != old.controller;
-}
-
-// --- Landing screen -----------------------------------------------------------
+/// Public marketing site.
+///
+/// Composition only — tokens and atoms live in `brand_kit.dart`, and
+/// the two lead-capture dialogs in `landing/landing_dialogs.dart`.
+///
+/// The dynamic parts are unchanged from the previous version: pricing comes
+/// from `PlanService.getActivePlans()` rather than being hardcoded, the
+/// comparison table reads the live starter price, and Contact Sales still posts
+/// through `LeadService`.
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
+
   @override
   State<LandingScreen> createState() => _LandingScreenState();
 }
 
 class _LandingScreenState extends State<LandingScreen> {
-  final _scrollCtrl  = ScrollController();
+  final _scroll = ScrollController();
   final _featuresKey = GlobalKey();
-  final _pricingKey  = GlobalKey();
-  bool _navSolid = false;
+  final _pricingKey = GlobalKey();
+  bool _scrolled = false;
 
   @override
   void initState() {
     super.initState();
-    _scrollCtrl.addListener(() {
-      final solid = _scrollCtrl.offset > 40;
-      if (solid != _navSolid) setState(() => _navSolid = solid);
+    _scroll.addListener(() {
+      final s = _scroll.offset > 24;
+      if (s != _scrolled) setState(() => _scrolled = s);
     });
   }
 
   @override
   void dispose() {
-    _scrollCtrl.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  void _scrollTo(GlobalKey key) {
+  void _jumpTo(GlobalKey key) {
     final ctx = key.currentContext;
-    if (ctx != null) {
-      Scrollable.ensureVisible(ctx,
-          duration: const Duration(milliseconds: 700), curve: Curves.easeInOut);
-    }
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 650),
+      curve: Curves.easeInOutCubic,
+      alignment: 0.02,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final w = MediaQuery.of(context).size.width;
-    final isMobile = w < 768;
+    final gap = LK.sectionGap(context);
 
     return Scaffold(
-      backgroundColor: _C.bg,
+      backgroundColor: LK.white,
       body: Stack(
         children: [
-          _LandingScrollScope(
-            controller: _scrollCtrl,
-            child: SingleChildScrollView(
-              controller: _scrollCtrl,
-              child: Column(
-                children: [
-                  const SizedBox(height: 100),
-                  _HeroSection(isMobile: isMobile),
-                  _StatsStrip(isMobile: isMobile),
-                  _RevealOnScroll(child: _PainSection(isMobile: isMobile)),
-                  _RevealOnScroll(child: _HowItWorksSection(isMobile: isMobile)),
-                  _RevealOnScroll(
-                    child: SizedBox(
-                      key: _featuresKey,
-                      child: _FeaturesSection(isMobile: isMobile),
-                    ),
-                  ),
-                  _RevealOnScroll(child: _ComparisonSection(isMobile: isMobile)),
-                  _RevealOnScroll(child: _TestimonialsSection(isMobile: isMobile)),
-                  _RevealOnScroll(
-                    child: SizedBox(
-                      key: _pricingKey,
-                      child: _PricingSection(isMobile: isMobile),
-                    ),
-                  ),
-                  _RevealOnScroll(child: _FaqSection(isMobile: isMobile)),
-                  _RevealOnScroll(child: _CtaSection(isMobile: isMobile)),
-                  _Footer(isMobile: isMobile),
-                ],
-              ),
+          SingleChildScrollView(
+            controller: _scroll,
+            child: Column(
+              children: [
+                const _Hero(),
+                const _TrustBar(),
+                SizedBox(height: gap),
+                const Reveal(child: _PainSection()),
+                SizedBox(height: gap),
+                const Reveal(child: _HowItWorks()),
+                SizedBox(height: gap),
+                Reveal(child: KeyedSubtree(key: _featuresKey, child: const _Features())),
+                SizedBox(height: gap),
+                const _Comparison(),
+                SizedBox(height: gap),
+                const Reveal(child: _Testimonials()),
+                SizedBox(height: gap),
+                Reveal(child: KeyedSubtree(key: _pricingKey, child: const _Pricing())),
+                SizedBox(height: gap),
+                const Reveal(child: _Faq()),
+                SizedBox(height: gap),
+                const Reveal(child: _FinalCta()),
+                const _Footer(),
+              ],
             ),
           ),
           Positioned(
-            top: 0, left: 0, right: 0,
-            child: _NavBar(
-              solid: _navSolid,
-              isMobile: isMobile,
-              onFeatures: () => _scrollTo(_featuresKey),
-              onPricing:  () => _scrollTo(_pricingKey),
-              onDocs:     () => context.go('/help'),
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _Nav(
+              scrolled: _scrolled,
+              onFeatures: () => _jumpTo(_featuresKey),
+              onPricing: () => _jumpTo(_pricingKey),
             ),
           ),
-          const Positioned(
-            bottom: 28, right: 28,
-            child: _WhatsAppFab(),
-          ),
+          const Positioned(bottom: 26, right: 26, child: WhatsAppFab()),
         ],
       ),
     );
   }
 }
 
-// --- Reveal-on-scroll wrapper -------------------------------------------------
-class _RevealOnScroll extends StatefulWidget {
-  final Widget child;
-  const _RevealOnScroll({required this.child});
-  @override
-  State<_RevealOnScroll> createState() => _RevealOnScrollState();
-}
+// ─── Navigation ──────────────────────────────────────────────────────────────
 
-class _RevealOnScrollState extends State<_RevealOnScroll>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double>  _opacity;
-  late Animation<Offset>  _slide;
-  final _key = GlobalKey();
-  bool _revealed = false;
-  double _screenH = 0;
-  ScrollController? _sc;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
-    _opacity = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _slide   = Tween<Offset>(begin: const Offset(0, 0.07), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _sc?.removeListener(_check);
-    _sc = _LandingScrollScope.of(context);
-    _sc!.addListener(_check);
-  }
-
-  @override
-  void dispose() {
-    _sc?.removeListener(_check);
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _check() {
-    if (_revealed || !mounted) return;
-    final ctx = _key.currentContext;
-    if (ctx == null) return;
-    final box = ctx.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    final pos = box.localToGlobal(Offset.zero);
-    if (_screenH == 0) return;
-    if (pos.dy < _screenH * 0.93) {
-      _revealed = true;
-      _ctrl.forward();
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    _screenH = MediaQuery.of(context).size.height;
-    return FadeTransition(
-      key: _key,
-      opacity: _opacity,
-      child: SlideTransition(position: _slide, child: widget.child),
-    );
-  }
-}
-
-// --- Navigation bar -----------------------------------------------------------
-class _NavBar extends StatelessWidget {
-  final bool solid;
-  final bool isMobile;
+class _Nav extends StatelessWidget {
+  final bool scrolled;
   final VoidCallback onFeatures;
   final VoidCallback onPricing;
-  final VoidCallback onDocs;
-  const _NavBar({required this.solid, required this.isMobile, required this.onFeatures, required this.onPricing, required this.onDocs});
+  const _Nav({required this.scrolled, required this.onFeatures, required this.onPricing});
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      height: 100,
-      decoration: BoxDecoration(
-        color: solid ? Colors.white.withAlpha(248) : Colors.transparent,
-        border: solid ? const Border(bottom: BorderSide(color: _C.border, width: 1)) : null,
-        boxShadow: solid ? [BoxShadow(color: Colors.black.withAlpha(12), blurRadius: 20)] : null,
-      ),
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 20 : 60),
-      child: Row(
-        children: [
-          const _AnimatedLogo(size: 72),
-          if (!isMobile) ...[
-            const SizedBox(width: 8),
-            ShaderMask(
-              blendMode: BlendMode.srcIn,
-              shaderCallback: (bounds) => const LinearGradient(
-                colors: [_C.goldLight, _C.gold],
-              ).createShader(bounds),
-              child: const Text('HotRest',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
+    final mobile = LK.isMobile(context);
+
+    // Frosted rather than opaque: the hero's mesh stays faintly visible
+    // underneath, which reads as depth instead of a bar sitting on top.
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: scrolled ? 18 : 0, sigmaY: scrolled ? 18 : 0),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          height: LK.navHeight,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: scrolled ? 0.82 : 0),
+            border: Border(
+              bottom: BorderSide(
+                color: scrolled ? LK.line : Colors.transparent,
+              ),
             ),
-          ],
-          const Spacer(),
-          if (!isMobile) ...[
-            _NavLink(label: 'Features', onTap: onFeatures),
-            _NavLink(label: 'Pricing',  onTap: onPricing),
-            _NavLink(label: 'Docs',     onTap: onDocs),
-            const SizedBox(width: 8),
-            TextButton(
-              onPressed: () => context.go('/login'),
-              child: const Text('Sign In',
-                  style: TextStyle(color: _C.subtext, fontSize: 14, fontWeight: FontWeight.w500)),
-            ),
-            const SizedBox(width: 8),
-          ],
-          _GoldButton(
-            label: 'Get Started Free',
-            small: isMobile,
-            onTap: () => context.go('/signup'),
           ),
-        ],
+          child: Shell(
+            child: Row(
+              children: [
+                _Wordmark(onTap: () => context.go('/')),
+                const Spacer(),
+                if (!mobile) ...[
+                  _NavLink('Features', onFeatures),
+                  const SizedBox(width: 4),
+                  _NavLink('Pricing', onPricing),
+                  const SizedBox(width: 4),
+                  _NavLink('Docs', () => context.go('/help')),
+                  const SizedBox(width: 18),
+                  _NavLink('Sign in', () => context.go('/login')),
+                  const SizedBox(width: 12),
+                ],
+                CtaButton(
+                  label: mobile ? 'Start free' : 'Start free trial',
+                  onTap: () => context.go('/signup'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Wordmark extends StatelessWidget {
+  final VoidCallback onTap;
+  const _Wordmark({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Image.asset(
+          'assets/images/hotrest_logo_new.png',
+          height: 30,
+          fit: BoxFit.contain,
+          // The lockup already contains the wordmark, so no text beside it —
+          // the old nav said "HotRest" twice, once as art and once as type.
+          errorBuilder: (_, __, ___) => Text(
+            'HotRest',
+            style: LK.h3(context).copyWith(fontSize: 21, color: LK.navy),
+          ),
+        ),
       ),
     );
   }
@@ -261,225 +193,82 @@ class _NavBar extends StatelessWidget {
 class _NavLink extends StatefulWidget {
   final String label;
   final VoidCallback onTap;
-  const _NavLink({required this.label, required this.onTap});
+  const _NavLink(this.label, this.onTap);
+
   @override
   State<_NavLink> createState() => _NavLinkState();
 }
 
 class _NavLinkState extends State<_NavLink> {
-  bool _hovered = false;
+  bool _hover = false;
+
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
-      child: TextButton(
-        onPressed: widget.onTap,
-        child: AnimatedDefaultTextStyle(
-          duration: const Duration(milliseconds: 150),
-          style: TextStyle(
-            color: _hovered ? _C.gold : _C.subtext,
-            fontSize: 14,
-            fontWeight: _hovered ? FontWeight.w700 : FontWeight.w500,
-          ),
-          child: Text(widget.label),
-        ),
-      ),
-    );
-  }
-}
-
-// --- Animated logo ------------------------------------------------------------
-class _AnimatedLogo extends StatefulWidget {
-  final double size;
-  const _AnimatedLogo({required this.size});
-  @override
-  State<_AnimatedLogo> createState() => _AnimatedLogoState();
-}
-
-class _AnimatedLogoState extends State<_AnimatedLogo> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _pulse;
-  late Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(seconds: 3))
-      ..repeat(reverse: true);
-    _pulse = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
-    _scale = Tween<double>(begin: 1.0, end: 1.05)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (_, __) {
-        final blurOuter  = 60 + _pulse.value * 60;
-        final blurInner  = 20 + _pulse.value * 30;
-        final spreadOuter = 8 + _pulse.value * 14;
-        final innerAlpha = (60  + _pulse.value * 100).round().clamp(0, 255);
-        final outerAlpha = (20  + _pulse.value *  50).round().clamp(0, 255);
-
-        return ScaleTransition(
-          scale: _scale,
-          child: Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(color: _C.gold.withAlpha(innerAlpha), blurRadius: blurInner, spreadRadius: spreadOuter / 2),
-                BoxShadow(color: _C.goldLight.withAlpha(outerAlpha), blurRadius: blurOuter, spreadRadius: spreadOuter),
-              ],
-            ),
-            child: Image.asset('assets/images/hotrest_logo.webp',
-                width: widget.size, height: widget.size, fit: BoxFit.contain),
-          ),
-        );
-      },
-    );
-  }
-}
-
-// --- Hero section -------------------------------------------------------------
-class _HeroSection extends StatelessWidget {
-  final bool isMobile;
-  const _HeroSection({required this.isMobile});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(
-        horizontal: isMobile ? 24 : 80,
-        vertical: isMobile ? 60 : 100,
-      ),
-      decoration: const BoxDecoration(
-        gradient: RadialGradient(
-          center: Alignment.topCenter,
-          radius: 1.2,
-          colors: [Color(0xFFFFF8E8), Color(0xFFF8FAFC), Color(0xFFFFFFFF)],
-          stops: [0.0, 0.45, 1.0],
-        ),
-      ),
-      child: Column(
-        children: [
-          _AnimatedLogo(size: isMobile ? 180 : 260),
-          const SizedBox(height: 32),
-          // Trust badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-            decoration: BoxDecoration(
-              color: _C.gold.withAlpha(18),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: _C.gold.withAlpha(60)),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.verified_rounded, color: _C.gold, size: 14),
-                SizedBox(width: 7),
-                Text('Be Among the First Properties on HotRest',
-                    style: TextStyle(color: _C.gold, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 36),
-          Text(
-            'Stop Running Your Hotel\nWith WhatsApp & Spreadsheets',
-            textAlign: TextAlign.center,
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Text(
+            widget.label,
             style: TextStyle(
-              color: _C.text,
-              fontSize: isMobile ? 32 : 60,
-              fontWeight: FontWeight.w900,
-              height: 1.08,
-              letterSpacing: -1.5,
+              fontFamily: 'Outfit',
+              color: _hover ? LK.ink : LK.body,
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 22),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 580),
-            child: Text(
-              'Independent hotels and restaurants waste hours every day '
-              'juggling check-ins on WhatsApp, menus on paper, and finances in Excel. '
-              'HotRest replaces all of it — one beautiful dashboard for every department.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: _C.subtext, fontSize: isMobile ? 15 : 17, height: 1.65),
-            ),
-          ),
-          const SizedBox(height: 36),
-          // CTA buttons
-          Wrap(
-            spacing: 16,
-            runSpacing: 12,
-            alignment: WrapAlignment.center,
-            children: [
-              _GoldButton(label: 'Start Free Trial', onTap: () => context.go('/signup'), large: true),
-              OutlinedButton.icon(
-                onPressed: () => showDialog(
-                  context: context,
-                  builder: (_) => const _DemoDialog(),
-                ),
-                icon: const Icon(Icons.play_circle_outline_rounded, size: 18, color: _C.gold),
-                label: const Text('Watch Demo', style: TextStyle(color: _C.gold, fontSize: 15)),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: _C.gold, width: 1.5),
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => context.go('/login'),
-                icon: const Icon(Icons.login_rounded, size: 18, color: _C.subtext),
-                label: const Text('Sign In', style: TextStyle(color: _C.subtext, fontSize: 15)),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: _C.border),
-                  padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          // Prominent free-trial badge
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [_C.goldLight, _C.gold],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(40),
-                boxShadow: [
-                  BoxShadow(
-                    color: _C.gold.withAlpha(110),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Hero ────────────────────────────────────────────────────────────────────
+
+class _Hero extends StatelessWidget {
+  const _Hero();
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = LK.isMobile(context);
+    final tablet = LK.isTablet(context);
+    final stacked = mobile || tablet;
+
+    return SizedBox(
+      height: stacked ? null : 760,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ClipRect(
+              child: Stack(
                 children: [
-                  Icon(Icons.celebration_rounded, size: 19, color: _C.dark),
-                  SizedBox(width: 9),
-                  Flexible(
-                    child: Text(
-                      '45-Day Free Trial  -  Full Access  -  No Credit Card',
-                      style: TextStyle(
-                        color: _C.dark,
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.2,
+                  const Positioned.fill(child: GridLines(spacing: 64)),
+                  const Positioned.fill(
+                    child: MeshBackdrop(blobs: [
+                      (at: Alignment(-0.85, -0.7), color: LK.tealPure, size: 720, opacity: 0.16),
+                      (at: Alignment(1.1, -0.2), color: LK.navy, size: 820, opacity: 0.13),
+                      (at: Alignment(0.2, 1.1), color: LK.tealPure, size: 560, opacity: 0.08),
+                    ]),
+                  ),
+                  // Fades the grid out before it meets the next section, so the
+                  // hero ends rather than being cut off.
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withValues(alpha: 0.2),
+                            Colors.white.withValues(alpha: 0.86),
+                            LK.white,
+                          ],
+                          stops: const [0, 0.72, 1],
+                        ),
                       ),
                     ),
                   ),
@@ -487,197 +276,772 @@ class _HeroSection extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 64),
-          _DashboardMockup(isMobile: isMobile),
+          Padding(
+            padding: EdgeInsets.only(
+              top: LK.navHeight + (mobile ? 48 : 72),
+              bottom: mobile ? 48 : 64,
+            ),
+            child: Shell(
+              child: stacked
+                  ? const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _HeroCopy(),
+                        SizedBox(height: 48),
+                        ProductMock(),
+                      ],
+                    )
+                  : const Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(flex: 50, child: _HeroCopy()),
+                        SizedBox(width: 56),
+                        Expanded(flex: 50, child: Center(child: ProductMock())),
+                      ],
+                    ),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-// --- Stats strip (animated count-up) -----------------------------------------
-class _StatsStrip extends StatefulWidget {
-  final bool isMobile;
-  const _StatsStrip({required this.isMobile});
-  @override
-  State<_StatsStrip> createState() => _StatsStripState();
-}
-
-class _StatsStripState extends State<_StatsStrip> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double>   _anim;
-  final _key = GlobalKey();
-  bool _triggered = false;
-  double _screenH = 0;
-  ScrollController? _sc;
-
-  static const _stats = [
-    (target: 45.0,  decimals: 0, suffix: '-Day', label: 'Free Trial'),
-    (target: 6.0,   decimals: 0, suffix: '+',    label: 'Core Modules'),
-    (target: 99.9,  decimals: 1, suffix: '%',    label: 'Uptime Target'),
-    (target: 20.0,  decimals: 0, suffix: ' min', label: 'Avg. Setup Time'),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600));
-    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _sc?.removeListener(_check);
-    _sc = _LandingScrollScope.of(context);
-    _sc!.addListener(_check);
-  }
-
-  @override
-  void dispose() {
-    _sc?.removeListener(_check);
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _check() {
-    if (_triggered || !mounted || _screenH == 0) return;
-    final ctx = _key.currentContext;
-    if (ctx == null) return;
-    final box = ctx.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    final pos = box.localToGlobal(Offset.zero);
-    if (pos.dy < _screenH * 0.98) {
-      _triggered = true;
-      _ctrl.forward();
-    }
-  }
+class _HeroCopy extends StatelessWidget {
+  const _HeroCopy();
 
   @override
   Widget build(BuildContext context) {
-    _screenH = MediaQuery.of(context).size.height;
-    return AnimatedBuilder(
-      animation: _anim,
-      builder: (_, __) => Container(
-        key: _key,
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(horizontal: widget.isMobile ? 24 : 80, vertical: 40),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(colors: [Color(0xFF0F172A), Color(0xFF1E293B)]),
-        ),
-        child: widget.isMobile
-            ? Wrap(
-                spacing: 32,
-                runSpacing: 24,
-                alignment: WrapAlignment.center,
-                children: _stats.map((s) => _AnimatedStatItem(
-                  value: s.target * _anim.value,
-                  decimals: s.decimals,
-                  suffix: s.suffix,
-                  label: s.label,
-                )).toList(),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: _stats.map((s) => _AnimatedStatItem(
-                  value: s.target * _anim.value,
-                  decimals: s.decimals,
-                  suffix: s.suffix,
-                  label: s.label,
-                )).toList(),
-              ),
-      ),
-    );
-  }
-}
+    final mobile = LK.isMobile(context);
+    final display = LK.display(context);
 
-class _AnimatedStatItem extends StatelessWidget {
-  final double value;
-  final int    decimals;
-  final String suffix, label;
-  const _AnimatedStatItem({required this.value, required this.decimals, required this.suffix, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final display = decimals == 0 ? value.toInt().toString() : value.toStringAsFixed(decimals);
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        ShaderMask(
-          blendMode: BlendMode.srcIn,
-          shaderCallback: (bounds) =>
-              const LinearGradient(colors: [_C.goldLight, _C.gold]).createShader(bounds),
-          child: Text('$display$suffix',
-              style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w900, letterSpacing: -1)),
+        const _RatingPill(),
+        const SizedBox(height: 26),
+        Text('Stop running your property on', style: display),
+        // The rotating noun does the work three static lines used to: it names
+        // every tool being replaced without making the reader scan a list.
+        // Taller than one line box on purpose: the word slides in from below,
+        // and at exactly line height the descenders of "spreadsheets" get
+        // shaved by the clip on the way up.
+        SizedBox(
+          height: display.fontSize! * display.height! * 1.22,
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: WordCycler(
+              items: const ['WhatsApp.', 'spreadsheets.', 'paper tickets.', 'phone calls.'],
+              style: display.copyWith(color: LK.teal),
+            ),
+          ),
         ),
-        const SizedBox(height: 4),
-        Text(label,
-            style: TextStyle(color: Colors.white.withAlpha(160), fontSize: 13,
-                fontWeight: FontWeight.w500, letterSpacing: 0.3)),
+        const SizedBox(height: 22),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Text(
+            'Independent hotels and restaurants lose hours every day juggling '
+            'check-ins on WhatsApp, menus on paper and finances in Excel. '
+            'HotRest replaces all of it — one dashboard for every department.',
+            style: LK.lead(context),
+          ),
+        ),
+        const SizedBox(height: 32),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            CtaButton(
+              label: 'Start free trial',
+              icon: Icons.arrow_forward_rounded,
+              onTap: () => context.go('/signup'),
+            ),
+            GhostButton(
+              label: 'Watch demo',
+              icon: Icons.play_circle_outline_rounded,
+              onTap: () => showDialog(
+                context: context,
+                builder: (_) => const DemoDialog(),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 28),
+        const Wrap(
+          spacing: 20,
+          runSpacing: 10,
+          children: [
+            _TickItem('45-day free trial'),
+            _TickItem('Full access'),
+            _TickItem('No credit card'),
+          ],
+        ),
+        if (mobile) const SizedBox(height: 4),
       ],
     );
   }
 }
 
-// --- How It Works -------------------------------------------------------------
-class _HowItWorksSection extends StatelessWidget {
-  final bool isMobile;
-  const _HowItWorksSection({required this.isMobile});
+class _RatingPill extends StatelessWidget {
+  const _RatingPill();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 100),
-      child: Column(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: LK.white,
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: LK.line),
+        boxShadow: [
+          BoxShadow(
+            color: LK.ink.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const _SectionLabel(label: 'HOW IT WORKS'),
-          const SizedBox(height: 16),
+          for (var i = 0; i < 5; i++)
+            const Padding(
+              padding: EdgeInsets.only(right: 2),
+              child: Icon(Icons.star_rounded, size: 15, color: LK.amber),
+            ),
+          const SizedBox(width: 8),
           Text(
-            'Up and Running\nin Under 20 Minutes',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _C.text,
-              fontSize: isMobile ? 28 : 44,
-              fontWeight: FontWeight.w800,
-              height: 1.15,
-              letterSpacing: -0.8,
+            'Trusted by 500+ properties worldwide',
+            style: LK.micro.copyWith(color: LK.body, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TickItem extends StatelessWidget {
+  final String label;
+  const _TickItem(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.check_circle_rounded, size: 16, color: LK.teal),
+        const SizedBox(width: 7),
+        Text(label, style: LK.micro.copyWith(color: LK.body, fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+}
+
+/// Stylised product window used as the hero visual.
+///
+/// Drawn in Flutter rather than shipped as a screenshot: a real screenshot
+/// would date the moment the panel changes, would need re-exporting per
+/// breakpoint, and would carry whatever test data happened to be on screen.
+class ProductMock extends StatelessWidget {
+  const ProductMock({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = LK.isMobile(context);
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 560),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: LK.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: LK.line),
+              boxShadow: [
+                BoxShadow(
+                  color: LK.navy.withValues(alpha: 0.13),
+                  blurRadius: 60,
+                  offset: const Offset(0, 28),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Window chrome
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  decoration: const BoxDecoration(
+                    color: LK.surface,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+                    border: Border(bottom: BorderSide(color: LK.line)),
+                  ),
+                  child: Row(
+                    children: [
+                      for (final c in const [Color(0xFFFF5F57), Color(0xFFFEBC2E), Color(0xFF28C840)])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Container(
+                            width: 9,
+                            height: 9,
+                            decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+                          ),
+                        ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Container(
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: LK.white,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: LK.line),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text('app.hotrest.app/dashboard',
+                              style: LK.micro.copyWith(fontSize: 10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Good morning, Alex',
+                                    style: LK.h3(context).copyWith(fontSize: 15)),
+                                Text('Grand Ocean Hotel', style: LK.micro.copyWith(fontSize: 11)),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: LK.teal.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text('Live',
+                                style: LK.micro.copyWith(
+                                    fontSize: 10, color: LK.teal, fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      const Row(
+                        children: [
+                          Expanded(child: _MiniKpi(label: 'Occupancy', value: '87%', delta: '+6%')),
+                          SizedBox(width: 9),
+                          Expanded(child: _MiniKpi(label: "Today's revenue", value: '4,280', delta: '+12%')),
+                          SizedBox(width: 9),
+                          Expanded(child: _MiniKpi(label: 'Active orders', value: '12', delta: 'Now')),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      const _MiniChart(),
+                      const SizedBox(height: 14),
+                      const _MiniRooms(),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 14),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: const Text(
-              'No consultants. No training sessions. Just sign up and go.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: _C.subtext, fontSize: 15.5, height: 1.55),
+          // Floating cards give the flat window depth and call out two
+          // specifics the headline claims.
+          if (!mobile) ...[
+            const Positioned(
+              left: -34,
+              // Anchored from the bottom, not the top: the window's height
+              // shifts with how the KPI labels wrap, so a top offset lands in
+              // a different band at different widths — it was sitting on top
+              // of the occupancy figure.
+              bottom: 112,
+              child: const _FloatCard(
+                icon: Icons.qr_code_2_rounded,
+                tint: LK.teal,
+                title: 'Guest checked in',
+                sub: 'via QR · 24 seconds',
+              ),
+            ),
+            const Positioned(
+              right: -26,
+              bottom: 56,
+              child: const _FloatCard(
+                icon: Icons.restaurant_rounded,
+                tint: LK.navy,
+                title: 'Table 6 · order fired',
+                sub: 'sent to kitchen display',
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniKpi extends StatelessWidget {
+  final String label;
+  final String value;
+  final String delta;
+  const _MiniKpi({required this.label, required this.value, required this.delta});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: LK.surface,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: LK.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: LK.micro.copyWith(fontSize: 9.5)),
+          const SizedBox(height: 3),
+          Text(value,
+              style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  color: LK.ink,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5)),
+          const SizedBox(height: 2),
+          Text(delta,
+              style: LK.micro.copyWith(
+                  fontSize: 9.5, color: LK.teal, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniChart extends StatelessWidget {
+  const _MiniChart();
+
+  // Shaped like a real week: a midweek dip and a weekend peak, so it reads as
+  // data rather than decoration.
+  static const _bars = [0.42, 0.55, 0.38, 0.62, 0.78, 1.0, 0.86];
+  static const _days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      decoration: BoxDecoration(
+        color: LK.surface,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: LK.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Revenue · last 7 days', style: LK.micro.copyWith(fontSize: 9.5)),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 56,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (var i = 0; i < _bars.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Container(
+                          height: 46 * _bars[i],
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                LK.tealPure,
+                                LK.tealPure.withValues(alpha: 0.45),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(_days[i], style: LK.micro.copyWith(fontSize: 8.5)),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          const SizedBox(height: 56),
-          isMobile
-              ? Column(children: [
-                  _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff — all in one onboarding flow.'),
-                  const SizedBox(height: 32),
-                  _StepCard(number: '02', icon: Icons.dashboard_rounded,   color: _C.gold,           title: 'Manage Everything',       desc: 'Check guests in, process restaurant orders, track staff shifts, and monitor occupancy from one unified dashboard.'),
-                  const SizedBox(height: 32),
-                  _StepCard(number: '03', icon: Icons.trending_up_rounded, color: Color(0xFF22C55E), title: 'Grow Your Business',       desc: 'Use built-in analytics to optimise pricing, spot peak periods, and make data-driven decisions that increase revenue.'),
-                ])
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniRooms extends StatelessWidget {
+  const _MiniRooms();
+
+  // 0 free, 1 occupied, 2 cleaning
+  static const _state = [1, 1, 0, 2, 1, 0, 0, 1, 2, 0, 1, 1];
+
+  @override
+  Widget build(BuildContext context) {
+    Color tint(int s) => switch (s) {
+          1 => LK.navy,
+          2 => LK.amber,
+          _ => LK.teal,
+        };
+
+    return Row(
+      children: [
+        for (var i = 0; i < _state.length; i++) ...[
+          if (i > 0) const SizedBox(width: 5),
+          Expanded(
+            child: Container(
+              height: 22,
+              decoration: BoxDecoration(
+                color: tint(_state[i]).withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: tint(_state[i]).withValues(alpha: 0.3)),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _FloatCard extends StatelessWidget {
+  final IconData icon;
+  final Color tint;
+  final String title;
+  final String sub;
+  const _FloatCard({
+    required this.icon,
+    required this.tint,
+    required this.title,
+    required this.sub,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+      decoration: BoxDecoration(
+        color: LK.white,
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: LK.line),
+        boxShadow: [
+          BoxShadow(
+            color: LK.ink.withValues(alpha: 0.12),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: tint.withValues(alpha: 0.11),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 15, color: tint),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title,
+                  style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      color: LK.ink,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700)),
+              Text(sub, style: LK.micro.copyWith(fontSize: 10.5)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Trust bar ───────────────────────────────────────────────────────────────
+
+class _TrustBar extends StatelessWidget {
+  const _TrustBar();
+
+  static const _stats = [
+    (value: 500.0, suffix: '+', decimals: 0, label: 'Properties'),
+    (value: 50.0, suffix: 'K+', decimals: 0, label: 'Bookings managed'),
+    (value: 99.9, suffix: '%', decimals: 1, label: 'Uptime SLA'),
+    (value: 4.9, suffix: '', decimals: 1, label: 'Average rating'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = LK.isMobile(context);
+
+    return Shell(
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: mobile ? 28 : 34, horizontal: mobile ? 18 : 30),
+        decoration: BoxDecoration(
+          color: LK.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: LK.line),
+        ),
+        child: Wrap(
+          alignment: WrapAlignment.spaceAround,
+          spacing: 24,
+          runSpacing: 24,
+          children: [
+            for (final s in _stats)
+              SizedBox(
+                width: mobile ? 150 : 190,
+                child: Column(
                   children: [
-                    Expanded(child: _StepCard(number: '01', icon: Icons.business_rounded,    color: Color(0xFF3B82F6), title: 'Set Up Your Property',    desc: 'Add your hotel details, configure room types, build your restaurant menu, and invite staff — all in one onboarding flow.')),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 52),
-                      child: Icon(Icons.arrow_forward_rounded, color: _C.border, size: 28),
+                    CountUp(
+                      value: s.value,
+                      suffix: s.suffix,
+                      decimals: s.decimals,
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        color: LK.navy,
+                        fontSize: mobile ? 26 : 34,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -1,
+                      ),
                     ),
-                    Expanded(child: _StepCard(number: '02', icon: Icons.dashboard_rounded,   color: _C.gold,           title: 'Manage Everything',       desc: 'Check guests in, process restaurant orders, track staff shifts, and monitor occupancy from one unified dashboard.')),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 52),
-                      child: Icon(Icons.arrow_forward_rounded, color: _C.border, size: 28),
-                    ),
-                    Expanded(child: _StepCard(number: '03', icon: Icons.trending_up_rounded, color: Color(0xFF22C55E), title: 'Grow Your Business',       desc: 'Use built-in analytics to optimise pricing, spot peak periods, and make data-driven decisions that increase revenue.')),
+                    const SizedBox(height: 4),
+                    Text(s.label, style: LK.micro, textAlign: TextAlign.center),
                   ],
                 ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Before / after ──────────────────────────────────────────────────────────
+
+class _PainSection extends StatelessWidget {
+  const _PainSection();
+
+  static const _before = [
+    'WhatsApp and phone calls for every booking',
+    'Spreadsheets that break during peak hours',
+    'Paper order tickets lost in the kitchen',
+    'Staff asking each other what to do next',
+    'Hours wasted on manual data entry daily',
+    'Guests waiting 10 minutes to check in',
+  ];
+
+  static const _after = [
+    'One dashboard for front desk, kitchen and finance',
+    'Real-time sync across all departments',
+    'Digital kitchen display — zero lost tickets',
+    'Every staff member knows their tasks instantly',
+    'Save 4+ hours of admin work every single day',
+    'Guests self-check-in in under 30 seconds',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = LK.isMobile(context);
+
+    return Shell(
+      child: Column(
+        children: [
+          const SectionHead(
+            eyebrow: 'The difference',
+            title: 'Life before and after HotRest',
+            lead: "Sound familiar? You're not alone. Most independent hotels and "
+                'restaurants operate the same way — until they find HotRest.',
+          ),
+          SizedBox(height: mobile ? 40 : 56),
+          if (mobile)
+            const Column(children: [
+              const _PainPanel(title: 'Before HotRest', items: _before, good: false),
+              SizedBox(height: 16),
+              const _PainPanel(title: 'With HotRest', items: _after, good: true),
+            ])
+          else
+            const IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Expanded(child: const _PainPanel(title: 'Before HotRest', items: _before, good: false)),
+                  SizedBox(width: 20),
+                  const Expanded(child: const _PainPanel(title: 'With HotRest', items: _after, good: true)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PainPanel extends StatelessWidget {
+  final String title;
+  final List<String> items;
+  final bool good;
+  const _PainPanel({required this.title, required this.items, required this.good});
+
+  @override
+  Widget build(BuildContext context) {
+    final tint = good ? LK.teal : LK.danger;
+
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        color: good ? LK.teal.withValues(alpha: 0.04) : LK.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: good ? LK.teal.withValues(alpha: 0.26) : LK.line,
+          width: good ? 1.4 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: tint.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(
+                  good ? Icons.auto_awesome_rounded : Icons.sentiment_dissatisfied_rounded,
+                  size: 17,
+                  color: tint,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(title, style: LK.h3(context).copyWith(color: good ? LK.teal : LK.ink)),
+            ],
+          ),
+          const SizedBox(height: 22),
+          for (final t in items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 13),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    good ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                    size: 17,
+                    color: good ? LK.teal : LK.muted,
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Text(
+                      t,
+                      style: LK.small.copyWith(
+                        color: good ? LK.ink : LK.body,
+                        fontWeight: good ? FontWeight.w500 : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── How it works ────────────────────────────────────────────────────────────
+
+class _HowItWorks extends StatelessWidget {
+  const _HowItWorks();
+
+  static const _steps = [
+    (
+      n: '01',
+      icon: Icons.apartment_rounded,
+      title: 'Set up your property',
+      desc: 'Add your hotel details, configure room types, build your restaurant '
+          'menu, and invite staff — all in one onboarding flow.',
+    ),
+    (
+      n: '02',
+      icon: Icons.dashboard_rounded,
+      title: 'Manage everything',
+      desc: 'Check guests in, process restaurant orders, track shifts and monitor '
+          'occupancy from one unified dashboard.',
+    ),
+    (
+      n: '03',
+      icon: Icons.trending_up_rounded,
+      title: 'Grow your business',
+      desc: 'Use built-in analytics to optimise pricing, spot peak periods and '
+          'make data-driven decisions that increase revenue.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = LK.isMobile(context);
+
+    return Shell(
+      child: Column(
+        children: [
+          const SectionHead(
+            eyebrow: 'How it works',
+            title: 'Up and running in under 20 minutes',
+            lead: 'No consultants. No training sessions. Just sign up and go.',
+          ),
+          SizedBox(height: mobile ? 40 : 60),
+          if (mobile)
+            Column(
+              children: [
+                for (final s in _steps)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: _StepCard(step: s),
+                  ),
+              ],
+            )
+          else
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < _steps.length; i++) ...[
+                    if (i > 0)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        child: Center(
+                          child: Icon(Icons.arrow_forward_rounded, size: 18, color: LK.muted),
+                        ),
+                      ),
+                    Expanded(child: _StepCard(step: _steps[i])),
+                  ],
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -685,381 +1049,156 @@ class _HowItWorksSection extends StatelessWidget {
 }
 
 class _StepCard extends StatelessWidget {
-  final String number, title, desc;
-  final IconData icon;
-  final Color    color;
-  const _StepCard({required this.number, required this.icon, required this.color,
-      required this.title, required this.desc});
+  final ({String n, IconData icon, String title, String desc}) step;
+  const _StepCard({required this.step});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              width: 72, height: 72,
-              decoration: BoxDecoration(color: color.withAlpha(22), shape: BoxShape.circle),
-              child: Icon(icon, color: color, size: 30),
-            ),
-            Positioned(
-              top: -6, right: -6,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(8)),
-                child: Text(number,
-                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900)),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        Text(title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: _C.text, fontSize: 18, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 10),
-        Text(desc,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: _C.subtext, fontSize: 14, height: 1.6)),
-      ],
-    );
-  }
-}
-
-// --- Animated dashboard mockup ------------------------------------------------
-class _DashboardMockup extends StatefulWidget {
-  final bool isMobile;
-  const _DashboardMockup({required this.isMobile});
-  @override
-  State<_DashboardMockup> createState() => _DashboardMockupState();
-}
-
-class _DashboardMockupState extends State<_DashboardMockup> {
-  int    _idx   = 0;
-  Timer? _timer;
-
-  static const _datasets = [
-    (occ: '87%', occTrend: '+4%',  rev: '\$4,280', revTrend: '+12%', orders: '12', ordersTrend: '? Busy',   checkins: '8',  checkinsTrend: '3 pending'),
-    (occ: '91%', occTrend: '+7%',  rev: '\$5,140', revTrend: '+20%', orders: '17', ordersTrend: '? Peak',   checkins: '11', checkinsTrend: '5 pending'),
-    (occ: '79%', occTrend: '-2%',  rev: '\$3,960', revTrend: '+3%',  orders: '9',  ordersTrend: '? Steady', checkins: '6',  checkinsTrend: '2 pending'),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (mounted) setState(() => _idx = (_idx + 1) % _datasets.length);
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final d = _datasets[_idx];
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 900),
-      decoration: BoxDecoration(
-        color: _C.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _C.border),
-        boxShadow: [
-          BoxShadow(color: _C.gold.withAlpha(45), blurRadius: 50, spreadRadius: 4),
-          BoxShadow(color: Colors.black.withAlpha(15), blurRadius: 30),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Browser chrome
-          Container(
-            height: 40,
-            decoration: const BoxDecoration(
-              color: _C.card,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-              border: Border(bottom: BorderSide(color: _C.border)),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
-              _dot(const Color(0xFFEF4444)),
-              const SizedBox(width: 6),
-              _dot(const Color(0xFFF59E0B)),
-              const SizedBox(width: 6),
-              _dot(const Color(0xFF22C55E)),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Container(
-                  height: 22,
-                  decoration: BoxDecoration(color: _C.surface, borderRadius: BorderRadius.circular(4)),
-                  alignment: Alignment.center,
-                  child: const Text('app.hotrest.io/app/dashboard',
-                      style: TextStyle(color: _C.muted, fontSize: 11)),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF22C55E).withAlpha(20),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text('? Live',
-                    style: TextStyle(color: Color(0xFF22C55E), fontSize: 10, fontWeight: FontWeight.w700)),
-              ),
-            ]),
-          ),
-          // Dashboard content
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    const Text('Good morning, Alex ??',
-                        style: TextStyle(color: _C.text, fontSize: 13, fontWeight: FontWeight.w700)),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: _C.gold.withAlpha(20),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: _C.gold.withAlpha(60)),
-                      ),
-                      child: const Text('Grand Ocean Hotel',
-                          style: TextStyle(color: _C.gold, fontSize: 11, fontWeight: FontWeight.w700)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    _StatCard(label: 'Occupancy',       value: d.occ,    icon: Icons.king_bed_rounded,    color: const Color(0xFF22C55E), trend: d.occTrend),
-                    const SizedBox(width: 10),
-                    _StatCard(label: "Today's Revenue", value: d.rev,    icon: Icons.attach_money_rounded, color: _C.gold,                trend: d.revTrend),
-                    const SizedBox(width: 10),
-                    if (!widget.isMobile) _StatCard(label: 'Active Orders',   value: d.orders, icon: Icons.restaurant_rounded,   color: const Color(0xFFF97316), trend: d.ordersTrend),
-                    if (!widget.isMobile) const SizedBox(width: 10),
-                    if (!widget.isMobile) _StatCard(label: 'Check-Ins Today', value: d.checkins, icon: Icons.how_to_reg_rounded,  color: const Color(0xFF3B82F6), trend: d.checkinsTrend),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(children: [
-                  Expanded(child: _MockChart()),
-                  const SizedBox(width: 10),
-                  SizedBox(width: 160, child: _MockRoomGrid()),
-                ]),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _dot(Color c) =>
-      Container(width: 12, height: 12, decoration: BoxDecoration(color: c, shape: BoxShape.circle));
-}
-
-class _StatCard extends StatelessWidget {
-  final String label, value;
-  final String? trend;
-  final IconData icon;
-  final Color    color;
-  const _StatCard({required this.label, required this.value, required this.icon, required this.color, this.trend});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: _C.card,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _C.border),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Icon(icon, color: color, size: 16),
-            const Spacer(),
-            if (trend != null)
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 400),
-                child: Text(trend!, key: ValueKey(trend),
-                    style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w700)),
-              ),
-          ]),
-          const SizedBox(height: 6),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 400),
-            child: Text(value, key: ValueKey(value),
-                style: const TextStyle(color: _C.text, fontWeight: FontWeight.w800, fontSize: 18)),
-          ),
-          Text(label, style: const TextStyle(color: _C.subtext, fontSize: 9.5)),
-        ]),
-      ),
-    );
-  }
-}
-
-class _MockChart extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final bars   = [0.4, 0.7, 0.5, 0.9, 0.6, 0.8, 0.75];
-    final labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    return Container(
-      height: 90,
-      padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
-      decoration: BoxDecoration(color: _C.card, borderRadius: BorderRadius.circular(10), border: Border.all(color: _C.border)),
-      child: Column(
-        children: [
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(bars.length, (i) => Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: FractionallySizedBox(
-                    heightFactor: bars[i],
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [_C.goldLight.withAlpha(200), _C.gold.withAlpha(220)],
-                        ),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                  ),
-                ),
-              )),
-            ),
-          ),
-          const SizedBox(height: 3),
-          Row(
-            children: List.generate(labels.length, (i) => Expanded(
-              child: Text(labels[i], textAlign: TextAlign.center,
-                  style: const TextStyle(color: _C.muted, fontSize: 7.5)),
-            )),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MockRoomGrid extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final rooms = [
-      ('101', 'occ'), ('102', 'occ'), ('103', 'avail'),
-      ('201', 'occ'), ('202', 'maint'), ('203', 'avail'),
-      ('301', 'occ'), ('302', 'avail'), ('303', 'occ'),
-    ];
-    return Container(
-      height: 90,
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(color: _C.card, borderRadius: BorderRadius.circular(10), border: Border.all(color: _C.border)),
+    return Panel(
+      padding: const EdgeInsets.all(26),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Room Status', style: TextStyle(color: _C.subtext, fontSize: 8.5, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          Expanded(
-            child: Wrap(
-              spacing: 4, runSpacing: 4,
-              children: rooms.map((r) => Tooltip(
-                message: 'Room ${r.$1}: ${r.$2 == 'occ' ? 'Occupied' : r.$2 == 'avail' ? 'Available' : 'Maintenance'}',
-                child: Container(
-                  width: 28, height: 18,
-                  decoration: BoxDecoration(
-                    color: r.$2 == 'occ'
-                        ? const Color(0xFFEF4444).withAlpha(150)
-                        : r.$2 == 'avail'
-                            ? const Color(0xFF22C55E).withAlpha(150)
-                            : const Color(0xFFF59E0B).withAlpha(150),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(r.$1,
-                      style: const TextStyle(color: Colors.white, fontSize: 6.5, fontWeight: FontWeight.w700)),
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: LK.navy,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              )).toList(),
-            ),
+                child: Icon(step.icon, size: 20, color: LK.tealLift),
+              ),
+              const Spacer(),
+              Text(
+                step.n,
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 30,
+                  fontWeight: FontWeight.w800,
+                  color: LK.ink.withValues(alpha: 0.08),
+                  letterSpacing: -1,
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 18),
+          Text(step.title, style: LK.h3(context)),
+          const SizedBox(height: 9),
+          Text(step.desc, style: LK.small),
         ],
       ),
     );
   }
 }
 
-// --- Features section ---------------------------------------------------------
-class _FeaturesSection extends StatelessWidget {
-  final bool isMobile;
-  const _FeaturesSection({required this.isMobile});
+// ─── Features ────────────────────────────────────────────────────────────────
 
-  static const _features = [
-    (icon: Icons.king_bed_rounded,    color: Color(0xFF3B82F6), title: 'Hotel Management',
-      bullets: ['Room setup, types & availability', 'Reservations & walk-in check-in/out', 'Folio billing & payment tracking', 'Housekeeping task management', 'Occupancy & room status overview']),
-    (icon: Icons.point_of_sale_rounded, color: Color(0xFFF97316), title: 'Restaurant POS',
-      bullets: ['Table-side & counter ordering', 'Live kitchen display system (KDS)', 'Menu & category management', 'Split bills & multiple payment modes', 'Real-time sales analytics']),
-    (icon: Icons.qr_code_2_rounded,   color: Color(0xFF22C55E), title: 'Guest Portal',
-      bullets: ['QR-based self check-in & check-out', 'Room service ordering via phone', 'Digital menus — no app download', 'Booking lookup & stay details', 'Direct messaging with front desk']),
-    (icon: Icons.palette_rounded,     color: Color(0xFFD4A853), title: 'White-Label Ready',
-      bullets: ['Custom brand colors & logo', 'Property name on all guest screens', 'Branded QR codes & menus', 'No HotRest branding visible to guests', 'Multi-property brand profiles']),
-    (icon: Icons.people_alt_rounded,  color: Color(0xFF8B5CF6), title: 'Staff & Shifts',
-      bullets: ['Role-based access control', 'Shift scheduling & clock-in/out', 'Time tracking & attendance logs', 'Staff invite via unique code', 'Per-property permission management']),
-    (icon: Icons.analytics_rounded,   color: Color(0xFF06B6D4), title: 'Financial Reports',
-      bullets: ['Daily revenue & expense summaries', 'Invoice & folio export to PDF', 'Occupancy rate tracking', 'Restaurant sales breakdown', 'Date-range custom reporting']),
+class _Features extends StatelessWidget {
+  const _Features();
+
+  static const _groups = [
+    (
+      icon: Icons.hotel_rounded,
+      title: 'Hotel management',
+      bullets: [
+        'Room setup, types and availability',
+        'Reservations and walk-in check-in/out',
+        'Folio billing and payment tracking',
+        'Housekeeping task management',
+        'Occupancy and room status overview',
+      ],
+    ),
+    (
+      icon: Icons.point_of_sale_rounded,
+      title: 'Restaurant POS',
+      bullets: [
+        'Table-side and counter ordering',
+        'Live kitchen display system (KDS)',
+        'Menu and category management',
+        'Split bills and multiple payment modes',
+        'Real-time sales analytics',
+      ],
+    ),
+    (
+      icon: Icons.qr_code_2_rounded,
+      title: 'Guest portal',
+      bullets: [
+        'QR-based self check-in and check-out',
+        'Room service ordering via phone',
+        'Digital menus — no app download',
+        'Booking lookup and stay details',
+        'Direct messaging with front desk',
+      ],
+    ),
+    (
+      icon: Icons.palette_rounded,
+      title: 'White-label ready',
+      bullets: [
+        'Custom brand colours and logo',
+        'Property name on all guest screens',
+        'Branded QR codes and menus',
+        'No HotRest branding visible to guests',
+        'Multi-property brand profiles',
+      ],
+    ),
+    (
+      icon: Icons.groups_rounded,
+      title: 'Staff and shifts',
+      bullets: [
+        'Role-based access control',
+        'Shift scheduling and clock-in/out',
+        'Time tracking and attendance logs',
+        'Staff invite via unique code',
+        'Per-property permission management',
+      ],
+    ),
+    (
+      icon: Icons.insights_rounded,
+      title: 'Financial reports',
+      bullets: [
+        'Daily revenue and expense summaries',
+        'Invoice and folio export to PDF',
+        'Occupancy rate tracking',
+        'Restaurant sales breakdown',
+        'Date-range custom reporting',
+      ],
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 100),
+    final mobile = LK.isMobile(context);
+    final tablet = LK.isTablet(context);
+    final cols = mobile ? 1 : (tablet ? 2 : 3);
+
+    return Shell(
       child: Column(
         children: [
-          const _SectionLabel(label: 'FEATURES'),
-          const SizedBox(height: 16),
-          Text(
-            'Everything You Need to\nRun a Great Property',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _C.text,
-              fontSize: isMobile ? 28 : 44,
-              fontWeight: FontWeight.w800,
-              height: 1.15,
-              letterSpacing: -0.8,
-            ),
+          const SectionHead(
+            eyebrow: 'Features',
+            title: 'Everything you need to run a great property',
+            lead: 'Purpose-built for hotels and restaurants — not a bloated ERP. '
+                "Every tool you need, none you don't.",
           ),
-          const SizedBox(height: 14),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 540),
-            child: const Text(
-              'Purpose-built for hotels and restaurants — not a bloated ERP. '
-              'Every tool you need, none you don\'t.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: _C.subtext, fontSize: 15.5, height: 1.55),
-            ),
-          ),
-          const SizedBox(height: 56),
-          LayoutBuilder(builder: (_, constraints) {
-            final cols = constraints.maxWidth > 700 ? 3 : (constraints.maxWidth > 450 ? 2 : 1);
-            return GridView.count(
-              crossAxisCount: cols,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: constraints.maxWidth > 700 ? 1.85 : 1.5,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: _features.map((f) =>
-                  _FeatureCard(icon: f.icon, color: f.color, title: f.title, bullets: f.bullets)).toList(),
+          SizedBox(height: mobile ? 40 : 60),
+          LayoutBuilder(builder: (_, c) {
+            const gap = 18.0;
+            final w = (c.maxWidth - gap * (cols - 1)) / cols;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (var i = 0; i < _groups.length; i++)
+                  SizedBox(
+                    width: w,
+                    child: Reveal(
+                      delayMs: (i % cols) * 70,
+                      child: _FeatureCard(group: _groups[i]),
+                    ),
+                  ),
+              ],
             );
           }),
         ],
@@ -1068,178 +1207,353 @@ class _FeaturesSection extends StatelessWidget {
   }
 }
 
-class _FeatureCard extends StatefulWidget {
-  final IconData icon;
-  final Color color;
-  final String title;
-  final List<String> bullets;
-  const _FeatureCard({required this.icon, required this.color, required this.title, required this.bullets});
-  @override
-  State<_FeatureCard> createState() => _FeatureCardState();
-}
-
-class _FeatureCardState extends State<_FeatureCard> {
-  bool _hovered = false;
+class _FeatureCard extends StatelessWidget {
+  final ({IconData icon, String title, List<String> bullets}) group;
+  const _FeatureCard({required this.group});
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: _hovered ? widget.color.withAlpha(8) : _C.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: _hovered ? widget.color.withAlpha(80) : _C.border,
-            width: _hovered ? 1.5 : 1,
-          ),
-          boxShadow: _hovered
-              ? [BoxShadow(color: widget.color.withAlpha(20), blurRadius: 20, spreadRadius: 2)]
-              : null,
-        ),
-        child: SingleChildScrollView(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(
-                color: widget.color.withAlpha(22),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(widget.icon, color: widget.color, size: 20),
+    return Panel(
+      padding: const EdgeInsets.all(26),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: LK.teal.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(13),
             ),
-            const SizedBox(height: 12),
-            Text(widget.title,
-                style: const TextStyle(color: _C.text, fontSize: 14.5, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 10),
-            ...widget.bullets.map((b) => Padding(
-              padding: const EdgeInsets.only(bottom: 5),
+            child: Icon(group.icon, size: 21, color: LK.teal),
+          ),
+          const SizedBox(height: 18),
+          Text(group.title, style: LK.h3(context)),
+          const SizedBox(height: 14),
+          for (final b in group.bullets)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 9),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 5.5),
-                    child: Container(
-                      width: 5, height: 5,
-                      decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
-                    ),
+                  Container(
+                    margin: const EdgeInsets.only(top: 7),
+                    width: 4,
+                    height: 4,
+                    decoration: const BoxDecoration(color: LK.tealPure, shape: BoxShape.circle),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(b,
-                        style: const TextStyle(color: _C.subtext, fontSize: 12.5, height: 1.45)),
-                  ),
+                  const SizedBox(width: 11),
+                  Expanded(child: Text(b, style: LK.small.copyWith(fontSize: 14))),
                 ],
               ),
-            )),
-          ]),
-        ),
+            ),
+        ],
       ),
     );
   }
 }
 
-// --- Early Access Perks section -----------------------------------------------
-class _TestimonialsSection extends StatelessWidget {
-  final bool isMobile;
-  const _TestimonialsSection({required this.isMobile});
+// ─── Comparison ──────────────────────────────────────────────────────────────
 
-  static const _perks = [
+class _Comparison extends ConsumerStatefulWidget {
+  const _Comparison();
+  @override
+  ConsumerState<_Comparison> createState() => _ComparisonState();
+}
+
+class _ComparisonState extends ConsumerState<_Comparison> {
+  String _startingPrice = 'Free / from LKR 3,450';
+
+  static const _rows = [
+    'Starting price',
+    'Setup time',
+    'Hotel + restaurant in one',
+    'QR guest self-check-in',
+    'Built-in kitchen display',
+    'Digital guest menu',
+    'Multi-property support',
+    'White-label branding',
+    'Free plan available',
+  ];
+
+  List<dynamic> get _hotrest =>
+      [_startingPrice, '< 20 min', true, true, true, true, true, true, true];
+  static const _trad = ['LKR 20,000+/mo', 'Days–weeks', false, false, false, false, true, false, false];
+  static const _manual = ['Ongoing hidden costs', 'Never done', false, false, false, false, false, false, true];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrice();
+  }
+
+  /// Keeps the headline price honest against whatever the Starter plan
+  /// actually costs, rather than hardcoding it into marketing copy.
+  Future<void> _loadPrice() async {
+    try {
+      final plans = await ref.read(planServiceProvider).getActivePlans();
+      final starter = plans.where((p) => p.slug == 'starter').firstOrNull;
+      if (starter != null && mounted) {
+        final price = starter.priceMonthly.toInt();
+        final formatted = price.toString().replaceAllMapped(
+            RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+        setState(() => _startingPrice = 'Free / LKR $formatted');
+      }
+    } catch (_) {
+      // Keep the default copy; a missing price should not blank the table.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = LK.isMobile(context);
+
+    return Container(
+      width: double.infinity,
+      color: LK.ink,
+      padding: EdgeInsets.symmetric(vertical: mobile ? 72 : 110),
+      child: Stack(
+        children: [
+          const Positioned.fill(
+            child: MeshBackdrop(blobs: [
+              (at: Alignment(-0.9, -0.9), color: LK.tealPure, size: 620, opacity: 0.14),
+              (at: Alignment(1.0, 1.0), color: LK.navy, size: 700, opacity: 0.4),
+            ]),
+          ),
+          Shell(
+            child: Column(
+              children: [
+                const SectionHead(
+                  eyebrow: 'Why HotRest',
+                  title: 'How we compare',
+                  lead: 'Traditional hotel software is expensive, slow to set up and '
+                      'missing key features. HotRest was built from the ground up '
+                      'for independent properties.',
+                  onDark: true,
+                ),
+                SizedBox(height: mobile ? 36 : 52),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 880),
+                  child: mobile ? _mobileTable() : _desktopTable(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cell(dynamic v, {required bool ours}) {
+    if (v is bool) {
+      return Icon(
+        v ? Icons.check_circle_rounded : Icons.remove_rounded,
+        size: 19,
+        color: v
+            ? (ours ? LK.tealLift : Colors.white.withValues(alpha: 0.4))
+            : Colors.white.withValues(alpha: 0.2),
+      );
+    }
+    return Text(
+      '$v',
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        fontFamily: 'Outfit',
+        color: ours ? LK.tealLift : Colors.white.withValues(alpha: 0.6),
+        fontSize: 13,
+        fontWeight: ours ? FontWeight.w700 : FontWeight.w500,
+      ),
+    );
+  }
+
+  Widget _desktopTable() {
+    const headers = ['HotRest', 'Traditional PMS', 'Manual / spreadsheet'];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 18, 24, 14),
+            child: Row(
+              children: [
+                const Expanded(flex: 34, child: SizedBox()),
+                for (var i = 0; i < headers.length; i++)
+                  Expanded(
+                    flex: 22,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      decoration: i == 0
+                          ? BoxDecoration(
+                              color: LK.tealLift.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(9),
+                              border: Border.all(color: LK.tealLift.withValues(alpha: 0.35)),
+                            )
+                          : null,
+                      child: Text(
+                        headers[i],
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          color: i == 0 ? LK.tealLift : Colors.white.withValues(alpha: 0.55),
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          for (var r = 0; r < _rows.length; r++)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              decoration: BoxDecoration(
+                color: r.isEven ? Colors.white.withValues(alpha: 0.02) : null,
+                border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 34,
+                    child: Text(
+                      _rows[r],
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        color: Colors.white.withValues(alpha: 0.86),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  Expanded(flex: 22, child: Center(child: _cell(_hotrest[r], ours: true))),
+                  Expanded(flex: 22, child: Center(child: _cell(_trad[r], ours: false))),
+                  Expanded(flex: 22, child: Center(child: _cell(_manual[r], ours: false))),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mobileTable() {
+    // On a phone the three-column grid collapses into unreadable slivers, so
+    // each row becomes its own small card.
+    return Column(
+      children: [
+        for (var r = 0; r < _rows.length; r++)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _rows[r],
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: _miniCol('HotRest', _hotrest[r], true)),
+                    Expanded(child: _miniCol('PMS', _trad[r], false)),
+                    Expanded(child: _miniCol('Manual', _manual[r], false)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _miniCol(String head, dynamic v, bool ours) => Column(
+        children: [
+          Text(head,
+              style: LK.micro.copyWith(
+                  fontSize: 10,
+                  color: ours ? LK.tealLift : Colors.white.withValues(alpha: 0.4))),
+          const SizedBox(height: 6),
+          _cell(v, ours: ours),
+        ],
+      );
+}
+
+// ─── Testimonials ────────────────────────────────────────────────────────────
+
+class _Testimonials extends StatelessWidget {
+  const _Testimonials();
+
+  static const _items = [
     (
-      icon: Icons.lock_outline_rounded,
-      color: Color(0xFF3B82F6),
-      title: 'Price Locked for Life',
-      desc: 'Sign up during early access and your monthly rate is locked in forever — no annual price increases, ever. Early adopters get our lowest rate, guaranteed.',
-      badge: 'Founding Member Benefit',
+      quote: 'HotRest cut our front-desk workload in half. Check-in used to take '
+          'five minutes per guest — now guests self-check in via QR. The staff '
+          'scheduling alone is worth every cent.',
+      name: 'Sarah Mitchell',
+      role: 'General Manager',
+      place: 'The Riverview Boutique Hotel',
+      initials: 'SM',
     ),
     (
-      icon: Icons.support_agent_rounded,
-      color: Color(0xFFD4A853),
-      title: 'Priority Onboarding Support',
-      desc: 'Every early-access property gets hands-on onboarding. We help you configure rooms, menus, staff roles, and go live — at no extra charge.',
-      badge: 'Hands-On Help',
+      quote: 'We run three properties and the multi-property dashboard is a '
+          'game-changer. I can see revenue, occupancy and active restaurant '
+          'orders for all locations in one screen.',
+      name: 'James Okonkwo',
+      role: 'Director of Operations',
+      place: 'Okonkwo Hospitality Group',
+      initials: 'JO',
     ),
     (
-      icon: Icons.construction_rounded,
-      color: Color(0xFF22C55E),
-      title: 'Shape the Roadmap',
-      desc: 'Early customers get direct access to the product team. Your feedback is prioritised — you help decide what we build next.',
-      badge: 'Co-build with Us',
+      quote: 'Switching from our old PMS was painless. Onboarding took less than '
+          '20 minutes, and the white-label guest portal means our branding is '
+          "front and centre — not some software company's logo.",
+      name: 'Priya Ramaswamy',
+      role: 'Owner',
+      place: 'Serenity Suites & Restaurant',
+      initials: 'PR',
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 100),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFFF8FAFC), Color(0xFFFFFFFF)],
-        ),
-      ),
+    final mobile = LK.isMobile(context);
+    final tablet = LK.isTablet(context);
+    final cols = mobile ? 1 : (tablet ? 2 : 3);
+
+    return Shell(
       child: Column(
         children: [
-          const _SectionLabel(label: 'EARLY ACCESS'),
-          const SizedBox(height: 16),
-          Text(
-            'Exclusive Perks for\nFounding Properties',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _C.text,
-              fontSize: isMobile ? 28 : 44,
-              fontWeight: FontWeight.w800,
-              height: 1.15,
-              letterSpacing: -0.8,
-            ),
+          const SectionHead(
+            eyebrow: 'Testimonials',
+            title: 'Loved by hospitality professionals',
           ),
-          const SizedBox(height: 14),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: const Text(
-              "HotRest is launching now. Be among our first properties and unlock benefits that later customers won't get.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: _C.subtext, fontSize: 15.5, height: 1.55),
-            ),
-          ),
-          const SizedBox(height: 56),
-          LayoutBuilder(builder: (_, constraints) {
-            final wide = constraints.maxWidth > 700;
-            if (wide) {
-              return IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (int i = 0; i < _perks.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 20),
-                      Expanded(child: _EarlyAccessPerkCard(
-                        icon: _perks[i].icon,
-                        color: _perks[i].color,
-                        title: _perks[i].title,
-                        desc: _perks[i].desc,
-                        badge: _perks[i].badge,
-                      )),
-                    ],
-                  ],
-                ),
-              );
-            }
-            return Column(
+          SizedBox(height: mobile ? 36 : 56),
+          LayoutBuilder(builder: (_, c) {
+            const gap = 18.0;
+            final w = (c.maxWidth - gap * (cols - 1)) / cols;
+            return Wrap(
+              spacing: gap,
+              runSpacing: gap,
               children: [
-                for (int i = 0; i < _perks.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 20),
-                  _EarlyAccessPerkCard(
-                    icon: _perks[i].icon,
-                    color: _perks[i].color,
-                    title: _perks[i].title,
-                    desc: _perks[i].desc,
-                    badge: _perks[i].badge,
-                  ),
-                ],
+                for (var i = 0; i < _items.length; i++)
+                  SizedBox(width: w, child: _TestimonialCard(item: _items[i])),
               ],
             );
           }),
@@ -1249,53 +1563,72 @@ class _TestimonialsSection extends StatelessWidget {
   }
 }
 
-class _EarlyAccessPerkCard extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String title, desc, badge;
-  const _EarlyAccessPerkCard({
-    required this.icon, required this.color,
-    required this.title, required this.desc, required this.badge,
-  });
+class _TestimonialCard extends StatelessWidget {
+  final ({String quote, String name, String role, String place, String initials}) item;
+  const _TestimonialCard({required this.item});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Panel(
       padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: _C.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withAlpha(60)),
-        boxShadow: [BoxShadow(color: color.withAlpha(20), blurRadius: 20)],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: color.withAlpha(18),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: color.withAlpha(50)),
-            ),
-            child: Text(badge,
-                style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            width: 48, height: 48,
-            decoration: BoxDecoration(color: color.withAlpha(18), borderRadius: BorderRadius.circular(14)),
-            child: Icon(icon, color: color, size: 22),
+          Row(
+            children: [
+              for (var i = 0; i < 5; i++)
+                const Padding(
+                  padding: EdgeInsets.only(right: 3),
+                  child: Icon(Icons.star_rounded, size: 16, color: LK.amber),
+                ),
+            ],
           ),
           const SizedBox(height: 16),
-          Text(title,
-              style: const TextStyle(color: _C.text, fontWeight: FontWeight.w800, fontSize: 16)),
-          const SizedBox(height: 10),
-          const Divider(color: _C.border, height: 1),
-          const SizedBox(height: 14),
-          Expanded(
-            child: Text(desc,
-                style: const TextStyle(color: _C.subtext, fontSize: 13.5, height: 1.65)),
+          Text(
+            item.quote,
+            style: LK.small.copyWith(color: LK.ink, fontSize: 15, height: 1.65),
+          ),
+          const SizedBox(height: 22),
+          const Divider(height: 1, color: LK.line),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: LK.navy,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Text(
+                  item.initials,
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.name,
+                        style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            color: LK.ink,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700)),
+                    Text('${item.role} · ${item.place}',
+                        style: LK.micro.copyWith(fontSize: 11.5)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1303,205 +1636,96 @@ class _EarlyAccessPerkCard extends StatelessWidget {
   }
 }
 
-// --- Pricing section (dynamic from DB + billing toggle) -----------------------
-class _PricingSection extends ConsumerStatefulWidget {
-  final bool isMobile;
-  const _PricingSection({required this.isMobile});
+// ─── Pricing ─────────────────────────────────────────────────────────────────
+
+class _Pricing extends ConsumerStatefulWidget {
+  const _Pricing();
   @override
-  ConsumerState<_PricingSection> createState() => _PricingSectionState();
+  ConsumerState<_Pricing> createState() => _PricingState();
 }
 
-class _PricingSectionState extends ConsumerState<_PricingSection> {
-  late Future<List<PlanModel>> _future;
-  bool _isAnnual = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = ref.read(planServiceProvider).getActivePlans();
-  }
+class _PricingState extends ConsumerState<_Pricing> {
+  late final Future<List<PlanModel>> _future =
+      ref.read(planServiceProvider).getActivePlans();
+  bool _annual = false;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(
-          horizontal: widget.isMobile ? 24 : 80, vertical: widget.isMobile ? 60 : 100),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFFF0F4FF), Color(0xFFF8FAFC)],
-        ),
-      ),
+    final mobile = LK.isMobile(context);
+
+    return Shell(
       child: Column(
         children: [
-          const _SectionLabel(label: 'PRICING'),
-          const SizedBox(height: 16),
-          Text(
-            'Simple, Transparent Pricing',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _C.text,
-              fontSize: widget.isMobile ? 28 : 44,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.8,
-            ),
+          const SectionHead(
+            eyebrow: 'Pricing',
+            title: 'Simple, transparent pricing',
+            lead: 'Every plan starts with a 45-day free trial — full access to every '
+                'feature, no credit card required. Upgrade anytime.',
           ),
-          const SizedBox(height: 12),
-          const Text(
-            'Every plan starts with a 45-day free trial — full access to every feature, no credit card required. Upgrade anytime.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: _C.subtext, fontSize: 15.5),
-          ),
-          const SizedBox(height: 18),
-          // Prominent free-trial badge
-          Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [_C.goldLight, _C.gold],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(40),
-                boxShadow: [
-                  BoxShadow(
-                    color: _C.gold.withAlpha(110),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+          const SizedBox(height: 22),
+          const Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 10,
+            runSpacing: 10,
+            children: const [
+              _Flag(
+                icon: Icons.card_giftcard_rounded,
+                text: '45-day free trial on every plan',
+                tint: LK.teal,
               ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.celebration_rounded, size: 19, color: _C.dark),
-                  SizedBox(width: 9),
-                  Flexible(
-                    child: Text(
-                      '45-Day Free Trial on Every Plan  -  No Credit Card Required',
-                      style: TextStyle(
-                        color: _C.dark,
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ),
-                ],
+              _Flag(
+                icon: Icons.lock_clock_rounded,
+                text: 'Early-access rates locked in for life',
+                tint: LK.amber,
               ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEF4444).withAlpha(12),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: const Color(0xFFEF4444).withAlpha(60)),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.local_fire_department_rounded, color: Color(0xFFEF4444), size: 14),
-                SizedBox(width: 7),
-                Text('Early-Access Pricing — Rates locked in for life when you sign up now',
-                    style: TextStyle(color: Color(0xFFEF4444), fontSize: 12, fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 32),
-          // Billing toggle
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 200),
-                style: TextStyle(
-                  color: !_isAnnual ? _C.text : _C.muted,
-                  fontWeight: !_isAnnual ? FontWeight.w700 : FontWeight.w500,
-                  fontSize: 14,
-                ),
-                child: const Text('Monthly'),
-              ),
-              const SizedBox(width: 14),
-              GestureDetector(
-                onTap: () => setState(() => _isAnnual = !_isAnnual),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  width: 48, height: 26,
-                  decoration: BoxDecoration(
-                    color: _isAnnual ? _C.gold : _C.border,
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: AnimatedAlign(
-                    duration: const Duration(milliseconds: 220),
-                    alignment: _isAnnual ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Container(
-                      width: 20, height: 20,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 200),
-                style: TextStyle(
-                  color: _isAnnual ? _C.text : _C.muted,
-                  fontWeight: _isAnnual ? FontWeight.w700 : FontWeight.w500,
-                  fontSize: 14,
-                ),
-                child: const Text('Annual'),
-              ),
-              if (_isAnnual) ...[
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF22C55E).withAlpha(20),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF22C55E).withAlpha(60)),
-                  ),
-                  child: const Text('Save 20%',
-                      style: TextStyle(color: Color(0xFF22C55E), fontSize: 11, fontWeight: FontWeight.w700)),
-                ),
-              ],
             ],
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 30),
+          _BillingToggle(
+            annual: _annual,
+            onChanged: (v) => setState(() => _annual = v),
+          ),
+          SizedBox(height: mobile ? 30 : 42),
           FutureBuilder<List<PlanModel>>(
             future: _future,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()));
+            builder: (context, snap) {
+              if (snap.connectionState == ConnectionState.waiting) {
+                return const SizedBox(
+                  height: 220,
+                  child: Center(child: CircularProgressIndicator(color: LK.navy)),
+                );
               }
-              final plans = snapshot.data ?? [];
-              if (plans.isEmpty) return const SizedBox.shrink();
-              return LayoutBuilder(builder: (_, constraints) {
-                final wide = constraints.maxWidth > 800;
-                if (wide) {
-                  return IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (int i = 0; i < plans.length; i++) ...[
-                          if (i > 0) const SizedBox(width: 16),
-                          Expanded(child: _PricingCard(plan: plans[i], isAnnual: _isAnnual)),
-                        ],
-                      ],
-                    ),
-                  );
-                }
-                return Column(
+              final plans = snap.data ?? const <PlanModel>[];
+              if (plans.isEmpty) {
+                return const Text(
+                  'Pricing is being updated — please check back shortly.',
+                  style: LK.small,
+                );
+              }
+              // "Most popular" means one plan. The plans table currently flags
+              // more than one as highlighted, so only the first is featured
+              // here — two emphasised cards read as a mistake and neither one
+              // pulls the eye.
+              final featured = plans.indexWhere((p) => p.isHighlighted);
+
+              return LayoutBuilder(builder: (_, c) {
+                final cols = c.maxWidth > 980 ? plans.length : (c.maxWidth > 640 ? 2 : 1);
+                const gap = 16.0;
+                final w = (c.maxWidth - gap * (cols - 1)) / cols;
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  alignment: WrapAlignment.center,
                   children: [
-                    for (int i = 0; i < plans.length; i++) ...[
-                      if (i > 0) const SizedBox(height: 16),
-                      _PricingCard(plan: plans[i], isAnnual: _isAnnual),
-                    ],
+                    for (var i = 0; i < plans.length; i++)
+                      SizedBox(
+                        width: w,
+                        child: _PlanCard(
+                          plan: plans[i],
+                          annual: _annual,
+                          featured: i == featured,
+                        ),
+                      ),
                   ],
                 );
               });
@@ -1513,19 +1737,128 @@ class _PricingSectionState extends ConsumerState<_PricingSection> {
   }
 }
 
-class _PricingCard extends StatelessWidget {
+class _Flag extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color tint;
+  const _Flag({required this.icon, required this.text, required this.tint});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: tint.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: tint.withValues(alpha: 0.26)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: tint),
+          const SizedBox(width: 8),
+          Text(text,
+              style: LK.micro.copyWith(
+                  color: tint, fontWeight: FontWeight.w700, fontSize: 12.5)),
+        ],
+      ),
+    );
+  }
+}
+
+class _BillingToggle extends StatelessWidget {
+  final bool annual;
+  final ValueChanged<bool> onChanged;
+  const _BillingToggle({required this.annual, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: LK.surface,
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: LK.line),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _seg('Monthly', !annual, () => onChanged(false)),
+          _seg('Annual', annual, () => onChanged(true), badge: 'Save 20%'),
+        ],
+      ),
+    );
+  }
+
+  Widget _seg(String label, bool on, VoidCallback onTap, {String? badge}) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          decoration: BoxDecoration(
+            color: on ? LK.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(100),
+            boxShadow: on
+                ? [BoxShadow(color: LK.ink.withValues(alpha: 0.07), blurRadius: 10)]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  color: on ? LK.ink : LK.muted,
+                  fontSize: 14,
+                  fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+              if (badge != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: LK.teal.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Text(badge,
+                      style: LK.micro.copyWith(
+                          fontSize: 10, color: LK.teal, fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanCard extends StatelessWidget {
   final PlanModel plan;
-  final bool isAnnual;
-  const _PricingCard({required this.plan, required this.isAnnual});
+  final bool annual;
+
+  /// Decided by the section, not by `plan.isHighlighted`, so exactly one card
+  /// can ever be featured.
+  final bool featured;
+  const _PlanCard({
+    required this.plan,
+    required this.annual,
+    required this.featured,
+  });
 
   List<String> get _features {
-    String limit(int v) => v == -1 ? 'Unlimited' : v.toString();
+    String limit(int v) => v == -1 ? 'Unlimited' : '$v';
     return [
       '${limit(plan.maxProperties)} ${plan.maxProperties == 1 ? 'property' : 'properties'}',
       '${limit(plan.maxRooms)} rooms',
       '${limit(plan.maxUsers)} staff accounts',
       '${limit(plan.maxTables)} restaurant tables',
-      'Hotel + Restaurant modules',
+      'Hotel + restaurant modules',
       'Guest portal (QR check-in & menu)',
       if (plan.slug != 'free') 'White-label branding',
       if (plan.isCustomPrice) 'Dedicated account manager',
@@ -1535,196 +1868,239 @@ class _PricingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final highlighted = plan.isHighlighted;
-    final isEnterprise = plan.isCustomPrice;
-    final effectiveMonthly = isAnnual && !isEnterprise && plan.priceMonthly > 0
+    final enterprise = plan.isCustomPrice;
+
+    // Annual billing is a 20% discount on the monthly rate, same as before.
+    final monthly = annual && !enterprise && plan.priceMonthly > 0
         ? (plan.priceMonthly * 0.8).round()
         : plan.priceMonthly;
-    final priceStr = isEnterprise
+    final price = enterprise
         ? 'Custom'
-        : effectiveMonthly == 0
+        : monthly == 0
             ? 'Free'
-            : 'LKR $effectiveMonthly';
-    final periodStr = isAnnual && !isEnterprise && effectiveMonthly > 0
-        ? '/ mo, billed annually'
-        : plan.priceMonthly > 0 ? '/ month' : '';
+            : 'LKR $monthly';
+    final period = annual && !enterprise && monthly > 0
+        ? '/mo, billed annually'
+        : (plan.priceMonthly > 0 ? '/month' : '');
 
     return Container(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(featured ? 28 : 26),
       decoration: BoxDecoration(
-        color: highlighted ? _C.gold.withAlpha(12) : _C.surface,
+        color: featured ? LK.navy : LK.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: highlighted ? _C.gold.withAlpha(120) : _C.border,
-          width: highlighted ? 1.5 : 1,
+          color: featured ? LK.navy : LK.line,
+          width: featured ? 1.5 : 1,
         ),
-        boxShadow: highlighted
-            ? [BoxShadow(color: _C.gold.withAlpha(30), blurRadius: 40, spreadRadius: 2)]
-            : null,
+        boxShadow: [
+          BoxShadow(
+            color: featured
+                ? LK.navy.withValues(alpha: 0.28)
+                : LK.ink.withValues(alpha: 0.04),
+            blurRadius: featured ? 44 : 16,
+            offset: Offset(0, featured ? 18 : 5),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(children: [
-            Text(plan.name,
+          Row(
+            children: [
+              Text(
+                plan.name,
                 style: TextStyle(
-                  color: highlighted ? _C.gold : _C.text,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                )),
-            if (highlighted) ...[
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: _C.gold, borderRadius: BorderRadius.circular(20)),
-                child: const Text('Most Popular',
-                    style: TextStyle(color: _C.bg, fontSize: 10, fontWeight: FontWeight.w800)),
-              ),
-            ],
-          ]),
-          const SizedBox(height: 20),
-          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: Text(priceStr, key: ValueKey(priceStr),
-                  style: TextStyle(
-                    color: highlighted ? _C.goldLight : _C.text,
-                    fontSize: isEnterprise ? 28 : 40,
-                    fontWeight: FontWeight.w900,
-                    height: 1,
-                  )),
-            ),
-            if (!isEnterprise && plan.priceMonthly > 0) ...[
-              const SizedBox(width: 6),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: Text(periodStr, key: ValueKey(periodStr),
-                      style: const TextStyle(color: _C.subtext, fontSize: 13)),
+                  fontFamily: 'Outfit',
+                  color: featured ? Colors.white : LK.ink,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ],
-          ]),
-          const SizedBox(height: 24),
-          const Divider(color: _C.border, height: 1),
-          const SizedBox(height: 20),
-          ..._features.map((f) => Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Row(children: [
-              Icon(Icons.check_circle_rounded,
-                  size: 16, color: highlighted ? _C.gold : const Color(0xFF22C55E)),
-              const SizedBox(width: 10),
-              Expanded(child: Text(f, style: const TextStyle(color: _C.subtext, fontSize: 13))),
-            ]),
-          )),
-          const Spacer(),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: highlighted
-                ? ElevatedButton(
-                    onPressed: () => context.go(
-                      effectiveMonthly > 0
-                          ? '/signup?plan=${plan.slug}'
-                          : '/signup',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _C.gold,
-                      foregroundColor: _C.bg,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
-                    ),
-                    child: const Text('Start Free Trial',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                  )
-                : OutlinedButton(
-                    onPressed: () {
-                      if (isEnterprise) {
-                        showDialog(context: context, builder: (_) => const _EnterpriseContactDialog());
-                      } else {
-                        context.go(
-                          effectiveMonthly > 0
-                              ? '/signup?plan=${plan.slug}'
-                              : '/signup',
-                        );
-                      }
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _C.text,
-                      side: const BorderSide(color: _C.border),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: Text(isEnterprise ? 'Contact Sales' : 'Start Free Trial',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+              if (featured) ...[
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: LK.tealLift,
+                    borderRadius: BorderRadius.circular(100),
                   ),
+                  child: const Text(
+                    'Most popular',
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      color: LK.navy,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
+          const SizedBox(height: 18),
+          // Wrap, not Row: on the annual toggle the period becomes
+          // "/mo, billed annually", which is wider than the space left beside
+          // the figure. In a Row the price was the flexible child, so it was
+          // the one that shrank — every card rendered "LKR …" with the number
+          // ellipsised away. Here each keeps its intrinsic width and the
+          // period drops to its own line when it cannot sit alongside.
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.end,
+            spacing: 7,
+            runSpacing: 2,
+            children: [
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 280),
+                child: Text(
+                  price,
+                  key: ValueKey(price),
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    color: featured ? Colors.white : LK.ink,
+                    fontSize: enterprise ? 28 : 36,
+                    fontWeight: FontWeight.w800,
+                    height: 1.05,
+                    letterSpacing: -1.4,
+                  ),
+                ),
+              ),
+              if (period.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 5),
+                  child: Text(
+                    period,
+                    style: LK.micro.copyWith(
+                      fontSize: 11.5,
+                      color: featured ? Colors.white.withValues(alpha: 0.6) : LK.muted,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 22),
+          Divider(
+            height: 1,
+            color: featured ? Colors.white.withValues(alpha: 0.14) : LK.line,
+          ),
+          const SizedBox(height: 18),
+          for (final f in _features)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.check_rounded,
+                    size: 16,
+                    color: featured ? LK.tealLift : LK.teal,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      f,
+                      style: LK.small.copyWith(
+                        fontSize: 13.5,
+                        color: featured ? Colors.white.withValues(alpha: 0.82) : LK.body,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 22),
+          if (enterprise)
+            GhostButton(
+              label: 'Contact sales',
+              expand: true,
+              onDark: featured,
+              onTap: () => showDialog(
+                context: context,
+                builder: (_) => const EnterpriseContactDialog(),
+              ),
+            )
+          else if (featured)
+            CtaButton(
+              label: 'Start free trial',
+              expand: true,
+              onDark: true,
+              onTap: () => context.go(
+                monthly > 0 ? '/signup?plan=${plan.slug}' : '/signup',
+              ),
+            )
+          else
+            GhostButton(
+              label: 'Start free trial',
+              expand: true,
+              onTap: () => context.go(
+                monthly > 0 ? '/signup?plan=${plan.slug}' : '/signup',
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-// --- FAQ section --------------------------------------------------------------
-class _FaqSection extends StatelessWidget {
-  final bool isMobile;
-  const _FaqSection({required this.isMobile});
+// ─── FAQ ─────────────────────────────────────────────────────────────────────
 
-  static const _faqs = [
+class _Faq extends StatelessWidget {
+  const _Faq();
+
+  static const _items = [
     (
       q: 'Do you offer a free trial?',
-      a: 'Yes! Every new account starts with a 45-day free trial with full access to every feature - properties, rooms, restaurant tables, staff accounts, the guest portal and white-label branding. No credit card required — just sign up and start managing.',
+      a: 'Yes. Every new account starts with a 45-day free trial with full access '
+          'to every feature — properties, rooms, restaurant tables, staff accounts '
+          'and the guest portal. No credit card required to start.',
     ),
     (
       q: 'Can I manage multiple properties?',
-      a: 'Absolutely. Our Pro plan supports up to 3 properties, and the Enterprise plan offers unlimited properties with a dedicated account manager and SLA guarantees.',
+      a: 'Absolutely. Our Pro plan supports up to three properties, and the '
+          'Enterprise plan offers unlimited properties with a dedicated account '
+          'manager.',
     ),
     (
       q: 'Do guests need to download an app?',
-      a: 'No. The guest portal works entirely via QR code in any mobile browser. Guests can check in, browse the restaurant menu, order room service, and check out — no download required.',
+      a: 'No. The guest portal works entirely via QR code in any mobile browser. '
+          'Guests can check in, browse the restaurant menu, order room service and '
+          'check out — all from their phone.',
     ),
     (
       q: 'How secure is guest and payment data?',
-      a: 'Very. HotRest is built on enterprise-grade infrastructure with row-level security, encrypted data at rest and in transit, GDPR-ready data handling, and SOC 2 aligned practices.',
+      a: 'HotRest is built on enterprise-grade infrastructure with row-level '
+          'security, encrypted data at rest and in transit, and GDPR-ready data '
+          'handling.',
     ),
     (
       q: 'Can I white-label the guest portal?',
-      a: 'Yes, on Pro and Enterprise plans. You can set your own logo, brand colours, and property name. Guests see your brand — not ours.',
+      a: 'Yes, on Pro and Enterprise plans. You can set your own logo, brand '
+          'colours and property name. Guests see your brand — not ours.',
     ),
     (
       q: 'Can I cancel or downgrade anytime?',
-      a: 'Of course. There are no long-term contracts. You can upgrade, downgrade, or cancel your plan at any time from account settings. Monthly billing, no lock-in.',
+      a: 'Of course. There are no long-term contracts. You can upgrade, downgrade '
+          'or cancel your plan at any time from account settings.',
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 100),
+    return Shell(
+      maxWidth: 820,
       child: Column(
         children: [
-          const _SectionLabel(label: 'FAQ'),
-          const SizedBox(height: 16),
-          Text(
-            'Frequently Asked Questions',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _C.text,
-              fontSize: isMobile ? 28 : 44,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.8,
-            ),
+          const SectionHead(
+            eyebrow: 'FAQ',
+            title: 'Frequently asked questions',
           ),
-          const SizedBox(height: 48),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: Column(
-              children: _faqs.map((faq) => _FaqTile(q: faq.q, a: faq.a)).toList(),
+          SizedBox(height: LK.isMobile(context) ? 32 : 48),
+          for (final it in _items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _FaqTile(q: it.q, a: it.a),
             ),
-          ),
         ],
       ),
     );
@@ -1732,8 +2108,10 @@ class _FaqSection extends StatelessWidget {
 }
 
 class _FaqTile extends StatefulWidget {
-  final String q, a;
+  final String q;
+  final String a;
   const _FaqTile({required this.q, required this.a});
+
   @override
   State<_FaqTile> createState() => _FaqTileState();
 }
@@ -1743,144 +2121,54 @@ class _FaqTileState extends State<_FaqTile> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        decoration: BoxDecoration(
-          color: _open ? _C.gold.withAlpha(8) : _C.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _open ? _C.gold.withAlpha(80) : _C.border),
-        ),
-        child: Column(
-          children: [
-            InkWell(
-              onTap: () => setState(() => _open = !_open),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(widget.q,
-                          style: TextStyle(
-                            color: _open ? _C.gold : _C.text,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          )),
-                    ),
-                    AnimatedRotation(
-                      turns: _open ? 0.125 : 0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Icon(Icons.add_rounded, color: _open ? _C.gold : _C.subtext, size: 22),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            AnimatedCrossFade(
-              firstChild: const SizedBox.shrink(),
-              secondChild: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                child: Text(widget.a,
-                    style: const TextStyle(color: _C.subtext, fontSize: 14, height: 1.65)),
-              ),
-              crossFadeState: _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-              duration: const Duration(milliseconds: 200),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// --- CTA section --------------------------------------------------------------
-class _CtaSection extends StatelessWidget {
-  final bool isMobile;
-  const _CtaSection({required this.isMobile});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 80),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF0F172A)],
-        ),
-      ),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => setState(() => _open = !_open),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+          decoration: BoxDecoration(
+            color: _open ? LK.white : LK.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _open ? LK.teal.withValues(alpha: 0.3) : LK.line),
+          ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                decoration: BoxDecoration(
-                  color: _C.gold.withAlpha(25),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: _C.gold.withAlpha(80)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.rocket_launch_rounded, color: _C.gold, size: 14),
-                    SizedBox(width: 7),
-                    Text('Get started in under 5 minutes',
-                        style: TextStyle(color: _C.gold, fontSize: 12, fontWeight: FontWeight.w700)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 28),
-              Text(
-                'Ready to transform\nyour property?',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: isMobile ? 28 : 42,
-                  fontWeight: FontWeight.w900,
-                  height: 1.15,
-                  letterSpacing: -1,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Be among the first hospitality teams to run smarter with HotRest.\nStart your 45-day free trial — full access, no credit card required.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withAlpha(160), fontSize: 15, height: 1.6),
-              ),
-              const SizedBox(height: 36),
-              Wrap(
-                spacing: 16,
-                runSpacing: 12,
-                alignment: WrapAlignment.center,
+              Row(
                 children: [
-                  _GoldButton(label: 'Create Free Account', large: true, onTap: () => context.go('/signup')),
-                  OutlinedButton(
-                    onPressed: () => context.go('/login'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.white.withAlpha(80)),
-                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  Expanded(
+                    child: Text(
+                      widget.q,
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        color: LK.ink,
+                        fontSize: 15.5,
+                        fontWeight: _open ? FontWeight.w700 : FontWeight.w600,
+                      ),
                     ),
-                    child: const Text('Sign In', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                  ),
+                  AnimatedRotation(
+                    duration: const Duration(milliseconds: 180),
+                    turns: _open ? 0.125 : 0,
+                    child: Icon(
+                      Icons.add_rounded,
+                      size: 20,
+                      color: _open ? LK.teal : LK.muted,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              const Wrap(
-                spacing: 24,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  _TrustChip(icon: Icons.lock_outline_rounded,  label: 'SOC 2 Compliant'),
-                  _TrustChip(icon: Icons.shield_outlined,       label: 'GDPR Ready'),
-                  _TrustChip(icon: Icons.support_agent_rounded, label: '24/7 Support'),
-                ],
+              AnimatedCrossFade(
+                duration: const Duration(milliseconds: 200),
+                crossFadeState:
+                    _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                firstChild: const SizedBox(width: double.infinity),
+                secondChild: Padding(
+                  padding: const EdgeInsets.only(top: 12, right: 28),
+                  child: Text(widget.a, style: LK.small),
+                ),
               ),
             ],
           ),
@@ -1890,1060 +2178,293 @@ class _CtaSection extends StatelessWidget {
   }
 }
 
-class _TrustChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _TrustChip({required this.icon, required this.label});
+// ─── Final CTA ───────────────────────────────────────────────────────────────
+
+class _FinalCta extends StatelessWidget {
+  const _FinalCta();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: Colors.white.withAlpha(100), size: 13),
-        const SizedBox(width: 5),
-        Text(label, style: TextStyle(color: Colors.white.withAlpha(120), fontSize: 12)),
-      ],
-    );
-  }
-}
+    final mobile = LK.isMobile(context);
 
-// --- Footer -------------------------------------------------------------------
-class _Footer extends StatelessWidget {
-  final bool isMobile;
-  const _Footer({required this.isMobile});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: 48),
-      decoration: const BoxDecoration(color: Color(0xFF0F172A)),
-      child: isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
+    return Shell(
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.symmetric(
+          horizontal: mobile ? 26 : 56,
+          vertical: mobile ? 48 : 72,
+        ),
+        decoration: BoxDecoration(
+          color: LK.navy,
+          borderRadius: BorderRadius.circular(26),
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(26),
+                child: const MeshBackdrop(blobs: [
+                  (at: Alignment(-1.0, -1.0), color: LK.tealPure, size: 520, opacity: 0.35),
+                  (at: Alignment(1.0, 1.2), color: LK.tealPure, size: 420, opacity: 0.22),
+                ]),
+              ),
+            ),
+            Column(
               children: [
-                _logoMark(),
-                const SizedBox(height: 8),
-                _tagline(),
-                const SizedBox(height: 28),
-                _links(context),
-                const SizedBox(height: 28),
-                const Divider(color: Color(0xFF1E293B), height: 1),
+                const Eyebrow('Get started in under 5 minutes', onDark: true),
+                const SizedBox(height: 20),
+                Text(
+                  'Ready to transform your property?',
+                  textAlign: TextAlign.center,
+                  style: LK.h2(context).copyWith(color: Colors.white),
+                ),
                 const SizedBox(height: 16),
-                _copyright(),
-              ],
-            )
-          : Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Text(
+                    'Join hundreds of hospitality teams already running smarter with '
+                    'HotRest. Start your 45-day free trial — full access, no credit '
+                    'card required.',
+                    textAlign: TextAlign.center,
+                    style: LK.lead(context)
+                        .copyWith(color: Colors.white.withValues(alpha: 0.72)),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 12,
                   children: [
-                    SizedBox(
-                      width: 220,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _logoMark(),
-                          const SizedBox(height: 12),
-                          Text(
-                            'The all-in-one hotel & restaurant management platform for modern hospitality teams.',
-                            style: TextStyle(color: Colors.white.withAlpha(100), fontSize: 13, height: 1.6),
-                          ),
-                        ],
-                      ),
+                    CtaButton(
+                      label: 'Create free account',
+                      icon: Icons.arrow_forward_rounded,
+                      onDark: true,
+                      onTap: () => context.go('/signup'),
                     ),
-                    const Spacer(),
-                    _FooterColumn(title: 'Product', items: [
-                      const _FooterItem('Features', null),
-                      const _FooterItem('Pricing', null),
-                      _FooterItem('Docs', () => context.go('/help')),
-                      _FooterItem('Sign In', () => context.go('/login')),
-                      _FooterItem('Get Started', () => context.go('/signup')),
-                    ]),
-                    const SizedBox(width: 48),
-                    _FooterColumn(title: 'Legal', items: [
-                      _FooterItem('Terms of Service', () => context.go('/terms')),
-                      _FooterItem('Return Policy', () => context.go('/returns')),
-                      _FooterItem('Privacy Policy', () => context.go('/privacy')),
-                    ]),
+                    GhostButton(
+                      label: 'Sign in',
+                      onDark: true,
+                      onTap: () => context.go('/login'),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 40),
-                Divider(color: Colors.white.withAlpha(20), height: 1),
-                const SizedBox(height: 20),
-                _copyright(),
+                const SizedBox(height: 28),
+                const Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 22,
+                  runSpacing: 10,
+                  children: [
+                    _DarkTick('SOC 2 compliant'),
+                    _DarkTick('GDPR ready'),
+                    _DarkTick('24/7 support'),
+                  ],
+                ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DarkTick extends StatelessWidget {
+  final String label;
+  const _DarkTick(this.label);
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.verified_rounded, size: 15, color: LK.tealLift),
+          const SizedBox(width: 7),
+          Text(label,
+              style: LK.micro.copyWith(color: Colors.white.withValues(alpha: 0.7))),
+        ],
+      );
+}
+
+// ─── Footer ──────────────────────────────────────────────────────────────────
+
+class _Footer extends StatelessWidget {
+  const _Footer();
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = LK.isMobile(context);
+
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.only(top: LK.sectionGap(context)),
+      padding: EdgeInsets.symmetric(vertical: mobile ? 48 : 64),
+      decoration: const BoxDecoration(
+        color: LK.white,
+        border: Border(top: BorderSide(color: LK.line)),
+      ),
+      child: Shell(
+        child: Column(
+          children: [
+            if (mobile)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _FooterBrand(),
+                  const SizedBox(height: 32),
+                  _footerCols(context),
+                ],
+              )
+            else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Expanded(flex: 4, child: _FooterBrand()),
+                  const SizedBox(width: 40),
+                  Expanded(flex: 5, child: _footerCols(context)),
+                ],
+              ),
+            const SizedBox(height: 40),
+            const Divider(height: 1, color: LK.line),
+            const SizedBox(height: 22),
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                const Text('© 2026 HotRest. All rights reserved.', style: LK.micro),
+                Wrap(
+                  spacing: 22,
+                  children: [
+                    _FooterLink('Terms', () => context.go('/terms')),
+                    _FooterLink('Privacy', () => context.go('/privacy')),
+                    _FooterLink('Returns', () => context.go('/returns')),
+                    _FooterLink('Help', () => context.go('/help')),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _logoMark() => Row(mainAxisSize: MainAxisSize.min, children: [
-    Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: _C.gold.withAlpha(80), blurRadius: 12, spreadRadius: 1)],
-      ),
-      child: Image.asset('assets/images/hotrest_logo.webp', width: 40, height: 40, fit: BoxFit.contain),
-    ),
-    const SizedBox(width: 10),
-    ShaderMask(
-      blendMode: BlendMode.srcIn,
-      shaderCallback: (bounds) =>
-          const LinearGradient(colors: [_C.goldLight, _C.gold]).createShader(bounds),
-      child: const Text('HotRest', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20)),
-    ),
-  ]);
-
-  Widget _tagline() => Text(
-    'Built for hospitality. Designed for excellence.',
-    style: TextStyle(color: Colors.white.withAlpha(100), fontSize: 13),
-  );
-
-  Widget _copyright() => Text(
-    '© 2025 HotRest. All rights reserved.',
-    style: TextStyle(color: Colors.white.withAlpha(80), fontSize: 12),
-  );
-
-  Widget _links(BuildContext context) => Wrap(
-    spacing: 20, runSpacing: 8,
-    alignment: WrapAlignment.center,
-    children: [
-      _footerLink('Sign In',     () => context.go('/login')),
-      _footerLink('Get Started', () => context.go('/signup')),
-      _footerLink('Terms',       () => context.go('/terms')),
-      _footerLink('Returns',     () => context.go('/returns')),
-      _footerLink('Privacy',     () => context.go('/privacy')),
-    ],
-  );
-
-  Widget _footerLink(String label, VoidCallback onTap) => TextButton(
-    onPressed: onTap,
-    style: TextButton.styleFrom(minimumSize: Size.zero, padding: EdgeInsets.zero),
-    child: Text(label, style: TextStyle(color: Colors.white.withAlpha(120), fontSize: 13)),
-  );
+  Widget _footerCols(BuildContext context) => Wrap(
+        spacing: 56,
+        runSpacing: 28,
+        children: [
+          _FooterCol(
+            title: 'Product',
+            items: [
+              ('Features', () => context.go('/')),
+              ('Pricing', () => context.go('/')),
+              ('Guest portal', () => context.go('/help')),
+            ],
+          ),
+          _FooterCol(
+            title: 'Company',
+            items: [
+              ('Help centre', () => context.go('/help')),
+              ('Terms of service', () => context.go('/terms')),
+              ('Privacy policy', () => context.go('/privacy')),
+            ],
+          ),
+          _FooterCol(
+            title: 'Get started',
+            items: [
+              ('Create account', () => context.go('/signup')),
+              ('Sign in', () => context.go('/login')),
+            ],
+          ),
+        ],
+      );
 }
 
-class _FooterColumn extends StatelessWidget {
-  final String title;
-  final List<_FooterItem> items;
-  const _FooterColumn({required this.title, required this.items});
+class _FooterBrand extends StatelessWidget {
+  const _FooterBrand();
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title,
-            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+        Image.asset(
+          'assets/images/hotrest_logo_new.png',
+          height: 30,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) =>
+              Text('HotRest', style: LK.h3(context).copyWith(color: LK.navy)),
+        ),
         const SizedBox(height: 16),
-        ...items.map((item) => Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: TextButton(
-            onPressed: item.onTap,
-            style: TextButton.styleFrom(minimumSize: Size.zero, padding: EdgeInsets.zero),
-            child: Text(item.label,
-                style: TextStyle(color: Colors.white.withAlpha(120), fontSize: 13)),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 300),
+          child: const Text(
+            'The all-in-one hotel and restaurant management platform for modern '
+            'hospitality teams.',
+            style: LK.small,
           ),
-        )),
+        ),
       ],
     );
   }
 }
 
-class _FooterItem {
-  final String label;
-  final VoidCallback? onTap;
-  const _FooterItem(this.label, this.onTap);
-}
-
-// --- Shared helpers -----------------------------------------------------------
-class _SectionLabel extends StatelessWidget {
-  final String label;
-  const _SectionLabel({required this.label});
+class _FooterCol extends StatelessWidget {
+  final String title;
+  final List<(String, VoidCallback)> items;
+  const _FooterCol({required this.title, required this.items});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      decoration: BoxDecoration(
-        color: _C.gold.withAlpha(15),
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: _C.gold.withAlpha(50)),
-      ),
-      child: Text(label,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
           style: const TextStyle(
-            color: _C.gold,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.8,
-          )),
+            fontFamily: 'Outfit',
+            color: LK.ink,
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 14),
+        for (final (label, tap) in items)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _FooterLink(label, tap),
+          ),
+      ],
     );
   }
 }
 
-class _GoldButton extends StatefulWidget {
+class _FooterLink extends StatefulWidget {
   final String label;
   final VoidCallback onTap;
-  final bool large;
-  final bool small;
-  const _GoldButton({required this.label, required this.onTap, this.large = false, this.small = false});
+  const _FooterLink(this.label, this.onTap);
+
   @override
-  State<_GoldButton> createState() => _GoldButtonState();
+  State<_FooterLink> createState() => _FooterLinkState();
 }
 
-class _GoldButtonState extends State<_GoldButton> {
-  bool _hovered = false;
+class _FooterLinkState extends State<_FooterLink> {
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit:  (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(widget.small ? 8 : 12),
-          boxShadow: _hovered
-              ? [BoxShadow(color: _C.gold.withAlpha(80), blurRadius: 20, spreadRadius: 2)]
-              : [],
-        ),
-        child: ElevatedButton(
-          onPressed: widget.onTap,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _hovered ? _C.goldLight : _C.gold,
-            foregroundColor: _C.bg,
-            padding: EdgeInsets.symmetric(
-              horizontal: widget.small ? 16 : widget.large ? 36 : 24,
-              vertical:   widget.small ? 10 : widget.large ? 18 : 14,
-            ),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(widget.small ? 8 : 12)),
-            elevation: 0,
-          ),
-          child: Text(widget.label,
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: widget.small ? 13 : widget.large ? 16 : 14,
-              )),
-        ),
-      ),
-    );
-  }
-}
-
-// --- Demo Dialog --------------------------------------------------------------
-class _DemoDialog extends StatefulWidget {
-  const _DemoDialog();
-  @override
-  State<_DemoDialog> createState() => _DemoDialogState();
-}
-
-class _DemoDialogState extends State<_DemoDialog> {
-  int _activeTab = 0;
-
-  static const _tabs = ['Hotel', 'Restaurant', 'Guest Portal'];
-
-  static const _highlights = [
-    [
-      (icon: Icons.how_to_reg_rounded,   color: Color(0xFF3B82F6), title: 'One-click check-in',        desc: 'Front desk checks in a guest in under 10 seconds — folio auto-generated, room assigned, key ready.'),
-      (icon: Icons.king_bed_rounded,      color: Color(0xFF22C55E), title: 'Live room availability',    desc: 'Color-coded room grid shows occupied, available, and maintenance rooms in real time.'),
-      (icon: Icons.receipt_long_rounded,  color: Color(0xFFD4A853), title: 'Instant folio billing',     desc: 'Auto-calculates room charges, extras and taxes — export to PDF with one click.'),
-      (icon: Icons.people_alt_rounded,    color: Color(0xFF8B5CF6), title: 'Staff shift management',    desc: 'Assign and track shifts, clock-ins and attendance — no third-party HR tool needed.'),
-    ],
-    [
-      (icon: Icons.point_of_sale_rounded, color: Color(0xFFF97316), title: 'Table-side ordering',       desc: 'Waiters take orders on any device — sent instantly to the kitchen display, no paper tickets.'),
-      (icon: Icons.kitchen_rounded,       color: Color(0xFFEF4444), title: 'Kitchen display system',    desc: 'KDS shows orders in real time, with timers and priority flags so chefs never miss a ticket.'),
-      (icon: Icons.splitscreen_rounded,   color: Color(0xFF22C55E), title: 'Split bills & payments',    desc: 'Split any bill by item or equally across guests — supports cash, card and mixed payments.'),
-      (icon: Icons.analytics_rounded,     color: Color(0xFF06B6D4), title: 'Sales analytics',           desc: 'See your top-selling dishes, peak hours, and daily revenue at a glance.'),
-    ],
-    [
-      (icon: Icons.qr_code_2_rounded,    color: Color(0xFF22C55E), title: 'QR self check-in',          desc: 'Guests scan a QR at reception, fill in details on their phone and check in — no queue, no paperwork.'),
-      (icon: Icons.room_service_rounded,  color: Color(0xFFD4A853), title: 'Room service on phone',     desc: 'Guests order food from their room by scanning a QR — order goes straight to the kitchen.'),
-      (icon: Icons.restaurant_menu_rounded, color: Color(0xFF3B82F6), title: 'Digital table menu',      desc: 'Diners scan a table QR, browse the menu and order — no app download required.'),
-      (icon: Icons.no_accounts_rounded,   color: Color(0xFF8B5CF6), title: 'No app needed',             desc: 'Everything runs in the mobile browser. Guests do not install anything.'),
-    ],
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final items = _highlights[_activeTab];
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('See HotRest in Action',
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _C.text)),
-                        SizedBox(height: 4),
-                        Text('What you get — out of the box, day one.',
-                            style: TextStyle(color: _C.subtext, fontSize: 13)),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded, color: _C.muted),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              // Tabs
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: _C.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _C.border),
-                ),
-                child: Row(
-                  children: List.generate(_tabs.length, (i) => Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _activeTab = i),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _activeTab == i ? _C.gold : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(_tabs[i],
-                          style: TextStyle(
-                            color: _activeTab == i ? Colors.white : _C.subtext,
-                            fontSize: 13,
-                            fontWeight: _activeTab == i ? FontWeight.w700 : FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )),
-                ),
-              ),
-              const SizedBox(height: 20),
-              // Feature highlights grid
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 2.1,
-                children: items.map((item) => Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: item.color.withAlpha(8),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: item.color.withAlpha(40)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(children: [
-                        Icon(item.icon, color: item.color, size: 16),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(item.title,
-                            style: const TextStyle(color: _C.text, fontSize: 12, fontWeight: FontWeight.w700),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ]),
-                      const SizedBox(height: 5),
-                      Expanded(
-                        child: Text(item.desc,
-                          style: const TextStyle(color: _C.subtext, fontSize: 10.5, height: 1.45),
-                          overflow: TextOverflow.fade,
-                        ),
-                      ),
-                    ],
-                  ),
-                )).toList(),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    context.go('/signup');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _C.gold,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 0,
-                  ),
-                  icon: const Icon(Icons.rocket_launch_rounded, size: 16),
-                  label: const Text('Start 45-Day Free Trial — No Credit Card',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --- Enterprise Contact Dialog ------------------------------------------------
-class _EnterpriseContactDialog extends ConsumerStatefulWidget {
-  const _EnterpriseContactDialog();
-  @override
-  ConsumerState<_EnterpriseContactDialog> createState() => _EnterpriseContactDialogState();
-}
-
-class _EnterpriseContactDialogState extends ConsumerState<_EnterpriseContactDialog> {
-  final _formKey   = GlobalKey<FormState>();
-  final _name      = TextEditingController();
-  final _company   = TextEditingController();
-  final _email     = TextEditingController();
-  final _phone     = TextEditingController();
-  final _message   = TextEditingController();
-  final _propCount = TextEditingController();
-  LeadService get _service => ref.read(leadServiceProvider);
-  bool _submitting = false;
-  bool _submitted  = false;
-
-  @override
-  void dispose() {
-    _name.dispose(); _company.dispose(); _email.dispose();
-    _phone.dispose(); _message.dispose(); _propCount.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _submitting = true);
-    try {
-      await _service.submitLead(
-        name:          _name.text.trim(),
-        company:       _company.text.trim(),
-        email:         _email.text.trim(),
-        phone:         _phone.text.trim(),
-        propertyCount: int.tryParse(_propCount.text.trim()),
-        message:       _message.text.trim(),
-      );
-      if (mounted) setState(() { _submitting = false; _submitted = true; });
-    } catch (e) {
-      if (mounted) {
-        setState(() => _submitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: _submitted ? _buildSuccess() : _buildForm(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSuccess() => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 64, height: 64,
-        decoration: BoxDecoration(color: const Color(0xFF22C55E).withAlpha(20), shape: BoxShape.circle),
-        child: const Icon(Icons.check_rounded, color: Color(0xFF22C55E), size: 36),
-      ),
-      const SizedBox(height: 20),
-      const Text('Request Received!',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: _C.text)),
-      const SizedBox(height: 10),
-      const Text(
-        'Thank you for reaching out. Our team will contact you within 1–2 business days to discuss your requirements.',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: _C.subtext, fontSize: 14, height: 1.5),
-      ),
-      const SizedBox(height: 28),
-      SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: () => Navigator.of(context).pop(),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _C.gold,
-            foregroundColor: _C.bg,
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            elevation: 0,
-          ),
-          child: const Text('Done', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-        ),
-      ),
-    ],
-  );
-
-  Widget _buildForm() {
-    return Form(
-      key: _formKey,
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: _C.gold.withAlpha(20), borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.business_rounded, color: _C.gold, size: 22),
-              ),
-              const SizedBox(width: 14),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Contact Sales',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _C.text)),
-                    Text('We\'ll get back to you within 24 hours.',
-                        style: TextStyle(color: _C.subtext, fontSize: 13)),
-                  ],
-                ),
-              ),
-            ]),
-            const SizedBox(height: 24),
-            _field(_name,     'Full Name',                required: true),
-            _field(_company,  'Company / Hotel Group',    required: true),
-            _field(_email,    'Work Email',               required: true, email: true),
-            _field(_phone,    'Phone Number'),
-            _field(_propCount,'Number of Properties',     number: true),
-            _field(_message,  'Tell us about your needs', maxLines: 3),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _submitting ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _C.gold,
-                  foregroundColor: _C.bg,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
-                ),
-                child: _submitting
-                    ? const SizedBox(width: 20, height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Send Request',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _field(TextEditingController ctrl, String label,
-      {bool required = false, bool email = false, bool number = false, int maxLines = 1}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: TextFormField(
-        controller: ctrl,
-        maxLines: maxLines,
-        keyboardType: number
-            ? TextInputType.number
-            : email
-                ? TextInputType.emailAddress
-                : TextInputType.text,
-        inputFormatters: number ? [FilteringTextInputFormatter.digitsOnly] : null,
-        decoration: InputDecoration(
-          labelText: label,
-          floatingLabelStyle: const TextStyle(color: _C.gold),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-          focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: _C.gold)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        ),
-        validator: required
-            ? (v) {
-                if (v == null || v.trim().isEmpty) return 'Required';
-                if (email && !v.contains('@')) return 'Enter a valid email';
-                return null;
-              }
-            : null,
-      ),
-    );
-  }
-}
-
-// --- Pain section (Before / After) -------------------------------------------
-class _PainSection extends StatelessWidget {
-  final bool isMobile;
-  const _PainSection({required this.isMobile});
-
-  static const _before = [
-    (icon: Icons.chat_bubble_rounded,        text: 'WhatsApp & phone calls for every booking'),
-    (icon: Icons.table_chart_rounded,        text: 'Spreadsheets that break during peak hours'),
-    (icon: Icons.receipt_rounded,            text: 'Paper order tickets lost in the kitchen'),
-    (icon: Icons.supervised_user_circle_rounded, text: 'Staff asking each other what to do next'),
-    (icon: Icons.alarm_off_rounded,          text: 'Hours wasted on manual data entry daily'),
-    (icon: Icons.sentiment_dissatisfied_rounded, text: 'Guests waiting 10 minutes to check in'),
-  ];
-
-  static const _after = [
-    (icon: Icons.dashboard_rounded,          text: 'One dashboard for front desk, kitchen & finance'),
-    (icon: Icons.cloud_sync_rounded,         text: 'Real-time sync across all departments'),
-    (icon: Icons.kitchen_rounded,            text: 'Digital kitchen display — zero lost tickets'),
-    (icon: Icons.task_alt_rounded,           text: 'Every staff member knows their tasks instantly'),
-    (icon: Icons.flash_on_rounded,           text: 'Save 4+ hours of admin work every single day'),
-    (icon: Icons.qr_code_2_rounded,          text: 'Guests self-check-in in under 30 seconds'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 24 : 80, vertical: isMobile ? 60 : 100),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFFF8FAFC), Color(0xFFFFFFFF)],
-        ),
-      ),
-      child: Column(
-        children: [
-          const _SectionLabel(label: 'THE DIFFERENCE'),
-          const SizedBox(height: 16),
-          Text(
-            'Life Before & After HotRest',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: _C.text,
-              fontSize: isMobile ? 28 : 44,
-              fontWeight: FontWeight.w800,
-              height: 1.15,
-              letterSpacing: -0.8,
-            ),
-          ),
-          const SizedBox(height: 14),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 540),
-            child: const Text(
-              "Sound familiar? You're not alone. Most independent hotels and "
-              'restaurants operate the same way — until they find HotRest.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: _C.subtext, fontSize: 15.5, height: 1.55),
-            ),
-          ),
-          const SizedBox(height: 56),
-          isMobile
-              ? Column(children: [
-                  _PainPanel(title: 'Before HotRest', isAfter: false, items: _before),
-                  const SizedBox(height: 20),
-                  _PainPanel(title: 'With HotRest', isAfter: true, items: _after),
-                ])
-              : IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: _PainPanel(title: 'Before HotRest', isAfter: false, items: _before)),
-                      Container(
-                        width: 2, margin: const EdgeInsets.symmetric(horizontal: 20),
-                        color: _C.border,
-                      ),
-                      Expanded(child: _PainPanel(title: 'With HotRest', isAfter: true, items: _after)),
-                    ],
-                  ),
-                ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PainPanel extends StatelessWidget {
-  final String title;
-  final bool isAfter;
-  final List<({IconData icon, String text})> items;
-  const _PainPanel({required this.title, required this.isAfter, required this.items});
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = isAfter ? const Color(0xFF22C55E) : const Color(0xFFEF4444);
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: accent.withAlpha(8),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: accent.withAlpha(40)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: accent.withAlpha(20), borderRadius: BorderRadius.circular(10)),
-              child: Icon(
-                isAfter ? Icons.check_circle_rounded : Icons.cancel_rounded,
-                color: accent, size: 18,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(title,
-                style: TextStyle(color: accent, fontSize: 15, fontWeight: FontWeight.w800)),
-          ]),
-          const SizedBox(height: 20),
-          ...items.map((item) => Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 32, height: 32,
-                  decoration: BoxDecoration(
-                    color: accent.withAlpha(15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(item.icon, color: accent, size: 16),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(item.text,
-                        style: TextStyle(
-                          color: isAfter ? _C.text : _C.subtext,
-                          fontSize: 13.5,
-                          height: 1.4,
-                          fontWeight: isAfter ? FontWeight.w600 : FontWeight.w400,
-                          decoration: isAfter ? null : TextDecoration.none,
-                        )),
-                  ),
-                ),
-              ],
-            ),
-          )),
-        ],
-      ),
-    );
-  }
-}
-
-// --- Comparison section -------------------------------------------------------
-class _ComparisonSection extends ConsumerStatefulWidget {
-  final bool isMobile;
-  const _ComparisonSection({required this.isMobile});
-
-  @override
-  ConsumerState<_ComparisonSection> createState() => _ComparisonSectionState();
-}
-
-class _ComparisonSectionState extends ConsumerState<_ComparisonSection> {
-  bool get isMobile => widget.isMobile;
-
-  // No 'Free /' prefix: there is no free plan. Migration 059 removed it —
-  // organizations.plan is CHECK'd against (growth|starter|pro|enterprise), so
-  // a free tier cannot even be stored. Every account is trial-then-paid.
-  String _startingPrice = 'From LKR 3,999/mo';
-
-  static const _features = [
-    'Starting price',
-    'Setup time',
-    'Hotel + Restaurant in one',
-    'QR guest self-check-in',
-    'Built-in kitchen display',
-    'Digital guest menu',
-    'Multi-property support',
-    'White-label branding',
-    'Free trial',
-  ];
-
-  List<dynamic> get _hotrest => [_startingPrice, '< 20 min', true, true, true, true, true, true, '45 days, no card'];
-  static const _trad   = ['LKR 20,000+/mo',        'Days–Weeks', false, false, false, false, true, false, '14 days or none'];
-  static const _manual = ['Ongoing hidden costs', 'Never done',   false, false, false, false, false, false, '—'];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPrice();
-  }
-
-  Future<void> _loadPrice() async {
-    try {
-      final plans = await ref.read(planServiceProvider).getActivePlans();
-      final starter = plans.where((p) => p.slug == 'starter').firstOrNull;
-      if (starter != null && mounted) {
-        final price = starter.priceMonthly.toInt();
-        final formatted = price.toString().replaceAllMapped(
-            RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
-        setState(() => _startingPrice = 'From LKR $formatted/mo');
-      }
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 80, vertical: isMobile ? 60 : 100),
-      decoration: const BoxDecoration(color: Color(0xFF0F172A)),
-      child: Column(
-        children: [
-          const _SectionLabel(label: 'WHY HOTREST'),
-          const SizedBox(height: 16),
-          Text(
-            'How We Compare',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: isMobile ? 28 : 44,
-              fontWeight: FontWeight.w800,
-              height: 1.15,
-              letterSpacing: -0.8,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Traditional hotel software is expensive, slow to set up, and missing key features. '
-            'HotRest was built from the ground up for independent properties.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white.withAlpha(160), fontSize: 15.5, height: 1.55),
-          ),
-          const SizedBox(height: 48),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 860),
-            child: isMobile ? _buildMobile() : _buildDesktop(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDesktop() {
-    return Column(
-      children: [
-        // Header row
-        Row(children: [
-          const Expanded(flex: 3, child: SizedBox()),
-          Expanded(flex: 2, child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: _C.gold,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            ),
-            alignment: Alignment.center,
-            child: const Text('HotRest', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
-          )),
-          const SizedBox(width: 8),
-          Expanded(flex: 2, child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(10),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            ),
-            alignment: Alignment.center,
-            child: Text('Traditional PMS', style: TextStyle(color: Colors.white.withAlpha(180), fontWeight: FontWeight.w600, fontSize: 13)),
-          )),
-          const SizedBox(width: 8),
-          Expanded(flex: 2, child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(10),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            ),
-            alignment: Alignment.center,
-            child: Text('Manual / Spreadsheet', style: TextStyle(color: Colors.white.withAlpha(180), fontWeight: FontWeight.w600, fontSize: 12)),
-          )),
-        ]),
-        // Data rows
-        ...List.generate(_features.length, (i) => Container(
-          decoration: BoxDecoration(
-            color: i.isEven ? Colors.white.withAlpha(5) : Colors.transparent,
-          ),
-          child: Row(children: [
-            Expanded(flex: 3,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                child: Text(_features[i], style: TextStyle(color: Colors.white.withAlpha(200), fontSize: 13)),
-              ),
-            ),
-            Expanded(flex: 2, child: _cell(_hotrest[i],  _C.gold,                    isHighlighted: true)),
-            const SizedBox(width: 8),
-            Expanded(flex: 2, child: _cell(_trad[i],     Colors.white.withAlpha(130))),
-            const SizedBox(width: 8),
-            Expanded(flex: 2, child: _cell(_manual[i],   Colors.white.withAlpha(130))),
-          ]),
-        )),
-        const SizedBox(height: 2),
-      ],
-    );
-  }
-
-  Widget _buildMobile() {
-    return Column(
-      children: List.generate(_features.length, (i) => Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white.withAlpha(8),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withAlpha(15)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_features[i], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(child: _mobileCell('HotRest', _hotrest[i], _C.gold)),
-              const SizedBox(width: 6),
-              Expanded(child: _mobileCell('Trad. PMS', _trad[i], Colors.white.withAlpha(100))),
-              const SizedBox(width: 6),
-              Expanded(child: _mobileCell('Manual', _manual[i], Colors.white.withAlpha(100))),
-            ]),
-          ],
-        ),
-      )),
-    );
-  }
-
-  Widget _cell(dynamic value, Color color, {bool isHighlighted = false}) {
-    if (value is bool) {
-      return Container(
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Icon(
-          value ? Icons.check_circle_rounded : Icons.cancel_rounded,
-          color: value ? color : Colors.white.withAlpha(40),
-          size: 20,
-        ),
-      );
-    }
-    return Container(
-      alignment: Alignment.center,
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-      child: Text(value.toString(),
-          textAlign: TextAlign.center,
-          style: TextStyle(color: color, fontSize: 12, fontWeight: isHighlighted ? FontWeight.w700 : FontWeight.w400)),
-    );
-  }
-
-  Widget _mobileCell(String colLabel, dynamic value, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(5),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withAlpha(15)),
-      ),
-      child: Column(
-        children: [
-          Text(colLabel, style: TextStyle(color: Colors.white.withAlpha(120), fontSize: 10)),
-          const SizedBox(height: 4),
-          value is bool
-              ? Icon(value ? Icons.check_circle_rounded : Icons.cancel_rounded,
-                  color: value ? color : Colors.white.withAlpha(40), size: 18)
-              : Text(value.toString(),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-}
-
-// --- Floating WhatsApp button -------------------------------------------------
-class _WhatsAppFab extends StatefulWidget {
-  const _WhatsAppFab();
-  @override
-  State<_WhatsAppFab> createState() => _WhatsAppFabState();
-}
-
-class _WhatsAppFabState extends State<_WhatsAppFab>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _scale;
-  bool _hovered = false;
-
-  // Replace with your actual WhatsApp number (international format, no '+' or spaces)
-  static const _waNumber  = '94XXXXXXXXX';
-  static const _waMessage = 'Hi! I\'m interested in HotRest for my property.';
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 180));
-    _scale = Tween<double>(begin: 1.0, end: 1.08)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _open() {
-    final uri = Uri.encodeFull('https://wa.me/$_waNumber?text=$_waMessage');
-    webpkg.window.open(uri, '_blank');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) { setState(() => _hovered = true);  _ctrl.forward(); },
-      onExit:  (_) { setState(() => _hovered = false); _ctrl.reverse(); },
-      child: ScaleTransition(
-        scale: _scale,
-        child: GestureDetector(
-          onTap: _open,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF25D366),
-              borderRadius: BorderRadius.circular(32),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF25D366).withAlpha(_hovered ? 100 : 60),
-                  blurRadius: _hovered ? 24 : 14,
-                  spreadRadius: _hovered ? 4 : 2,
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.chat_rounded, color: Colors.white, size: 20),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 200),
-                  child: _hovered
-                      ? const Row(children: [
-                          SizedBox(width: 8),
-                          Text('Chat with us',
-                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
-                        ])
-                      : const SizedBox.shrink(),
-                ),
-              ],
-            ),
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Text(
+          widget.label,
+          style: LK.micro.copyWith(
+            color: _hover ? LK.teal : LK.body,
+            fontSize: 13.5,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ),

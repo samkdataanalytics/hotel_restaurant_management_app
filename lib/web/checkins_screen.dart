@@ -16,6 +16,7 @@ import 'package:provider/provider.dart' as pkg_provider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/hotel_session.dart';
 import '../providers/service_providers.dart';
+import '../providers/invoice_provider.dart';
 import '../domain/repositories/check_in_repository.dart';
 import '../domain/repositories/booking_repository.dart';
 import '../domain/repositories/order_repository.dart';
@@ -106,7 +107,7 @@ class _CheckinsScreenState extends ConsumerState<CheckinsScreen> {
     if (_isLoading) return const TableListSkeleton(rowCount: 8, cellCount: 5);
 
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.pageBg,
       child: SingleChildScrollView(
         padding: AppTheme.screenPad(context),
         child: Column(

@@ -2273,10 +2273,10 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF3CD),
+                      color: AppTheme.restaurantAccentBg,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.table_restaurant_rounded, color: Color(0xFFD4A853), size: 20),
+                    child: const Icon(Icons.table_restaurant_rounded, color: AppTheme.restaurantAccent, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -2554,7 +2554,7 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
   Color _orderStatusColor(OrderStatus status) {
     switch (status) {
       case OrderStatus.pending: return _RC.preparing;
-      case OrderStatus.preparing: return AppTheme.adminPrimary;
+      case OrderStatus.preparing: return AppTheme.statusInKitchen;
       case OrderStatus.ready: return _RC.available;
       case OrderStatus.served: return Colors.grey;
       case OrderStatus.cancelled: return _RC.occupied;
@@ -2583,7 +2583,7 @@ class _TablesTabState extends ConsumerState<_TablesTab> {
     }
     switch (order.status) {
       case OrderStatus.pending:    return _RC.preparing;
-      case OrderStatus.preparing:  return AppTheme.adminPrimary;
+      case OrderStatus.preparing:  return AppTheme.statusInKitchen;
       case OrderStatus.ready:      return _RC.available;
       case OrderStatus.served:     return Colors.grey;
       case OrderStatus.cancelled:  return _RC.occupied;
@@ -2762,7 +2762,7 @@ class _TableOrderDialog extends StatelessWidget {
     }
     switch (order.status) {
       case OrderStatus.pending:   return _RC.preparing;
-      case OrderStatus.preparing: return AppTheme.adminPrimary;
+      case OrderStatus.preparing: return AppTheme.statusInKitchen;
       case OrderStatus.ready:     return _RC.available;
       case OrderStatus.served:    return Colors.grey;
       case OrderStatus.cancelled: return _RC.occupied;

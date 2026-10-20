@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app_theme.dart';
 import '../../services/organization_service.dart';
 import 'company_detail_screen.dart';
+import '../semantic_palette.dart';
 
 class CompaniesListScreen extends StatefulWidget {
   const CompaniesListScreen({super.key});
@@ -348,16 +349,7 @@ class _PlanChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color color;
-    switch (plan.toLowerCase()) {
-      case 'enterprise':
-        color = AppTheme.goldPrimary;
-        break;
-      case 'pro':
-        color = AppTheme.adminPrimary;
-        break;
-      default:
-        color = Colors.grey.shade500;
-    }
+    color = SemanticPalette.tier(plan);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

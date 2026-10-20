@@ -12,6 +12,10 @@ class Expense {
   final bool isPaid;
   final String? bookingId;
 
+  /// Object path in the private `expense-receipts` bucket, or null when the
+  /// expense was entered without a photo — which most are.
+  final String? receiptUrl;
+
   Expense({
     required this.id,
     required this.description,
@@ -23,6 +27,7 @@ class Expense {
     this.isBillable = false,
     this.isPaid = false,
     this.bookingId,
+    this.receiptUrl,
   });
 
   Map<String, dynamic> toMap() {
@@ -37,6 +42,7 @@ class Expense {
       'isBillable': isBillable,
       'isPaid': isPaid,
       'bookingId': bookingId,
+      'receiptUrl': receiptUrl,
     };
   }
 
@@ -52,6 +58,7 @@ class Expense {
       isBillable: map['isBillable'] as bool? ?? false,
       isPaid: map['isPaid'] as bool? ?? false,
       bookingId: map['bookingId'] as String?,
+      receiptUrl: map['receiptUrl'] as String?,
     );
   }
 
@@ -79,6 +86,7 @@ class Expense {
     bool? isBillable,
     bool? isPaid,
     String? bookingId,
+    String? receiptUrl,
   }) {
     return Expense(
       id: id ?? this.id,
@@ -91,6 +99,7 @@ class Expense {
       isBillable: isBillable ?? this.isBillable,
       isPaid: isPaid ?? this.isPaid,
       bookingId: bookingId ?? this.bookingId,
+      receiptUrl: receiptUrl ?? this.receiptUrl,
     );
   }
 

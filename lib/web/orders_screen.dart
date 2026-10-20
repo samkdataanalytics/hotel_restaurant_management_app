@@ -14,8 +14,8 @@ import '../domain/repositories/order_repository.dart';
 import '../domain/repositories/restaurant_table_repository.dart';
 import 'restaurant_invoice_dialog.dart';
 
-const _kOrange = AppTheme.restaurantAccent;
-const _kOrangeBg = AppTheme.restaurantAccentBg;
+const _kAccent = AppTheme.restaurantAccent;
+const _kAccentBg = AppTheme.restaurantAccentBg;
 
 enum _DateFilter { today, week, all }
 
@@ -176,7 +176,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             title: const Row(
               children: [
-                Icon(Icons.undo_rounded, color: _kOrange, size: 20),
+                Icon(Icons.undo_rounded, color: _kAccent, size: 20),
                 SizedBox(width: 8),
                 Text('Refund Items'),
               ],
@@ -251,7 +251,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                   height: 32,
                                   alignment: Alignment.center,
                                   color: qty > 0
-                                      ? _kOrangeBg
+                                      ? _kAccentBg
                                       : Colors.transparent,
                                   child: Text(
                                     '$qty',
@@ -259,7 +259,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                         fontSize: 13,
                                         fontWeight: FontWeight.w700,
                                         color: qty > 0
-                                            ? _kOrange
+                                            ? _kAccent
                                             : Colors.black38),
                                   ),
                                 ),
@@ -343,7 +343,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 onPressed:
                     anySelected ? () => Navigator.pop(ctx, true) : null,
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: _kOrange, foregroundColor: Colors.white),
+                    backgroundColor: _kAccent, foregroundColor: Colors.white),
                 child: const Text('Process Refund'),
               ),
             ],
@@ -375,7 +375,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
         content: Text(failCount > 0
             ? '$processedCount item line(s) refunded. $failCount failed — please retry.'
             : '$processedCount item line(s) refunded. (Inventory unchanged — food was served.)'),
-        backgroundColor: failCount > 0 ? Colors.red : _kOrange,
+        backgroundColor: failCount > 0 ? Colors.red : _kAccent,
       ),
     );
     _load();
@@ -423,9 +423,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-                color: _kOrangeBg, borderRadius: BorderRadius.circular(10)),
+                color: _kAccentBg, borderRadius: BorderRadius.circular(10)),
             child:
-                const Icon(Icons.receipt_long_rounded, color: _kOrange, size: 22),
+                const Icon(Icons.receipt_long_rounded, color: _kAccent, size: 22),
           ),
           const SizedBox(width: 14),
           Text('Order Management',
@@ -442,8 +442,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             icon: const Icon(Icons.refresh_rounded, size: 16),
             label: const Text('Refresh'),
             style: OutlinedButton.styleFrom(
-                foregroundColor: _kOrange,
-                side: const BorderSide(color: _kOrange)),
+                foregroundColor: _kAccent,
+                side: const BorderSide(color: _kAccent)),
           ),
         ],
       ),
@@ -477,7 +477,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                                 fontWeight: FontWeight.w600)),
                         selected: _dateFilter == f,
                         onSelected: (_) => setState(() => _dateFilter = f),
-                        selectedColor: _kOrange,
+                        selectedColor: _kAccent,
                         backgroundColor: Colors.grey.shade100,
                       ),
                     const SizedBox(width: 8),
@@ -592,7 +592,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.teal.shade100, width: 1.5),
+        border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
         boxShadow: [
           BoxShadow(
               color: Colors.black.withOpacity(0.04),
@@ -610,7 +610,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: _kOrangeBg,
+                  color: _kAccentBg,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -618,7 +618,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                   style: const TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 13,
-                      color: _kOrange),
+                      color: _kAccent),
                 ),
               ),
               const SizedBox(width: 8),
@@ -626,7 +626,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                   decoration: BoxDecoration(
-                    color: Colors.teal.shade50,
+                    color: const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -634,13 +634,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
-                        color: Colors.teal.shade700),
+                        color: AppTheme.statusAddOn),
                   ),
                 ),
                 const SizedBox(width: 8),
               ],
               _chip('${children.length} ADD-ON${children.length == 1 ? "" : "S"}',
-                  Colors.teal.shade700, icon: Icons.add_circle_outline_rounded),
+                  AppTheme.statusAddOn, icon: Icons.add_circle_outline_rounded),
               const SizedBox(width: 6),
               _chip(_paymentLbl(parent.paymentStatus),
                   _paymentColor(parent.paymentStatus),
@@ -666,7 +666,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: o.parentOrderId != null
-                              ? Colors.teal.shade100
+                              ? const Color(0xFFCBD5E1)
                               : Colors.grey.shade200,
                         ),
                         borderRadius: BorderRadius.circular(10),
@@ -715,7 +715,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: isCancelled ? Colors.red.shade50 : _kOrangeBg,
+                    color: isCancelled ? Colors.red.shade50 : _kAccentBg,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -723,7 +723,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 13,
-                        color: isCancelled ? Colors.red.shade600 : _kOrange),
+                        color: isCancelled ? Colors.red.shade600 : _kAccent),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -826,7 +826,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                   style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
-                      color: _kOrange),
+                      color: _kAccent),
                 ),
                 const Spacer(),
                 // Invoice
@@ -850,8 +850,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                     icon: const Icon(Icons.undo_rounded, size: 14),
                     label: const Text('Refund', style: TextStyle(fontSize: 12)),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: _kOrange,
-                      side: const BorderSide(color: _kOrange),
+                      foregroundColor: _kAccent,
+                      side: const BorderSide(color: _kAccent),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 8),
                       shape: RoundedRectangleBorder(

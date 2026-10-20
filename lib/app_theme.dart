@@ -94,8 +94,41 @@ class AppTheme {
 
   // ─── Web Admin Theme ─────────────────────────────────────
 
-  static const _adminPrimary = Color(0xFFE65100);       // Elevate: Burnt Orange
-  static const _adminPrimaryLight = Color(0xFFFF9800);  // Elevate: Lighter Orange
+  // ─── Brand ───────────────────────────────────────────────────────────────
+  // Sampled from assets/images/hotrest_logo_new.png — the mark is a navy H
+  // with a teal ribbon through it, and those two are the whole palette. They
+  // replaced the previous burnt orange when the new logo was adopted.
+
+  /// The navy of the mark and wordmark. 13.98:1 on white.
+  static const brandNavy = Color(0xFF012C58);
+
+  /// The teal of the ribbon, as drawn. Only 3.42:1 on white, so this is for
+  /// the logo and large fills — never small text. Use [brandTeal] for that.
+  static const brandTealPure = Color(0xFF0D9B94);
+
+  /// The ribbon teal darkened to 4.98:1 on white: same hue, legible under
+  /// body text and safe to put white text on. This is the usable teal.
+  static const brandTeal = Color(0xFF0A7D77);
+
+  /// Teal lifted for dark grounds. The pure teal is only 4.4:1 on the sidebar
+  /// navy; this is 6.6:1 there and 7.8:1 on the darker auth gradients.
+  static const brandTealOnDark = Color(0xFF3FBDB4);
+
+  /// Brand accent for the dark screens — login, signup, invite, verify,
+  /// onboarding and the guest QR pages.
+  ///
+  /// [adminPrimary] is navy and all but disappears there: 1.22:1 against the
+  /// login card, where the burnt orange it replaced was 3.02:1. This is 4.99:1.
+  static const brandOnDark = brandTealOnDark;
+
+  /// Label colour for anything filled with [brandOnDark]: 6.09:1 on it, where
+  /// white would be 2.30:1. No single teal clears both the 3:1 the fill needs
+  /// against a dark card and the 4.5:1 a white label needs on the fill — the
+  /// two ranges do not overlap — so dark labels are the way out.
+  static const onBrandOnDark = brandNavy;
+
+  static const _adminPrimary = brandNavy;
+  static const _adminPrimaryLight = brandTeal;
   static const _adminBgDark = Color(0xFF0F172A);
   static const _adminSidebar = Color(0xFF101828);       // Elevate: Deeper Midnight
   static const _adminContent = Color(0xFFF8FAFC);       // Elevate: Soft Slate 50
@@ -135,8 +168,8 @@ class AppTheme {
         elevation: 0,
         shadowColor: Colors.black12,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFFE8EDF3)),
+          borderRadius: BorderRadius.circular(cardRadius),
+          side: const BorderSide(color: cardBorder),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -173,13 +206,13 @@ class AppTheme {
       dataTableTheme: DataTableThemeData(
         headingRowColor: WidgetStateProperty.all(Colors.grey.shade50),
         headingTextStyle: const TextStyle(
-          fontFamily: 'Inter',
+          fontFamily: 'Outfit',
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: _adminTextMuted,
         ),
         dataTextStyle: const TextStyle(
-          fontFamily: 'Inter',
+          fontFamily: 'Outfit',
           fontSize: 14,
           fontWeight: FontWeight.w400,
           color: _adminTextDark,
@@ -189,23 +222,6 @@ class AppTheme {
   }
 
   // ─── DM Serif Display helpers ────────────────────────────────────────────────
-
-  /// H1 — large page display titles (32 px).
-  static const TextStyle serifDisplayLarge = TextStyle(
-    fontFamily: 'DMSerifDisplay',
-    fontSize: 32,
-    fontWeight: FontWeight.w400,
-    color: _adminTextDark,
-    letterSpacing: -0.3,
-  );
-
-  /// H2 — page-level section titles and prominent dialog headings (24 px).
-  static const TextStyle serifDisplayMedium = TextStyle(
-    fontFamily: 'DMSerifDisplay',
-    fontSize: 24,
-    fontWeight: FontWeight.w400,
-    color: _adminTextDark,
-  );
 
   /// H3 — card headings and secondary dialog titles (20 px).
   static const TextStyle serifHeadingLarge = TextStyle(
@@ -232,10 +248,14 @@ class AppTheme {
   // ─── Shared Design Tokens (used by all web screens) ─────────────────────────
 
   /// Unified card border-radius.
-  static const double cardRadius = 12.0;
+  /// Card corner radius. Was 12 here and in cardTheme while 22 call sites
+  /// drew 16, so the loading skeleton did not match the screen that
+  /// replaced it. Settled on the 16 already in use.
+  static const double cardRadius = 16.0;
 
-  /// Standard horizontal page content padding.
-  static const double pagePadH = 32.0;
+  /// Card border. Was an unnamed #E8EDF3 in cardTheme and cardDecoration
+  /// while two screens drew Colors.grey.shade200 instead.
+  static const Color cardBorder = Color(0xFFE8EDF3);
 
   /// Subtle card shadow shared by hotel and restaurant cards.
   static List<BoxShadow> get cardShadow => [
@@ -246,16 +266,7 @@ class AppTheme {
   static BoxDecoration get cardDecoration => BoxDecoration(
     color: Colors.white,
     borderRadius: BorderRadius.circular(cardRadius),
-    border: Border.all(color: const Color(0xFFE8EDF3)),
-    boxShadow: cardShadow,
-  );
-
-  /// KPI card base decoration (uniform border — safe with borderRadius).
-  /// Use [kpiCard] to get the full left-accent card widget.
-  static BoxDecoration kpiDecoration(Color accent) => BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(cardRadius),
-    border: Border.all(color: const Color(0xFFE8EDF3)),
+    border: Border.all(color: cardBorder),
     boxShadow: cardShadow,
   );
 
@@ -269,7 +280,7 @@ class AppTheme {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(cardRadius),
-        border: Border.all(color: const Color(0xFFE8EDF3)),
+        border: Border.all(color: cardBorder),
         boxShadow: cardShadow,
       ),
       child: ClipRRect(
@@ -286,9 +297,16 @@ class AppTheme {
 
   // ─── Restaurant Section (const — safe in const expressions) ─────────────────
 
-  static const Color restaurantAccent    = Color(0xFFF97316);
-  static const Color restaurantAccentBg  = Color(0xFFFFF7ED);
-  static const Color restaurantAccentMid = Color(0xFFFFEDD5);
+  // Teal, not the former orange: with navy as the brand primary the restaurant
+  // side now reads as the ribbon through the mark, and orange was left looking
+  // like the one survivor of the old palette. The hotel side keeps using each
+  // property's own configurable colour, so the two halves stay distinguishable.
+  //
+  // restaurantAccent on restaurantAccentBg is 4.61:1 — the lightest tint that
+  // still carries body text.
+  static const Color restaurantAccent    = brandTeal;
+  static const Color restaurantAccentBg  = Color(0xFFEFF8F7);
+  static const Color restaurantAccentMid = Color(0xFFD5EDEB);
 
   // ─── Semantic Status Colors (const) ─────────────────────────────────────────
 
@@ -298,9 +316,42 @@ class AppTheme {
   static const Color statusBlue   = Color(0xFF2563EB);   // info / hotel accent
   static const Color statusPurple = Color(0xFF8B5CF6);   // payment due
 
+  /// A child ticket added onto an open tab.
+  ///
+  /// Slate, not the teal it used to be. That teal (#009688) sat 11.4 dE from
+  /// the brand accent once the brand went teal, so an add-on chip read as
+  /// brand chrome. Slate is 25.3 dE from the nearest colour in this language
+  /// and 7.58:1 on white, so it still carries chip text. It also says
+  /// "subordinate", which is what an add-on is.
+  static const Color statusAddOn  = Color(0xFF475569);
+
+  /// Fallback brand colour for a property that has not picked one.
+  ///
+  /// Deliberately still gold, and deliberately NOT a HotRest brand colour:
+  /// this slot belongs to the operator, it is offered as the first swatch in
+  /// the property editor, and it is drawn on the dark sidebar where gold is
+  /// 8.10:1. Painting it navy would both overwrite tenant branding and
+  /// disappear (1.28:1). It lived as a bare literal in three places that could
+  /// drift; the string form exists because OrgProperty.primaryColor is hex.
+  static const Color defaultPropertyColor = Color(0xFFD4A853);
+  static const String defaultPropertyColorHex = '#D4A853';
+
+  /// An order that has been fired and is with the kitchen.
+  ///
+  /// Deliberately the same blue the kitchen board gives its "Preparing" lane
+  /// (kitchen_screen.dart), so the floor and the board agree. The POS and
+  /// table screens previously used a second hardcoded teal here, which after
+  /// the rebrand was 9.9 dE from the brand accent beside it -- the two states
+  /// could not be told apart.
+  static const Color statusInKitchen = statusBlue;
+
   // ─── Page Background ─────────────────────────────────────────────────────────
 
-  static const Color pageBg = Color(0xFFF5F7FA);
+  /// The page ground. Was declared as #F5F7FA and referenced nowhere, while
+  /// nine screens hardcoded #F8FAFC -- the value the scaffold already uses.
+  /// Re-pointed at the one in use rather than moving nine screens onto an
+  /// unused shade.
+  static const Color pageBg = Color(0xFFF8FAFC);
 
   // ─── Responsive helpers ───────────────────────────────────────────────────
 

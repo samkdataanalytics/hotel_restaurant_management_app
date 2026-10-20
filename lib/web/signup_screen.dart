@@ -4,66 +4,60 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:web/web.dart' as webpkg;
-import '../app_theme.dart';
+
 import '../providers/app_auth_provider.dart';
 import '../router.dart';
+import 'auth/auth_scaffold.dart';
+import 'brand_kit.dart';
 
+/// Create an account.
+///
+/// Shares [AuthScaffold] with sign-in. The signup logic is unchanged: the plan
+/// slug from the landing page is held in SharedPreferences for onboarding to
+/// pick up, and Supabase's email-enumeration behaviour is still handled.
 class SignupScreen extends ConsumerStatefulWidget {
-  final String? plan; // slug forwarded from landing page, e.g. "starter"
+  /// Slug forwarded from the landing page, e.g. "starter".
+  final String? plan;
   const SignupScreen({super.key, this.plan});
 
   @override
   ConsumerState<SignupScreen> createState() => _SignupScreenState();
 }
 
-class _SignupScreenState extends ConsumerState<SignupScreen>
-    with SingleTickerProviderStateMixin {
-  final _emailController    = TextEditingController();
+class _SignupScreenState extends ConsumerState<SignupScreen> {
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _confirmController  = TextEditingController();
+  final _confirmController = TextEditingController();
+  final _passwordFocus = FocusNode();
+  final _confirmFocus = FocusNode();
 
-  bool _obscurePassword  = true;
-  bool _obscureConfirm   = true;
-  bool _isLoading        = false;
-  bool _emailSent        = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
+  bool _isLoading = false;
+  bool _emailSent = false;
   String? _error;
 
-  late AnimationController _fadeController;
-  late Animation<double>   _fadeAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeOut,
-    );
-    _fadeController.forward();
-  }
+  static final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
-    _fadeController.dispose();
+    _passwordFocus.dispose();
+    _confirmFocus.dispose();
     super.dispose();
   }
 
   Future<void> _signup() async {
-    final email    = _emailController.text.trim();
+    final email = _emailController.text.trim();
     final password = _passwordController.text;
-    final confirm  = _confirmController.text;
+    final confirm = _confirmController.text;
 
     if (email.isEmpty || password.isEmpty || confirm.isEmpty) {
       setState(() => _error = 'Please fill in all fields.');
       return;
     }
-    final _emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
     if (!_emailRegex.hasMatch(email)) {
       setState(() => _error = 'Please enter a valid email address.');
       return;
@@ -79,14 +73,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
 
     setState(() {
       _isLoading = true;
-      _error     = null;
+      _error = null;
     });
 
     try {
       final origin = webpkg.window.location.origin;
       final res = await Supabase.instance.client.auth.signUp(
-        email:          email,
-        password:       password,
+        email: email,
+        password: password,
         emailRedirectTo: '$origin${AppRoutes.emailVerified}',
       );
 
@@ -95,23 +89,25 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
       if (res.user == null) {
         setState(() {
           _isLoading = false;
-          _error     = 'Sign up failed. Please try again.';
+          _error = 'Sign up failed. Please try again.';
         });
         return;
       }
 
       // Supabase returns a fake success for existing emails (email enumeration
-      // protection). Identities list is empty when the email is already registered.
+      // protection). The identities list is empty when the email is already
+      // registered.
       if (res.user!.identities != null && res.user!.identities!.isEmpty) {
         setState(() {
           _isLoading = false;
-          _error     = 'An account with this email already exists. Please sign in instead.';
+          _error = 'An account with this email already exists. Sign in instead.';
         });
         return;
       }
 
-      // If session is returned immediately (email confirmation disabled),
-      // load the auth context then navigate — respect plan intent if present.
+      // If a session comes back immediately (email confirmation disabled),
+      // load the auth context then let the router move on — keeping the plan
+      // the visitor picked on the pricing table.
       if (res.session != null) {
         final plan = widget.plan;
         if (plan != null && plan.isNotEmpty) {
@@ -119,11 +115,11 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
           await prefs.setString('pending_plan', plan);
         }
         await ref.read(authProvider.notifier).reload();
-        // GoRouter redirect takes over → onboarding (new user has no org/properties)
+        // GoRouter's redirect takes over → onboarding, since a new user has
+        // no organisation or property yet.
         return;
       }
 
-      // Email confirmation required — show success message.
       setState(() {
         _isLoading = false;
         _emailSent = true;
@@ -131,332 +127,204 @@ class _SignupScreenState extends ConsumerState<SignupScreen>
     } on AuthException catch (e) {
       setState(() {
         _isLoading = false;
-        _error     = e.message;
+        _error = e.message;
       });
     } catch (e) {
       setState(() {
         _isLoading = false;
-        _error     = 'Unexpected error: $e';
+        _error = 'Unexpected error: $e';
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              AppTheme.sidebarDark,
-              const Color(0xFF1E293B),
-              const Color(0xFF0F172A),
-            ],
-          ),
-        ),
-        child: Center(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Container(
-              width: 440,
-              padding: const EdgeInsets.all(40),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.12)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 40,
-                    offset: const Offset(0, 16),
-                  ),
-                ],
-              ),
-              child: _emailSent ? _buildEmailSentState() : _buildForm(),
-            ),
-          ),
-        ),
+    if (_emailSent) return _sentScaffold();
+
+    return AuthScaffold(
+      title: 'Create your account',
+      subtitle: 'Register your company on HotRest.',
+      banner: const _TrialBanner(),
+      footer: AuthFooterPrompt(
+        question: 'Already have an account?',
+        action: 'Sign in',
+        onTap: () => context.go(AppRoutes.login),
       ),
-    );
-  }
-
-  Widget _buildForm() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        // Logo
-        Image.asset(
-          'assets/images/hotrest_logo.webp',
-          width: 140,
-          height: 140,
-          fit: BoxFit.contain,
+        AuthField(
+          controller: _emailController,
+          label: 'Work email',
+          icon: Icons.mail_outline_rounded,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          onSubmitted: (_) => _passwordFocus.requestFocus(),
         ),
-        const SizedBox(height: 24),
-
-        const Text(
-          'Create Account',
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
+        const SizedBox(height: 14),
+        AuthField(
+          controller: _passwordController,
+          focusNode: _passwordFocus,
+          label: 'Password',
+          icon: Icons.lock_outline_rounded,
+          obscure: _obscurePassword,
+          textInputAction: TextInputAction.next,
+          onSubmitted: (_) => _confirmFocus.requestFocus(),
+          trailing: IconButton(
+            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+            icon: Icon(
+              _obscurePassword
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+              color: LK.muted,
+              size: 20,
+            ),
+            tooltip: _obscurePassword ? 'Show password' : 'Hide password',
           ),
         ),
         const SizedBox(height: 6),
-        Text(
-          'Register your company on HotRest',
-          style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.5)),
+        Padding(
+          padding: const EdgeInsets.only(left: 2),
+          child: Text('At least 6 characters.', style: LK.micro.copyWith(fontSize: 12)),
         ),
-        const SizedBox(height: 16),
-        // Prominent free-trial highlight
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFEDD07A), Color(0xFFD4A853)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+        const SizedBox(height: 10),
+        AuthField(
+          controller: _confirmController,
+          focusNode: _confirmFocus,
+          label: 'Confirm password',
+          icon: Icons.lock_person_outlined,
+          obscure: _obscureConfirm,
+          textInputAction: TextInputAction.go,
+          onSubmitted: (_) => _isLoading ? null : _signup(),
+          trailing: IconButton(
+            onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+            icon: Icon(
+              _obscureConfirm
+                  ? Icons.visibility_outlined
+                  : Icons.visibility_off_outlined,
+              color: LK.muted,
+              size: 20,
             ),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFD4A853).withOpacity(0.45),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
-              ),
-            ],
+            tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
           ),
-          child: const Row(
-            children: [
-              Icon(Icons.celebration_rounded, size: 20, color: Color(0xFF0F172A)),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  '45-day free trial — full access to every feature.\nNo credit card required.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.35,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF0F172A),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 14),
+          AuthInlineError(_error!),
+        ],
+        const SizedBox(height: 24),
+        if (_isLoading)
+          const AuthBusyButton()
+        else
+          CtaButton(label: 'Create account', expand: true, onTap: _signup),
+        const SizedBox(height: 16),
+        Text(
+          'By creating an account you agree to our Terms of Service and '
+          'Privacy Policy.',
+          textAlign: TextAlign.center,
+          style: LK.micro.copyWith(fontSize: 11.5),
+        ),
+      ],
+    );
+  }
+
+  Widget _sentScaffold() => AuthScaffold(
+        title: 'Check your inbox',
+        subtitle: 'One more step to finish setting up.',
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: LK.teal.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: LK.teal.withValues(alpha: 0.22)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    color: LK.teal.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.mark_email_read_outlined,
+                      color: LK.teal, size: 26),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'We sent a verification link to',
+                  textAlign: TextAlign.center,
+                  style: LK.small,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _emailController.text.trim(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    color: LK.ink,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 32),
-
-        // Email
-        _darkField(
-          controller: _emailController,
-          hint: 'Work email',
-          icon: Icons.email_outlined,
-          keyboardType: TextInputType.emailAddress,
-        ),
-        const SizedBox(height: 14),
-
-        // Password
-        _darkField(
-          controller: _passwordController,
-          hint: 'Password',
-          icon: Icons.lock_outline,
-          obscure: _obscurePassword,
-          suffixIcon: IconButton(
-            icon: Icon(
-              _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              color: Colors.white.withOpacity(0.4),
-              size: 20,
-            ),
-            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-          ),
-        ),
-        const SizedBox(height: 14),
-
-        // Confirm password
-        _darkField(
-          controller: _confirmController,
-          hint: 'Confirm password',
-          icon: Icons.lock_outline,
-          obscure: _obscureConfirm,
-          suffixIcon: IconButton(
-            icon: Icon(
-              _obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              color: Colors.white.withOpacity(0.4),
-              size: 20,
-            ),
-            onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
-          ),
-          onSubmitted: (_) => _signup(),
-        ),
-
-        if (_error != null) ...[
-          const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.danger.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.danger.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.error_outline, color: AppTheme.danger, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _error!,
-                    style: TextStyle(color: AppTheme.danger, fontSize: 13),
-                  ),
+                const SizedBox(height: 12),
+                Text(
+                  'Click the link in that email to activate your account. '
+                  'It may take a minute to arrive — check your spam folder too.',
+                  textAlign: TextAlign.center,
+                  style: LK.micro.copyWith(fontSize: 12.5, height: 1.55),
                 ),
               ],
             ),
           ),
-        ],
-
-        const SizedBox(height: 24),
-
-        // Sign up button
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _signup,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.adminPrimary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: _isLoading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : const Text(
-                    'Create Account',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                  ),
+          const SizedBox(height: 22),
+          CtaButton(
+            label: 'Go to sign in',
+            expand: true,
+            onTap: () => context.go(AppRoutes.login),
           ),
-        ),
+          const SizedBox(height: 12),
+          GhostButton(
+            label: 'Use a different email',
+            expand: true,
+            onTap: () => setState(() {
+              _emailSent = false;
+              _error = null;
+            }),
+          ),
+        ],
+      );
+}
 
-        const SizedBox(height: 20),
+/// The 45-day trial promise, shown above the fields.
+class _TrialBanner extends StatelessWidget {
+  const _TrialBanner();
 
-        // Back to login
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Already have an account? ',
-              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
-            ),
-            GestureDetector(
-              onTap: () => context.go(AppRoutes.login),
-              child: Text(
-                'Sign in',
-                style: TextStyle(
-                  color: AppTheme.adminPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      decoration: BoxDecoration(
+        color: LK.teal.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: LK.teal.withValues(alpha: 0.24)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.card_giftcard_rounded, color: LK.teal, size: 19),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              '45-day free trial — full access to every feature. '
+              'No credit card required.',
+              style: LK.micro.copyWith(
+                color: LK.teal,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                height: 1.45,
               ),
             ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEmailSentState() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            color: AppTheme.success.withOpacity(0.15),
-            shape: BoxShape.circle,
-            border: Border.all(color: AppTheme.success.withOpacity(0.4)),
           ),
-          child: Icon(Icons.mark_email_read_rounded, color: AppTheme.success, size: 36),
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'Check your email',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'We sent a confirmation link to\n${_emailController.text.trim()}\n\nClick the link to verify your account, then come back to sign in.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.white.withOpacity(0.6),
-            height: 1.6,
-          ),
-        ),
-        const SizedBox(height: 32),
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: OutlinedButton(
-            onPressed: () => context.go(AppRoutes.login),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: BorderSide(color: Colors.white.withOpacity(0.2)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text(
-              'Back to Sign In',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _darkField({
-    required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    bool obscure = false,
-    TextInputType? keyboardType,
-    Widget? suffixIcon,
-    ValueChanged<String>? onSubmitted,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: obscure,
-      keyboardType: keyboardType,
-      style: const TextStyle(color: Colors.white),
-      onSubmitted: onSubmitted,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
-        prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.4), size: 20),
-        suffixIcon: suffixIcon,
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.06),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppTheme.adminPrimary),
-        ),
+        ],
       ),
     );
   }

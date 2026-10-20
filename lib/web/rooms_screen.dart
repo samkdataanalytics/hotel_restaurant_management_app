@@ -392,7 +392,7 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
         _rooms.where((r) => r.status == RoomStatus.maintenance).length;
 
     return Container(
-      color: const Color(0xFFF8FAFC),
+      color: AppTheme.pageBg,
       child: SingleChildScrollView(
         padding: AppTheme.screenPad(context),
         child: Column(
@@ -539,7 +539,10 @@ class _RoomsScreenState extends ConsumerState<RoomsScreen> {
         statusIcon = Icons.check_circle_outline;
         break;
       case RoomStatus.occupied:
-        statusColor = AppTheme.adminPrimary;
+        // Pinned, not AppTheme.adminPrimary. Occupancy is a room state, and
+        // binding it to the brand meant it silently re-coloured when the
+        // brand did -- and would move again on the next brand change.
+        statusColor = AppTheme.statusBlue;
         statusIcon = Icons.person;
         break;
       case RoomStatus.maintenance:

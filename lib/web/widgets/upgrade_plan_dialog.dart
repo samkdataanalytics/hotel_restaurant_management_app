@@ -6,6 +6,7 @@ import '../../providers/app_auth_provider.dart';
 import '../../services/plan_service.dart';
 import '../../services/lead_service.dart';
 import '../../providers/service_providers.dart';
+import '../semantic_palette.dart';
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
@@ -231,15 +232,7 @@ class _PlanCard extends StatelessWidget {
   static const _accentGreen = Color(0xFF10B981);
   static const _accentPurple = Color(0xFF8B5CF6);
 
-  Color get _accent {
-    switch (plan.slug) {
-      case 'growth':     return _accentBlue;
-      case 'starter':    return _accentGreen;
-      case 'pro':        return _accentGold;
-      case 'enterprise': return _accentPurple;
-      default:           return _accentBlue;
-    }
-  }
+  Color get _accent => SemanticPalette.tier(plan.slug);
 
   @override
   Widget build(BuildContext context) {

@@ -11,7 +11,7 @@ class _C {
   static const border  = Color(0xFFE2E8F0);
   static const text    = Color(0xFF0F172A);
   static const sub     = Color(0xFF64748B);
-  static const gold    = Color(0xFFD4A853);
+  static const gold    = Color(0xFF0A7D77);
 
   static const hotel     = Color(0xFF3B82F6);
   static const restaurant= Color(0xFFF97316);
@@ -551,12 +551,12 @@ class _HelpScreenState extends State<HelpScreen> {
       ),
       padding: const EdgeInsets.symmetric(horizontal: 40),
       child: Row(children: [
-        Image.asset('assets/images/hotrest_logo.webp', width: 36, height: 36, fit: BoxFit.contain),
+        Image.asset('assets/images/hotrest_mark.png', width: 36, height: 36, fit: BoxFit.contain),
         const SizedBox(width: 10),
         ShaderMask(
           blendMode: BlendMode.srcIn,
           shaderCallback: (bounds) => const LinearGradient(
-            colors: [Color(0xFFEDD07A), _C.gold],
+            colors: [Color(0xFF0D9B94), _C.gold],
           ).createShader(bounds),
           child: const Text('HotRest',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
@@ -602,9 +602,9 @@ class _HelpScreenState extends State<HelpScreen> {
           Container(
             width: 44, height: 44,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFFEDD07A), Color(0xFFD4A853)]),
+              gradient: const LinearGradient(colors: [Color(0xFF0D9B94), Color(0xFF0A7D77)]),
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: const Color(0xFFD4A853).withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))],
+              boxShadow: [BoxShadow(color: const Color(0xFF0A7D77).withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))],
             ),
             child: const Icon(Icons.auto_stories_rounded, color: Colors.white, size: 22),
           ),

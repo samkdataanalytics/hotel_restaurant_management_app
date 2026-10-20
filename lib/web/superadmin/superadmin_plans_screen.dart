@@ -355,13 +355,13 @@ class _PlanEditorCardState extends State<_PlanEditorCard> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: AppTheme.goldPrimary.withOpacity(0.05),
+                color: AppTheme.brandTeal.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.goldPrimary.withOpacity(0.2)),
+                border: Border.all(color: AppTheme.brandTeal.withOpacity(0.2)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.star_rounded, color: AppTheme.goldPrimary, size: 16),
+                  Icon(Icons.star_rounded, color: AppTheme.brandTeal, size: 16),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -372,7 +372,7 @@ class _PlanEditorCardState extends State<_PlanEditorCard> {
                   Switch(
                     value: _isHighlighted,
                     onChanged: (v) => setState(() => _isHighlighted = v),
-                    activeThumbColor: AppTheme.goldPrimary,
+                    activeThumbColor: AppTheme.brandTeal,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ],
