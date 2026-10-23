@@ -181,7 +181,36 @@ const Map<String, Object?> kHomeDefaults = {
       'id': 'comparison',
       'type': 'comparison',
       'style': {'reveal': false},
-      'content': {},
+      'content': {
+        'eyebrow': 'Why HotRest',
+        'title': 'How we compare',
+        'lead': 'Traditional hotel software is expensive, slow to set up and '
+            'missing key features. HotRest was built from the ground up '
+            'for independent properties.',
+        'columns': [
+          {'name': 'HotRest', 'short': 'HotRest'},
+          {'name': 'Traditional PMS', 'short': 'PMS'},
+          {'name': 'Manual / spreadsheet', 'short': 'Manual'},
+        ],
+        'rows': [
+          {
+            'label': 'Starting price',
+            // {starterPrice} is filled from the live Starter plan.
+            'cells': ['Free / {starterPrice}', 'LKR 20,000+/mo', 'Ongoing hidden costs'],
+          },
+          {
+            'label': 'Setup time',
+            'cells': ['< 20 min', 'Days–weeks', 'Never done'],
+          },
+          {'label': 'Hotel + restaurant in one', 'cells': [true, false, false]},
+          {'label': 'QR guest self-check-in', 'cells': [true, false, false]},
+          {'label': 'Built-in kitchen display', 'cells': [true, false, false]},
+          {'label': 'Digital guest menu', 'cells': [true, false, false]},
+          {'label': 'Multi-property support', 'cells': [true, true, false]},
+          {'label': 'White-label branding', 'cells': [true, false, false]},
+          {'label': 'Free plan available', 'cells': [true, false, true]},
+        ],
+      },
     },
     {
       'id': 'testimonials',

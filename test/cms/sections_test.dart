@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hotel_checkin/web/cms/data/plans_provider.dart';
 import 'package:hotel_checkin/web/cms/defaults/home_defaults.dart';
 import 'package:hotel_checkin/web/cms/model/json_reader.dart';
 import 'package:hotel_checkin/web/cms/model/site_document.dart';
@@ -7,6 +9,7 @@ import 'package:hotel_checkin/web/cms/registry/section_registry.dart';
 import 'package:hotel_checkin/web/cms/render/site_renderer.dart';
 import 'package:hotel_checkin/web/cms/render/site_scope.dart';
 import 'package:hotel_checkin/web/cms/sections/before_after_section.dart';
+import 'package:hotel_checkin/web/cms/sections/comparison_section.dart';
 import 'package:hotel_checkin/web/cms/sections/cta_band_section.dart';
 import 'package:hotel_checkin/web/cms/sections/faq_section.dart';
 import 'package:hotel_checkin/web/cms/sections/feature_grid_section.dart';
@@ -25,6 +28,7 @@ final _defs = {
   'ctaBand': ctaBandDefinition,
   'featureGrid': featureGridDefinition,
   'testimonials': testimonialsDefinition,
+  'comparison': comparisonDefinition,
 };
 
 SectionNode _node(String type, Object? content) => SectionNode.fromJson(J.of({
@@ -33,14 +37,21 @@ SectionNode _node(String type, Object? content) => SectionNode.fromJson(J.of({
       'content': content,
     }));
 
-Future<void> _pump(WidgetTester t, double width, Widget child) async {
+Future<void> _pump(WidgetTester t, double width, Widget child,
+    {Object? starterPrice = 3450}) async {
   t.view.physicalSize = Size(width, 1600);
   t.view.devicePixelRatio = 1;
   addTearDown(t.view.reset);
-  await t.pumpWidget(MaterialApp(
-    home: SiteScope(
-      mode: SiteMode.test,
-      child: Scaffold(body: SingleChildScrollView(child: child)),
+  await t.pumpWidget(ProviderScope(
+    overrides: [
+      // No network in tests: the price is whatever the test says it is.
+      starterMonthlyPriceProvider.overrideWith((ref) async => starterPrice as int?),
+    ],
+    child: MaterialApp(
+      home: SiteScope(
+        mode: SiteMode.test,
+        child: Scaffold(body: SingleChildScrollView(child: child)),
+      ),
     ),
   ));
   await t.pump(const Duration(seconds: 2));
@@ -102,6 +113,42 @@ void main() {
     expect(find.text('AB'), findsOneWidget);
     expect(find.text('P'), findsOneWidget);
     expect(find.text('ZZ'), findsOneWidget);
+  });
+
+  group('comparison', () {
+    Widget build(SectionNode n) => Builder(builder: (c) => comparisonDefinition.builder(c, n));
+
+    testWidgets('fills {starterPrice} from the live plan', (t) async {
+      await _pump(t, 1280, build(byType['comparison']!));
+      expect(find.text('Free / LKR 3,450'), findsOneWidget);
+    });
+
+    testWidgets('uses the fallback price when the plan cannot be had', (t) async {
+      await _pump(t, 1280, build(byType['comparison']!), starterPrice: null);
+      expect(find.text('Free / $kStarterPriceFallback'), findsOneWidget);
+    });
+
+    testWidgets('a row with too few cells is padded, not a crash', (t) async {
+      final node = _node('comparison', {
+        'columns': [
+          {'name': 'A'},
+          {'name': 'B'},
+        ],
+        'rows': [
+          {'label': 'Short row', 'cells': [true]},
+          {'label': 'Junk cells', 'cells': [5, null]},
+        ],
+      });
+      await _pump(t, 1280, build(node));
+      expect(t.takeException(), isNull);
+      expect(find.text('Short row'), findsOneWidget);
+    });
+
+    testWidgets('phone layout labels columns with the short name', (t) async {
+      await _pump(t, 520, build(byType['comparison']!));
+      expect(find.text('PMS'), findsWidgets);
+      expect(find.text('Traditional PMS'), findsNothing);
+    });
   });
 
   testWidgets('steps are numbered by position', (t) async {
