@@ -1,25 +1,17 @@
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'landing/landing_dialogs.dart';
 import 'brand_kit.dart';
-import 'cms/defaults/home_defaults.dart';
-import 'cms/registry/section_registry.dart';
+import 'cms/data/site_providers.dart';
+import 'cms/defaults/site_defaults.dart';
+import 'cms/registry/public_registry.dart';
 import 'cms/render/anchor_keys.dart';
 import 'cms/render/site_renderer.dart';
 import 'cms/render/site_scope.dart';
-import 'cms/sections/before_after_section.dart';
-import 'cms/sections/comparison_section.dart';
-import 'cms/sections/cta_band_section.dart';
-import 'cms/sections/faq_section.dart';
-import 'cms/sections/feature_grid_section.dart';
-import 'cms/sections/hero_section.dart';
-import 'cms/sections/stats_section.dart';
-import 'cms/sections/pricing_section.dart';
-import 'cms/sections/steps_section.dart';
-import 'cms/sections/testimonials_section.dart';
 
 /// Public marketing site.
 ///
@@ -30,15 +22,17 @@ import 'cms/sections/testimonials_section.dart';
 /// from `PlanService.getActivePlans()` rather than being hardcoded, the
 /// comparison table reads the live starter price, and Contact Sales still posts
 /// through `LeadService`.
-class LandingScreen extends StatefulWidget {
+class LandingScreen extends ConsumerStatefulWidget {
   const LandingScreen({super.key});
 
   @override
-  State<LandingScreen> createState() => _LandingScreenState();
+  ConsumerState<LandingScreen> createState() => _LandingScreenState();
 }
 
-class _LandingScreenState extends State<LandingScreen> {
+class _LandingScreenState extends ConsumerState<LandingScreen> {
   final _scroll = ScrollController();
+  static const _pageKey = 'page:home';
+
   final _anchors = AnchorKeys();
   bool _scrolled = false;
 
@@ -59,10 +53,14 @@ class _LandingScreenState extends State<LandingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Published content when there is some, otherwise the page as it shipped.
+    // Sections that fail to draw fall back to their bundled default one by one.
+    final doc = ref.watch(siteDocumentProvider(_pageKey));
     final renderer = SiteRenderer(
-      registry: _registry,
-      fallback: homeDefaults,
+      registry: publicRegistry,
+      fallback: siteDefaultDocument(_pageKey),
       anchors: _anchors,
+      theme: ref.watch(siteThemeProvider),
     );
 
     return SiteScope(
@@ -75,7 +73,7 @@ class _LandingScreenState extends State<LandingScreen> {
               controller: _scroll,
               child: Column(
                 children: [
-                  ...renderer.build(context, homeDefaults),
+                  ...renderer.build(context, doc),
                   const _Footer(),
                 ],
               ),
@@ -97,21 +95,6 @@ class _LandingScreenState extends State<LandingScreen> {
     );
   }
 }
-
-/// Section types the home page can name. Each reads its content from the
-/// document; see `cms/sections/`.
-final _registry = SectionRegistry.of([
-  heroDefinition,
-  statsDefinition,
-  beforeAfterDefinition,
-  stepsDefinition,
-  featureGridDefinition,
-  comparisonDefinition,
-  testimonialsDefinition,
-  pricingDefinition,
-  faqDefinition,
-  ctaBandDefinition,
-]);
 
 // ─── Navigation ──────────────────────────────────────────────────────────────
 
