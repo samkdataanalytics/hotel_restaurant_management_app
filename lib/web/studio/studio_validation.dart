@@ -27,6 +27,7 @@ const kKnownTokens = {
   'steps',
   'category',
   'minutes',
+  'date',
 };
 
 /// JSON size above which the database would refuse the save (it caps at 256 KB).
@@ -163,6 +164,8 @@ void _globals(List<ValidationIssue> out, String key, Map<String, dynamic> doc) {
     case 'global:theme':
       _fields(out, kThemeTypographyFields, j.obj('typography'), ['typography'], null, 'Theme');
       _fields(out, kThemeLayoutFields, j.obj('layout'), ['layout'], null, 'Theme');
+    case 'global:dialogs':
+      _fields(out, kDialogFields, j, const [], null, 'Dialogs');
     case 'global:site':
       _fields(out, kSiteFields, j, const [], null, 'Settings');
       final email = j.str('supportEmail').trim();

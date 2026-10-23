@@ -33,6 +33,7 @@ class StudioUi {
     this.device = Device.desktop,
     this.pageKey = 'page:home',
     this.navDoc = 'global:header',
+    this.settingsDoc = 'global:site',
     this.panelTab = PanelTab.content,
     this.leftOpen = false,
     this.rightOpen = false,
@@ -44,6 +45,9 @@ class StudioUi {
 
   /// `global:header` or `global:footer`.
   final String navDoc;
+
+  /// `global:site` or `global:dialogs`.
+  final String settingsDoc;
   final PanelTab panelTab;
 
   /// Slide-over panels on narrow windows (a tablet): the section list and the
@@ -56,6 +60,7 @@ class StudioUi {
     Device? device,
     String? pageKey,
     String? navDoc,
+    String? settingsDoc,
     PanelTab? panelTab,
     bool? leftOpen,
     bool? rightOpen,
@@ -65,6 +70,7 @@ class StudioUi {
         device: device ?? this.device,
         pageKey: pageKey ?? this.pageKey,
         navDoc: navDoc ?? this.navDoc,
+        settingsDoc: settingsDoc ?? this.settingsDoc,
         panelTab: panelTab ?? this.panelTab,
         leftOpen: leftOpen ?? this.leftOpen,
         rightOpen: rightOpen ?? this.rightOpen,
@@ -75,7 +81,7 @@ class StudioUi {
         StudioWorkspace.pages => pageKey,
         StudioWorkspace.navigation => navDoc,
         StudioWorkspace.theme => 'global:theme',
-        StudioWorkspace.settings => 'global:site',
+        StudioWorkspace.settings => settingsDoc,
         StudioWorkspace.media => null,
       };
 }

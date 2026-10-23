@@ -47,10 +47,17 @@ class PropertyPanel extends StatelessWidget {
         ),
       StudioWorkspace.theme => _themeTabs(),
       StudioWorkspace.settings => _Scroll(
-          title: 'Site settings',
-          subtitle: 'Contact details and the chat button, used across the site.',
+          title: ui.settingsDoc == 'global:dialogs' ? 'Pop-ups' : 'Site settings',
+          subtitle: ui.settingsDoc == 'global:dialogs'
+              ? 'The wording of the demo tour and the contact-sales form.'
+              : 'Contact details and the chat button, used across the site.',
           issues: state.issues,
-          child: FieldForm(fields: kSiteFields, values: state.doc, basePath: const [], env: env),
+          child: FieldForm(
+            fields: ui.settingsDoc == 'global:dialogs' ? kDialogFields : kSiteFields,
+            values: state.doc,
+            basePath: const [],
+            env: env,
+          ),
         ),
       StudioWorkspace.media => const SizedBox.shrink(),
     };

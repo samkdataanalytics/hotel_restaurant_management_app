@@ -10,6 +10,7 @@ const Map<String, Object?> kAuthDefaults = {
       'style': {'reveal': false},
       'content': {
         'metaTitle': 'Sign in — HotRest',
+        'backLabel': 'Back to site',
         'title': 'Welcome back',
         'subtitle': 'Sign in to your management portal.',
         'identifierLabel': 'Email or username',
@@ -26,6 +27,7 @@ const Map<String, Object?> kAuthDefaults = {
       'style': {'reveal': false},
       'content': {
         'metaTitle': 'Create your account — HotRest',
+        'backLabel': 'Back to site',
         'title': 'Create your account',
         'subtitle': 'Register your company on HotRest.',
         'trialBanner': '{trialDays}-day free trial — full access to every feature. '

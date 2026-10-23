@@ -12,6 +12,7 @@ import '../registry/section_registry.dart';
 /// content.
 class LoginCopy {
   const LoginCopy({
+    required this.backLabel,
     required this.metaTitle,
     required this.title,
     required this.subtitle,
@@ -23,6 +24,7 @@ class LoginCopy {
   });
 
   factory LoginCopy.fromJson(J j) => LoginCopy(
+        backLabel: j.str('backLabel', 'Back to site'),
         metaTitle: j.str('metaTitle'),
         title: expandTokens(j.str('title')),
         subtitle: expandTokens(j.str('subtitle')),
@@ -35,6 +37,7 @@ class LoginCopy {
 
   /// The browser tab title for this screen.
   final String metaTitle;
+  final String backLabel;
   final String title;
   final String subtitle;
   final String identifierLabel;
@@ -46,6 +49,7 @@ class LoginCopy {
 
 class SignupCopy {
   const SignupCopy({
+    required this.backLabel,
     required this.metaTitle,
     required this.title,
     required this.subtitle,
@@ -67,6 +71,7 @@ class SignupCopy {
   });
 
   factory SignupCopy.fromJson(J j) => SignupCopy(
+        backLabel: j.str('backLabel', 'Back to site'),
         metaTitle: j.str('metaTitle'),
         title: expandTokens(j.str('title')),
         subtitle: expandTokens(j.str('subtitle')),
@@ -88,6 +93,7 @@ class SignupCopy {
       );
 
   final String metaTitle;
+  final String backLabel;
   final String title;
   final String subtitle;
   final String trialBanner;

@@ -161,97 +161,95 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     if (_emailSent) return _sentScaffold(copy);
 
     return SeoScope(
-      seo: J({'title': copy.metaTitle}),
-      fallbackTitle: 'Create your account — HotRest',
-      child: AuthScaffold(
-      title: copy.title,
-      subtitle: copy.subtitle,
-      banner: copy.trialBanner.isEmpty ? null : TrialBanner(text: copy.trialBanner),
-      footer: AuthFooterPrompt(
-        question: copy.footerQuestion,
-        action: copy.footerAction,
-        onTap: () => context.go(AppRoutes.login),
-      ),
-      children: [
-        AuthField(
-          controller: _emailController,
-          label: copy.emailLabel,
-          icon: Icons.mail_outline_rounded,
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
-          onSubmitted: (_) => _passwordFocus.requestFocus(),
-        ),
-        const SizedBox(height: 14),
-        AuthField(
-          controller: _passwordController,
-          focusNode: _passwordFocus,
-          label: copy.passwordLabel,
-          icon: Icons.lock_outline_rounded,
-          obscure: _obscurePassword,
-          textInputAction: TextInputAction.next,
-          onSubmitted: (_) => _confirmFocus.requestFocus(),
-          trailing: IconButton(
-            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-            icon: Icon(
-              _obscurePassword
-                  ? Icons.visibility_outlined
-                  : Icons.visibility_off_outlined,
-              color: LK.muted,
-              size: 20,
+        seo: J({'title': copy.metaTitle}),
+        fallbackTitle: 'Create your account — HotRest',
+        child: AuthScaffold(
+          backLabel: copy.backLabel,
+          title: copy.title,
+          subtitle: copy.subtitle,
+          banner: copy.trialBanner.isEmpty ? null : TrialBanner(text: copy.trialBanner),
+          footer: AuthFooterPrompt(
+            question: copy.footerQuestion,
+            action: copy.footerAction,
+            onTap: () => context.go(AppRoutes.login),
+          ),
+          children: [
+            AuthField(
+              controller: _emailController,
+              label: copy.emailLabel,
+              icon: Icons.mail_outline_rounded,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              onSubmitted: (_) => _passwordFocus.requestFocus(),
             ),
-            tooltip: _obscurePassword ? 'Show password' : 'Hide password',
-          ),
-        ),
-        if (copy.passwordHint.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.only(left: 2),
-            child: Text(copy.passwordHint, style: LK.micro.copyWith(fontSize: 12)),
-          ),
-        ],
-        const SizedBox(height: 10),
-        AuthField(
-          controller: _confirmController,
-          focusNode: _confirmFocus,
-          label: copy.confirmLabel,
-          icon: Icons.lock_person_outlined,
-          obscure: _obscureConfirm,
-          textInputAction: TextInputAction.go,
-          onSubmitted: (_) => _isLoading ? null : _signup(),
-          trailing: IconButton(
-            onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
-            icon: Icon(
-              _obscureConfirm
-                  ? Icons.visibility_outlined
-                  : Icons.visibility_off_outlined,
-              color: LK.muted,
-              size: 20,
+            const SizedBox(height: 14),
+            AuthField(
+              controller: _passwordController,
+              focusNode: _passwordFocus,
+              label: copy.passwordLabel,
+              icon: Icons.lock_outline_rounded,
+              obscure: _obscurePassword,
+              textInputAction: TextInputAction.next,
+              onSubmitted: (_) => _confirmFocus.requestFocus(),
+              trailing: IconButton(
+                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                  color: LK.muted,
+                  size: 20,
+                ),
+                tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+              ),
             ),
-            tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
-          ),
-        ),
-        if (_error != null) ...[
-          const SizedBox(height: 14),
-          AuthInlineError(_error!),
-        ],
-        const SizedBox(height: 24),
-        if (_isLoading)
-          const AuthBusyButton()
-        else
-          CtaButton(label: copy.submitLabel, expand: true, onTap: _signup),
-        if (copy.terms.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text(
-            copy.terms,
-            textAlign: TextAlign.center,
-            style: LK.micro.copyWith(fontSize: 11.5),
-          ),
-        ],
-      ],
-    ));
+            if (copy.passwordHint.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.only(left: 2),
+                child: Text(copy.passwordHint, style: LK.micro.copyWith(fontSize: 12)),
+              ),
+            ],
+            const SizedBox(height: 10),
+            AuthField(
+              controller: _confirmController,
+              focusNode: _confirmFocus,
+              label: copy.confirmLabel,
+              icon: Icons.lock_person_outlined,
+              obscure: _obscureConfirm,
+              textInputAction: TextInputAction.go,
+              onSubmitted: (_) => _isLoading ? null : _signup(),
+              trailing: IconButton(
+                onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                icon: Icon(
+                  _obscureConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                  color: LK.muted,
+                  size: 20,
+                ),
+                tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 14),
+              AuthInlineError(_error!),
+            ],
+            const SizedBox(height: 24),
+            if (_isLoading)
+              const AuthBusyButton()
+            else
+              CtaButton(label: copy.submitLabel, expand: true, onTap: _signup),
+            if (copy.terms.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                copy.terms,
+                textAlign: TextAlign.center,
+                style: LK.micro.copyWith(fontSize: 11.5),
+              ),
+            ],
+          ],
+        ));
   }
 
   Widget _sentScaffold(SignupCopy copy) => AuthScaffold(
+        backLabel: copy.backLabel,
         title: copy.sentTitle,
         subtitle: copy.sentSubtitle,
         children: [
@@ -271,8 +269,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     color: LK.teal.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.mark_email_read_outlined,
-                      color: LK.teal, size: 26),
+                  child: const Icon(Icons.mark_email_read_outlined, color: LK.teal, size: 26),
                 ),
                 const SizedBox(height: 16),
                 Text(

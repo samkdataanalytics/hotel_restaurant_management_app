@@ -642,6 +642,8 @@ const _legalDoc = SectionSpec(
     FieldSpec.text('updated', 'Last updated', maxLength: 40,
         help: 'The date the legal text itself last changed, e.g. "April 8, 2025". '
             'Change it whenever you change the wording.'),
+    FieldSpec.text('updatedLabel', 'Wording before the date', maxLength: 40,
+        help: '{date} is the date above. Default: "Last updated: {date}".'),
     FieldSpec.text('backLabel', '"Back" link', maxLength: 30),
     FieldSpec.text('copyright', 'Copyright line', maxLength: 120, help: '{year} is the current year.'),
     FieldSpec.list(
@@ -695,6 +697,7 @@ const _loginCopy = SectionSpec(
   addable: false,
   fields: [
     FieldSpec.text('metaTitle', 'Browser tab title', maxLength: 70),
+    FieldSpec.text('backLabel', 'Link back to the site', maxLength: 30),
     FieldSpec.text('title', 'Heading', required: true, maxLength: 60),
     FieldSpec.text('subtitle', 'Line under the heading', maxLength: 100),
     FieldSpec.text('identifierLabel', 'Email field label', maxLength: 40),
@@ -714,6 +717,7 @@ const _signupCopy = SectionSpec(
   addable: false,
   fields: [
     FieldSpec.text('metaTitle', 'Browser tab title', maxLength: 70),
+    FieldSpec.text('backLabel', 'Link back to the site', maxLength: 30),
     FieldSpec.text('title', 'Heading', required: true, maxLength: 60),
     FieldSpec.text('subtitle', 'Line under the heading', maxLength: 100),
     FieldSpec.textarea('trialBanner', 'Free-trial banner', maxLength: 200, protectedTokens: true,

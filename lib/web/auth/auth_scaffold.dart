@@ -22,6 +22,9 @@ class AuthScaffold extends StatefulWidget {
   /// "Already have an account?" style prompt under the card.
   final Widget? footer;
 
+  /// The link back to the marketing site, above the logo.
+  final String backLabel;
+
   const AuthScaffold({
     super.key,
     required this.title,
@@ -29,6 +32,7 @@ class AuthScaffold extends StatefulWidget {
     required this.children,
     this.banner,
     this.footer,
+    this.backLabel = 'Back to site',
   });
 
   @override
@@ -111,7 +115,7 @@ class _AuthScaffoldState extends State<AuthScaffold>
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _BackToSite(),
+                            _BackToSite(label: widget.backLabel),
                             const SizedBox(height: 26),
                             MouseRegion(
                               cursor: SystemMouseCursors.click,
@@ -219,6 +223,10 @@ class AuthCard extends StatelessWidget {
 }
 
 class _BackToSite extends StatefulWidget {
+  const _BackToSite({required this.label});
+
+  final String label;
+
   @override
   State<_BackToSite> createState() => _BackToSiteState();
 }
@@ -243,7 +251,7 @@ class _BackToSiteState extends State<_BackToSite> {
                   size: 16, color: _hover ? LK.teal : LK.muted),
               const SizedBox(width: 7),
               Text(
-                'Back to site',
+                widget.label,
                 style: LK.micro.copyWith(
                   color: _hover ? LK.teal : LK.muted,
                   fontWeight: FontWeight.w600,

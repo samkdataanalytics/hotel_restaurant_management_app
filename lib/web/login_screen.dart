@@ -149,6 +149,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         seo: J({'title': copy.metaTitle}),
         fallbackTitle: 'Sign in — HotRest',
         child: AuthScaffold(
+          backLabel: copy.backLabel,
           title: copy.title,
           subtitle: copy.subtitle,
           footer: AuthFooterPrompt(

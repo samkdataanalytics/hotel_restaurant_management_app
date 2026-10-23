@@ -16,6 +16,7 @@ final Map<String, Map<String, Object?>> kSiteDefaults = {
   'global:footer': kFooterDefaults,
   'global:theme': kThemeDefaults,
   'global:site': kSiteSettingsDefaults,
+  'global:dialogs': kDialogsDefaults,
   'page:auth': kAuthDefaults,
   'page:help': kHelpDefaults,
   'page:terms': kTermsDefaults,

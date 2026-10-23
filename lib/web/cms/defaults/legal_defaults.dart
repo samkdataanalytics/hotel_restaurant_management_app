@@ -18,6 +18,7 @@ const Map<String, Object?> kTermsDefaults = {
       'content': {
         'title': 'Terms of Service',
         'updated': 'April 8, 2025',
+        'updatedLabel': 'Last updated: {date}',
         'backLabel': 'Back to Home',
         'copyright': '© {year} HotRest. All rights reserved.',
         'footerLinks': [
@@ -112,6 +113,7 @@ const Map<String, Object?> kReturnsDefaults = {
       'content': {
         'title': 'Return & Refund Policy',
         'updated': 'April 8, 2025',
+        'updatedLabel': 'Last updated: {date}',
         'backLabel': 'Back to Home',
         'copyright': '© {year} HotRest. All rights reserved.',
         'footerLinks': [
@@ -194,6 +196,7 @@ const Map<String, Object?> kPrivacyDefaults = {
       'content': {
         'title': 'Privacy Policy',
         'updated': 'April 8, 2025',
+        'updatedLabel': 'Last updated: {date}',
         'backLabel': 'Back to Home',
         'copyright': '© {year} HotRest. All rights reserved.',
         'footerLinks': [

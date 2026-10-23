@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../cms/chrome/dialog_content.dart';
 import '../cms/chrome/footer_content.dart';
 import '../cms/chrome/header_content.dart';
 import '../cms/data/site_providers.dart';
@@ -10,6 +11,7 @@ import '../cms/model/site_document.dart';
 import '../cms/model/site_theme.dart';
 import '../cms/platform/open_external.dart';
 import '../cms/platform/unload_guard.dart';
+import '../landing/landing_dialogs.dart';
 import 'field_env.dart';
 import 'json_path.dart';
 import 'media/media_library.dart';
@@ -433,6 +435,37 @@ class _TopBar extends ConsumerWidget {
               selected: {ui.navDoc},
               onSelectionChanged: (s) => go((u) => u.copyWith(navDoc: s.first)),
             ),
+          if (ui.workspace == StudioWorkspace.settings) ...[
+            SegmentedButton<String>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              segments: const [
+                ButtonSegment(value: 'global:site', label: Text('Contact & chat')),
+                ButtonSegment(value: 'global:dialogs', label: Text('Pop-ups')),
+              ],
+              selected: {ui.settingsDoc},
+              onSelectionChanged: (s) => go((u) => u.copyWith(settingsDoc: s.first)),
+            ),
+            if (ui.settingsDoc == 'global:dialogs') ...[
+              OutlinedButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => DemoDialog(content: DemoContent.fromJson(J.of(state.doc).obj('demo'))),
+                ),
+                child: const Text('Preview demo'),
+              ),
+              OutlinedButton(
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  builder: (_) => EnterpriseContactDialog(
+                    content: ContactContent.fromJson(J.of(state.doc).obj('contact')),
+                    preview: true,
+                  ),
+                ),
+                child: const Text('Preview contact form'),
+              ),
+            ],
+          ],
           if (isDoc) ...[
             SegmentedButton<Device>(
               showSelectedIcon: false,

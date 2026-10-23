@@ -106,3 +106,66 @@ const List<FieldSpec> kSiteFields = [
       help: 'Pre-filled in the chat when a visitor taps the button.'),
   FieldSpec.text('whatsappLabel', 'Label on hover', maxLength: 30),
 ];
+
+/// The "Watch demo" tour and the "Contact sales" form (`global:dialogs`).
+const List<FieldSpec> kDialogFields = [
+  FieldSpec.group('demo', 'Watch-demo dialog', [
+    FieldSpec.text('title', 'Title', required: true, maxLength: 60),
+    FieldSpec.text('subtitle', 'Line under the title', maxLength: 100),
+    FieldSpec.text('closeLabel', 'Close button hint', maxLength: 20),
+    FieldSpec.list(
+      'tabs',
+      'Tabs',
+      [
+        FieldSpec.text('name', 'Tab name', required: true, maxLength: 24),
+        FieldSpec.list(
+          'items',
+          'Highlights',
+          [
+            FieldSpec.icon('icon', 'Icon'),
+            FieldSpec.choice('tone', 'Colour', {
+              'blue': 'Blue',
+              'green': 'Green',
+              'teal': 'Teal',
+              'purple': 'Purple',
+              'red': 'Red',
+              'cyan': 'Cyan',
+            }),
+            FieldSpec.text('title', 'Title', required: true, maxLength: 40),
+            FieldSpec.textarea('desc', 'Description', maxLength: 200,
+                verify: 'Contains specific performance claims ("under 10 seconds"). Confirm them.'),
+          ],
+          itemTitleKey: 'title',
+          itemLabel: 'highlight',
+          maxItems: 8,
+          template: {'icon': 'check_circle_rounded', 'tone': 'teal', 'title': 'New highlight', 'desc': ''},
+        ),
+      ],
+      itemTitleKey: 'name',
+      itemLabel: 'tab',
+      minItems: 1,
+      maxItems: 5,
+      template: {'name': 'New tab', 'items': <Object>[]},
+    ),
+    FieldSpec.group('cta', 'Button at the bottom', [
+      FieldSpec.text('label', 'Button text', maxLength: 60, protectedTokens: true,
+          help: 'Use {trialDays} for the trial length. Leave empty to hide the button.'),
+      FieldSpec.link('link', 'Where it goes'),
+    ]),
+  ]),
+  FieldSpec.group('contact', 'Contact-sales form', [
+    FieldSpec.text('title', 'Title', required: true, maxLength: 60),
+    FieldSpec.text('subtitle', 'Line under the title', maxLength: 100),
+    FieldSpec.text('closeLabel', 'Close button hint', maxLength: 20),
+    FieldSpec.text('nameLabel', 'Name field', maxLength: 40),
+    FieldSpec.text('companyLabel', 'Company field', maxLength: 40),
+    FieldSpec.text('emailLabel', 'Email field', maxLength: 40),
+    FieldSpec.text('phoneLabel', 'Phone field', maxLength: 40),
+    FieldSpec.text('propertiesLabel', 'Properties field', maxLength: 40),
+    FieldSpec.text('messageLabel', 'Message field', maxLength: 60),
+    FieldSpec.text('submitLabel', 'Send button', maxLength: 30),
+    FieldSpec.text('successTitle', 'After sending: heading', maxLength: 60),
+    FieldSpec.textarea('successBody', 'After sending: text', maxLength: 300),
+    FieldSpec.text('successClose', 'After sending: button', maxLength: 30),
+  ]),
+];

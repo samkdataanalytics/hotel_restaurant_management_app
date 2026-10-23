@@ -1,57 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../providers/service_providers.dart';
 import '../../services/lead_service.dart';
 import '../brand_kit.dart';
+import '../cms/chrome/dialog_content.dart';
 import '../cms/data/site_providers.dart';
+import '../cms/defaults/site_defaults.dart';
 import '../cms/model/json_reader.dart';
+import '../cms/render/link_action.dart';
 import '../cms/platform/open_external.dart';
 
-typedef _Highlight = ({IconData icon, Color color, String title, String desc});
+/// "Watch Demo" — a tabbed tour of what ships on day one. Its wording comes from
+/// the `global:dialogs` document; [content] overrides that (the studio previews a
+/// draft this way).
+class DemoDialog extends ConsumerStatefulWidget {
+  const DemoDialog({super.key, this.content});
 
-/// "Watch Demo" — a tabbed tour of what ships on day one.
-///
-/// Content is unchanged from the previous landing page; only the styling moved
-/// onto the new kit.
-class DemoDialog extends StatefulWidget {
-  const DemoDialog({super.key});
+  final DemoContent? content;
+
   @override
-  State<DemoDialog> createState() => _DemoDialogState();
+  ConsumerState<DemoDialog> createState() => _DemoDialogState();
 }
 
-class _DemoDialogState extends State<DemoDialog> {
+class _DemoDialogState extends ConsumerState<DemoDialog> {
   int _tab = 0;
 
-  static const _tabs = ['Hotel', 'Restaurant', 'Guest Portal'];
-
-  static const List<List<_Highlight>> _highlights = [
-    [
-      (icon: Icons.how_to_reg_rounded, color: Color(0xFF2563EB), title: 'One-click check-in', desc: 'Front desk checks in a guest in under 10 seconds — folio auto-generated, room assigned, key ready.'),
-      (icon: Icons.king_bed_rounded, color: Color(0xFF16A34A), title: 'Live room availability', desc: 'Colour-coded room grid shows occupied, available and maintenance rooms in real time.'),
-      (icon: Icons.receipt_long_rounded, color: LK.teal, title: 'Instant folio billing', desc: 'Auto-calculates room charges, extras and taxes — export to PDF with one click.'),
-      (icon: Icons.people_alt_rounded, color: Color(0xFF7C3AED), title: 'Staff shift management', desc: 'Assign and track shifts, clock-ins and attendance — no third-party HR tool needed.'),
-    ],
-    [
-      (icon: Icons.point_of_sale_rounded, color: LK.teal, title: 'Table-side ordering', desc: 'Waiters take orders on any device — sent instantly to the kitchen display, no paper tickets.'),
-      (icon: Icons.kitchen_rounded, color: Color(0xFFE5484D), title: 'Kitchen display system', desc: 'KDS shows orders in real time, with timers and priority flags so chefs never miss a ticket.'),
-      (icon: Icons.splitscreen_rounded, color: Color(0xFF16A34A), title: 'Split bills & payments', desc: 'Split any bill by item or equally across guests — supports cash, card and mixed payments.'),
-      (icon: Icons.analytics_rounded, color: Color(0xFF0891B2), title: 'Sales analytics', desc: 'See your top-selling dishes, peak hours and daily revenue at a glance.'),
-    ],
-    [
-      (icon: Icons.qr_code_2_rounded, color: Color(0xFF16A34A), title: 'QR self check-in', desc: 'Guests scan a QR at reception, fill in details on their phone and check in — no queue, no paperwork.'),
-      (icon: Icons.room_service_rounded, color: LK.teal, title: 'Room service on phone', desc: 'Guests order food from their room by scanning a QR — the order goes straight to the kitchen.'),
-      (icon: Icons.restaurant_menu_rounded, color: Color(0xFF2563EB), title: 'Digital table menu', desc: 'Diners scan a table QR, browse the menu and order — no app download required.'),
-      (icon: Icons.no_accounts_rounded, color: Color(0xFF7C3AED), title: 'No app needed', desc: 'Everything runs in the mobile browser. Guests do not install anything.'),
-    ],
-  ];
+  DemoContent _content() {
+    if (widget.content != null) return widget.content!;
+    final raw = J.of(ref.watch(siteRawProvider('global:dialogs'))).obj('demo');
+    final c = DemoContent.fromJson(raw);
+    // A published document that parses to no tabs would show an empty dialog.
+    return c.tabs.isEmpty ? DemoContent.fromJson(J.of(siteDefaultJson('global:dialogs')).obj('demo')) : c;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final c = _content();
     final narrow = MediaQuery.sizeOf(context).width < 620;
-    final items = _highlights[_tab];
+    final tab = _tab.clamp(0, c.tabs.length - 1);
+    final items = c.tabs[tab].items;
 
     return Dialog(
       backgroundColor: LK.white,
@@ -71,16 +60,18 @@ class _DemoDialogState extends State<DemoDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('See HotRest in action', style: LK.h3(context).copyWith(fontSize: 22)),
-                        const SizedBox(height: 4),
-                        const Text('What you get — out of the box, day one.', style: LK.small),
+                        Text(c.title, style: LK.h3(context).copyWith(fontSize: 22)),
+                        if (c.subtitle.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(c.subtitle, style: LK.small),
+                        ],
                       ],
                     ),
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close_rounded, color: LK.muted),
-                    tooltip: 'Close',
+                    tooltip: c.closeLabel,
                   ),
                 ],
               ),
@@ -93,8 +84,8 @@ class _DemoDialogState extends State<DemoDialog> {
                   border: Border.all(color: LK.line),
                 ),
                 child: Row(
-                  children: List.generate(_tabs.length, (i) {
-                    final on = _tab == i;
+                  children: List.generate(c.tabs.length, (i) {
+                    final on = tab == i;
                     return Expanded(
                       child: GestureDetector(
                         onTap: () => setState(() => _tab = i),
@@ -107,7 +98,7 @@ class _DemoDialogState extends State<DemoDialog> {
                             borderRadius: BorderRadius.circular(9),
                           ),
                           child: Text(
-                            _tabs[i],
+                            c.tabs[i].name,
                             style: TextStyle(
                               fontFamily: 'Outfit',
                               color: on ? Colors.white : LK.body,
@@ -136,15 +127,16 @@ class _DemoDialogState extends State<DemoDialog> {
                 );
               }),
               const SizedBox(height: 22),
-              CtaButton(
-                label: 'Start 45-day free trial — no credit card',
-                icon: Icons.arrow_forward_rounded,
-                expand: true,
-                onTap: () {
-                  Navigator.of(context).pop();
-                  context.go('/signup');
-                },
-              ),
+              if (c.ctaLabel.isNotEmpty && !c.ctaLink.isNone)
+                CtaButton(
+                  label: c.ctaLabel,
+                  icon: Icons.arrow_forward_rounded,
+                  expand: true,
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    runLink(context, c.ctaLink);
+                  },
+                ),
             ],
           ),
         ),
@@ -154,7 +146,7 @@ class _DemoDialogState extends State<DemoDialog> {
 }
 
 class _HighlightTile extends StatelessWidget {
-  final _Highlight item;
+  final DemoHighlight item;
   const _HighlightTile({required this.item});
 
   @override
@@ -207,7 +199,14 @@ class _HighlightTile extends StatelessWidget {
 /// Submission path is unchanged: [LeadService.submitLead] with the same six
 /// fields, same validation, same success state.
 class EnterpriseContactDialog extends ConsumerStatefulWidget {
-  const EnterpriseContactDialog({super.key});
+  const EnterpriseContactDialog({super.key, this.content, this.preview = false});
+
+  /// Overrides the wording from the `global:dialogs` document (studio preview).
+  final ContactContent? content;
+
+  /// In the studio preview, submitting shows the success step and sends nothing.
+  final bool preview;
+
   @override
   ConsumerState<EnterpriseContactDialog> createState() =>
       _EnterpriseContactDialogState();
@@ -238,8 +237,17 @@ class _EnterpriseContactDialogState
     super.dispose();
   }
 
+  ContactContent _content() {
+    if (widget.content != null) return widget.content!;
+    return ContactContent.fromJson(J.of(ref.watch(siteRawProvider('global:dialogs'))).obj('contact'));
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (widget.preview) {
+      setState(() => _submitted = true);
+      return;
+    }
     setState(() => _submitting = true);
     try {
       await _service.submitLead(
@@ -275,13 +283,13 @@ class _EnterpriseContactDialogState
         constraints: const BoxConstraints(maxWidth: 540),
         child: Padding(
           padding: const EdgeInsets.all(30),
-          child: _submitted ? _success() : _form(),
+          child: _submitted ? _success(_content()) : _form(_content()),
         ),
       ),
     );
   }
 
-  Widget _success() => Column(
+  Widget _success(ContactContent c) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
@@ -294,24 +302,23 @@ class _EnterpriseContactDialogState
             child: const Icon(Icons.check_rounded, color: LK.teal, size: 32),
           ),
           const SizedBox(height: 20),
-          Text('Request received', style: LK.h3(context).copyWith(fontSize: 22)),
+          Text(c.successTitle, style: LK.h3(context).copyWith(fontSize: 22)),
           const SizedBox(height: 10),
-          const Text(
-            'Thank you for reaching out. Our team will contact you within 1–2 '
-            'business days to discuss your requirements.',
+          Text(
+            c.successBody,
             textAlign: TextAlign.center,
             style: LK.small,
           ),
           const SizedBox(height: 26),
           CtaButton(
-            label: 'Close',
+            label: c.successClose,
             expand: true,
             onTap: () => Navigator.of(context).pop(),
           ),
         ],
       );
 
-  Widget _form() => Form(
+  Widget _form(ContactContent c) => Form(
         key: _formKey,
         child: SingleChildScrollView(
           child: Column(
@@ -333,25 +340,25 @@ class _EnterpriseContactDialogState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Contact sales', style: LK.h3(context)),
-                        const Text("We'll get back to you within 24 hours.", style: LK.micro),
+                        Text(c.title, style: LK.h3(context)),
+                        if (c.subtitle.isNotEmpty) Text(c.subtitle, style: LK.micro),
                       ],
                     ),
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close_rounded, color: LK.muted),
-                    tooltip: 'Close',
+                    tooltip: c.closeLabel,
                   ),
                 ],
               ),
               const SizedBox(height: 22),
-              _field(_name, 'Full name', required: true),
-              _field(_company, 'Company / hotel group', required: true),
-              _field(_email, 'Work email', required: true, email: true),
-              _field(_phone, 'Phone number'),
-              _field(_propCount, 'Number of properties', number: true),
-              _field(_message, 'Tell us about your needs', maxLines: 3),
+              _field(_name, c.nameLabel, required: true),
+              _field(_company, c.companyLabel, required: true),
+              _field(_email, c.emailLabel, required: true, email: true),
+              _field(_phone, c.phoneLabel),
+              _field(_propCount, c.propertiesLabel, number: true),
+              _field(_message, c.messageLabel, maxLines: 3),
               const SizedBox(height: 8),
               _submitting
                   ? const SizedBox(
@@ -364,7 +371,7 @@ class _EnterpriseContactDialogState
                         ),
                       ),
                     )
-                  : CtaButton(label: 'Send request', expand: true, onTap: _submit),
+                  : CtaButton(label: c.submitLabel, expand: true, onTap: _submit),
             ],
           ),
         ),

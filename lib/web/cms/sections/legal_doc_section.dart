@@ -57,6 +57,7 @@ class LegalDocContent {
   const LegalDocContent({
     required this.title,
     required this.updated,
+    required this.updatedLabel,
     required this.backLabel,
     required this.copyright,
     required this.sections,
@@ -68,6 +69,7 @@ class LegalDocContent {
   factory LegalDocContent.fromJson(J j, {Map<String, String> vars = const {}}) => LegalDocContent(
         title: expandTokens(j.str('title'), vars),
         updated: j.str('updated'),
+        updatedLabel: j.str('updatedLabel', 'Last updated: {date}'),
         backLabel: j.str('backLabel', 'Back to Home'),
         copyright: expandTokens(j.str('copyright'), vars),
         sections: j
@@ -82,6 +84,9 @@ class LegalDocContent {
   /// "April 8, 2025": a date the admin states, not one derived from publishing,
   /// because it records when the legal text itself last changed.
   final String updated;
+
+  /// "Last updated: {date}".
+  final String updatedLabel;
   final String backLabel;
   final String copyright;
   final List<LegalSectionContent> sections;
@@ -128,7 +133,8 @@ class LegalDocSection extends ConsumerWidget {
               ),
               if (content.updated.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text('Last updated: ${content.updated}', style: const TextStyle(color: _muted, fontSize: 13)),
+                Text(expandTokens(content.updatedLabel, {'date': content.updated}),
+                    style: const TextStyle(color: _muted, fontSize: 13)),
               ],
               const SizedBox(height: 32),
               const Divider(color: _border),

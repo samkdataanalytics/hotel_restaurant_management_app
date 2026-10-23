@@ -1,0 +1,64 @@
+name: Test
+
+# Runs on every push and pull request, including to main. Migrations reach
+# production from main with no other gate, so this is the only check between a
+# change and the live site.
+on:
+  push:
+    branches: [main, dev_v1, chirath_dev_v1]
+  pull_request:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.3'
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # The website CMS and the pages it draws. The rest of the app carries a
+      # backlog of analyzer findings (473 at the start of the CMS work, two of them
+      # errors in the unused admin_app.dart), so the whole project is not gated
+      # here yet; these paths are, and must stay clean.
+      - name: Analyze the website CMS
+        run: >
+          flutter analyze --no-fatal-infos
+          lib/web/cms lib/web/studio lib/web/landing lib/web/auth
+          lib/web/landing_screen.dart lib/web/help_screen.dart lib/web/legal_screen.dart
+          lib/web/login_screen.dart lib/web/signup_screen.dart test/cms
+
+      - name: Unit and widget tests
+        run: flutter test
+
+      - name: Public text coverage
+        run: python3 tool/cms/audit_coverage.py --strict
+
+  sql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: CMS migration and its regression test
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: tool/cms/run_sql_tests.sh
