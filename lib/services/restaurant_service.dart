@@ -277,10 +277,12 @@ class RestaurantService {
 
   Future<List<IngredientPrice>> getPricesForIngredient(
       String ingredientId) async {
+    if (hotelId == null) return [];
     final rows = await _db
         .from('ingredient_prices')
         .select()
         .eq('ingredient_id', ingredientId)
+        .eq('hotel_id', hotelId!)
         .order('date', ascending: false);
     return rows.map(_priceFromRow).toList();
   }
@@ -339,10 +341,12 @@ class RestaurantService {
 
   Future<List<MenuItemCostRecord>> getCostRecordsForItem(
       String menuItemId) async {
+    if (hotelId == null) return [];
     final rows = await _db
         .from('menu_item_cost_records')
         .select()
         .eq('menu_item_id', menuItemId)
+        .eq('hotel_id', hotelId!)
         .order('date', ascending: false);
     return rows.map(_costRecordFromRow).toList();
   }
@@ -565,10 +569,12 @@ class RestaurantService {
 
   /// Returns ALL open (non-cancelled, non-paid) orders for a table, oldest first.
   Future<List<RestaurantOrder>> getOpenOrdersForTable(String tableId) async {
+    if (hotelId == null) return [];
     final rows = await _db
         .from('restaurant_orders')
         .select()
         .eq('table_id', tableId)
+        .eq('hotel_id', hotelId!)
         .order('created_at', ascending: true);
 
     return rows
@@ -641,10 +647,12 @@ class RestaurantService {
   /// Returns the most recent active order for a table.
   /// "Active" = not cancelled AND not (served + payment collected).
   Future<RestaurantOrder?> getActiveOrderForTable(String tableId) async {
+    if (hotelId == null) return null;
     final rows = await _db
         .from('restaurant_orders')
         .select()
         .eq('table_id', tableId)
+        .eq('hotel_id', hotelId!)
         .order('created_at', ascending: false);
 
     final active = rows.map(_orderFromRow).where((o) {
@@ -669,10 +677,12 @@ class RestaurantService {
 
   Future<InventoryItem?> getInventoryForIngredient(
       String ingredientId) async {
+    if (hotelId == null) return null;
     final rows = await _db
         .from('inventory')
         .select()
         .eq('ingredient_id', ingredientId)
+        .eq('hotel_id', hotelId!)
         .limit(1);
     return rows.isNotEmpty ? _inventoryFromRow(rows.first) : null;
   }

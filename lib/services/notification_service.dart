@@ -54,28 +54,45 @@ class NotificationService {
 
   NotificationService(this.hotelId);
 
+  // ── Recipient targeting ─────────────────────────────────────────────────
+  // Notifications are hotel-wide by default. Tagging `metadata.recipient_user_id`
+  // targets a single staff member; untagged notifications remain visible to
+  // everyone. Filtering happens client-side so no schema change is needed.
+
+  static bool _visibleTo(AppNotification n, String? viewerUserId) {
+    final recipient = n.metadata['recipient_user_id'] as String?;
+    if (recipient == null) return true;
+    return recipient == viewerUserId;
+  }
+
   // ── Fetch recent notifications (last 50) ──────────────────────────────────
 
-  Future<List<AppNotification>> getNotifications() async {
+  Future<List<AppNotification>> getNotifications({String? viewerUserId}) async {
     final rows = await _db
         .from('notifications')
         .select()
         .eq('hotel_id', hotelId)
         .order('created_at', ascending: false)
         .limit(50);
-    return rows.map<AppNotification>(AppNotification.fromMap).toList();
+    return rows
+        .map<AppNotification>(AppNotification.fromMap)
+        .where((n) => _visibleTo(n, viewerUserId))
+        .toList();
   }
 
   // ── Real-time stream ──────────────────────────────────────────────────────
 
-  Stream<List<AppNotification>> watchNotifications() {
+  Stream<List<AppNotification>> watchNotifications({String? viewerUserId}) {
     return _db
         .from('notifications')
         .stream(primaryKey: ['id'])
         .eq('hotel_id', hotelId)
         .order('created_at', ascending: false)
         .limit(50)
-        .map((rows) => rows.map(AppNotification.fromMap).toList());
+        .map((rows) => rows
+            .map(AppNotification.fromMap)
+            .where((n) => _visibleTo(n, viewerUserId))
+            .toList());
   }
 
   // ── Create ────────────────────────────────────────────────────────────────
@@ -199,5 +216,19 @@ class NotificationService {
           'order_number': orderNumber,
           'room_number': roomNumber,
         },
+      );
+
+  /// Targeted at a single staff member — only visible to [recipientUserId]
+  /// (see [_visibleTo]). Used for shift add/edit/delete/copy-week alerts.
+  Future<void> notifyShiftChange({
+    required String recipientUserId,
+    required String title,
+    required String body,
+  }) =>
+      create(
+        type: 'shift_change',
+        title: title,
+        body: body,
+        metadata: {'recipient_user_id': recipientUserId},
       );
 }

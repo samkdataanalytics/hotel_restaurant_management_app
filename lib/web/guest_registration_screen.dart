@@ -139,7 +139,6 @@ class _GuestRegistrationScreenState extends ConsumerState<GuestRegistrationScree
 
     setState(() => _isLoading = true);
 
-    // Update Guest
     final updatedGuest = _guest!.copyWith(
       fullName: _fullNameCtrl.text.trim(),
       email: _emailCtrl.text.trim(),
@@ -148,9 +147,7 @@ class _GuestRegistrationScreenState extends ConsumerState<GuestRegistrationScree
       whatsApp: _whatsAppCtrl.text.trim(),
       dateOfBirth: _dateOfBirth,
     );
-    await _bookingService.updateGuest(updatedGuest);
 
-    // Collect Preferences
     final preferences = {
       'bikeRental': _bikeRental,
       'airportTransfer': _airportTransfer,
@@ -161,13 +158,12 @@ class _GuestRegistrationScreenState extends ConsumerState<GuestRegistrationScree
       'specialRequests': _specialRequestsCtrl.text.trim(),
     };
 
-    // Update Booking
-    final updatedBooking = _booking!.copyWith(
-      isGuestFormSubmitted: true,
-      guestPreferences: preferences,
-      specialRequests: _specialRequestsCtrl.text.trim().isNotEmpty ? _specialRequestsCtrl.text.trim() : _booking!.specialRequests,
+    await _bookingService.submitGuestForm(
+      bookingRef:      _booking!.bookingRef,
+      guest:           updatedGuest,
+      preferences:     preferences,
+      specialRequests: _specialRequestsCtrl.text.trim(),
     );
-    await _bookingService.updateBooking(updatedBooking);
 
     setState(() {
       _error = 'SUCCESS';

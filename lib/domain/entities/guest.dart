@@ -53,6 +53,19 @@ class Guest {
     );
   }
 
+  static Guest fromDbRow(Map<String, dynamic> r) => Guest.fromMap({
+        'id': r['id'],
+        'fullName': r['full_name'],
+        'email': r['email'],
+        'phone': r['phone'],
+        'idType': r['id_type'],
+        'idNumber': r['id_number'],
+        'nationality': r['nationality'],
+        'passportOrNic': r['passport_or_nic'],
+        'dateOfBirth': r['date_of_birth'],
+        'whatsApp': r['whats_app'],
+      });
+
   Guest copyWith({
     String? id,
     String? fullName,

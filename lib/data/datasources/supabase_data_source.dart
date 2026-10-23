@@ -19,19 +19,6 @@ class SupabaseDataSource {
 
   // ─── Mappers ─────────────────────────────────────────────────────────────
 
-  Guest _guestFromRow(Map<String, dynamic> r) => Guest.fromMap({
-        'id': r['id'],
-        'fullName': r['full_name'],
-        'email': r['email'],
-        'phone': r['phone'],
-        'idType': r['id_type'],
-        'idNumber': r['id_number'],
-        'nationality': r['nationality'],
-        'passportOrNic': r['passport_or_nic'],
-        'dateOfBirth': r['date_of_birth'],
-        'whatsApp': r['whats_app'],
-      });
-
   Map<String, dynamic> _guestToRow(Guest g) => {
         'id': g.id,
         'full_name': g.fullName,
@@ -71,25 +58,6 @@ class SupabaseDataSource {
         if (hotelId != null) 'hotel_id': hotelId,
       };
 
-  Booking _bookingFromRow(Map<String, dynamic> r) => Booking.fromMap({
-        'id': r['id'],
-        'bookingRef': r['booking_ref'],
-        'guestId': r['guest_id'],
-        'roomId': r['room_id'],
-        'checkInDate': r['check_in_date'],
-        'checkOutDate': r['check_out_date'],
-        'status': r['status'],
-        'numberOfGuests': r['number_of_guests'],
-        'specialRequests': r['special_requests'] ?? '',
-        'source': r['source'] ?? 'direct',
-        'totalAmount': r['total_amount'],
-        'isQrGenerated': r['is_qr_generated'] ?? false,
-        'isQrSent': r['is_qr_sent'] ?? false,
-        'isGuestFormSubmitted': r['is_guest_form_submitted'] ?? false,
-        'isPaid': r['is_paid'] ?? false,
-        'guestPreferences': r['guest_preferences'],
-      });
-
   Map<String, dynamic> _bookingToRow(Booking b) => {
         'id': b.id,
         'booking_ref': b.bookingRef,
@@ -107,6 +75,8 @@ class SupabaseDataSource {
         'is_guest_form_submitted': b.isGuestFormSubmitted,
         'is_paid': b.isPaid,
         'guest_preferences': b.guestPreferences,
+        'discount_type': b.discountType,
+        'discount_value': b.discountValue,
         if (hotelId != null) 'hotel_id': hotelId,
       };
 
@@ -167,15 +137,16 @@ class SupabaseDataSource {
   // ─── Guests ──────────────────────────────────────────────────────────────
 
   Future<Guest?> getGuest(String id) async {
-    final rows = await _db.from('guests').select().eq('id', id).limit(1);
+    if (hotelId == null) return null;
+    final rows = await _db.from('guests').select().eq('id', id).eq('hotel_id', hotelId!).limit(1);
     if (rows.isEmpty) return null;
-    return _guestFromRow(rows.first);
+    return Guest.fromDbRow(rows.first);
   }
 
   Future<List<Guest>> getAllGuests() async {
     if (hotelId == null) return [];
     final rows = await _db.from('guests').select().eq('hotel_id', hotelId!).order('full_name');
-    return rows.map(_guestFromRow).toList();
+    return rows.map(Guest.fromDbRow).toList();
   }
 
   Future<void> insertGuest(Guest guest) async {
@@ -193,15 +164,16 @@ class SupabaseDataSource {
   // ─── Rooms ───────────────────────────────────────────────────────────────
 
   Future<Room?> getRoom(String id) async {
-    final rows = await _db.from('rooms').select().eq('id', id).limit(1);
+    if (hotelId == null) return null;
+    final rows = await _db.from('rooms').select().eq('id', id).eq('hotel_id', hotelId!).limit(1);
     if (rows.isEmpty) return null;
-    return _roomFromRow(rows.first);
+    return Room.fromDbRow(rows.first);
   }
 
   Future<List<Room>> getAllRooms() async {
     if (hotelId == null) return [];
     final rows = await _db.from('rooms').select().eq('hotel_id', hotelId!).order('room_number');
-    return rows.map(_roomFromRow).toList();
+    return rows.map(Room.fromDbRow).toList();
   }
 
   Future<void> insertRoom(Room room) async {
@@ -219,28 +191,29 @@ class SupabaseDataSource {
   Future<List<Room>> getAvailableRooms() async {
     if (hotelId == null) return [];
     final rows = await _db.from('rooms').select().eq('hotel_id', hotelId!).eq('status', 'available');
-    return rows.map(_roomFromRow).toList();
+    return rows.map(Room.fromDbRow).toList();
   }
 
   // ─── Bookings ────────────────────────────────────────────────────────────
 
   Future<Booking?> getBooking(String id) async {
-    final rows = await _db.from('bookings').select().eq('id', id).limit(1);
+    if (hotelId == null) return null;
+    final rows = await _db.from('bookings').select().eq('id', id).eq('hotel_id', hotelId!).limit(1);
     if (rows.isEmpty) return null;
-    return _bookingFromRow(rows.first);
+    return Booking.fromDbRow(rows.first);
   }
 
   Future<List<Booking>> getAllBookings() async {
     if (hotelId == null) return [];
     final rows = await _db.from('bookings').select().eq('hotel_id', hotelId!).order('created_at', ascending: false);
-    return rows.map(_bookingFromRow).toList();
+    return rows.map(Booking.fromDbRow).toList();
   }
 
   Future<Booking?> getBookingByRef(String ref) async {
     if (hotelId == null) return null;
     final rows = await _db.from('bookings').select().eq('hotel_id', hotelId!).eq('booking_ref', ref).limit(1);
     if (rows.isEmpty) return null;
-    return _bookingFromRow(rows.first);
+    return Booking.fromDbRow(rows.first);
   }
 
   Future<void> insertBooking(Booking booking) async {
@@ -258,7 +231,7 @@ class SupabaseDataSource {
   Future<List<Booking>> getBookingsByStatus(BookingStatus status) async {
     if (hotelId == null) return [];
     final rows = await _db.from('bookings').select().eq('hotel_id', hotelId!).eq('status', status.name);
-    return rows.map(_bookingFromRow).toList();
+    return rows.map(Booking.fromDbRow).toList();
   }
 
   Future<String> getNextBookingRef() async {
@@ -305,9 +278,9 @@ class SupabaseDataSource {
 
     return rows.map((r) {
       return {
-        'booking': _bookingFromRow(r),
-        'guest': r['guests'] != null ? _guestFromRow(r['guests']) : null,
-        'room': r['rooms'] != null ? _roomFromRow(r['rooms']) : null,
+        'booking': Booking.fromDbRow(r),
+        'guest': r['guests'] != null ? Guest.fromDbRow(r['guests']) : null,
+        'room': r['rooms'] != null ? Room.fromDbRow(r['rooms']) : null,
       };
     }).toList();
   }
@@ -315,15 +288,16 @@ class SupabaseDataSource {
   // ─── Check-Ins ───────────────────────────────────────────────────────────
 
   Future<CheckIn?> getCheckIn(String id) async {
-    final rows = await _db.from('check_ins').select().eq('id', id).limit(1);
+    if (hotelId == null) return null;
+    final rows = await _db.from('check_ins').select().eq('id', id).eq('hotel_id', hotelId!).limit(1);
     if (rows.isEmpty) return null;
-    return _checkInFromRow(rows.first);
+    return CheckIn.fromDbRow(rows.first);
   }
 
   Future<List<CheckIn>> getAllCheckIns() async {
     if (hotelId == null) return [];
     final rows = await _db.from('check_ins').select().eq('hotel_id', hotelId!).order('check_in_time', ascending: false);
-    return rows.map(_checkInFromRow).toList();
+    return rows.map(CheckIn.fromDbRow).toList();
   }
 
   Future<void> insertCheckIn(CheckIn checkIn) async {
@@ -335,7 +309,7 @@ class SupabaseDataSource {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
     final rows = await _db.from('check_ins').select().eq('hotel_id', hotelId!).gte('check_in_time', todayStart);
-    return rows.map(_checkInFromRow).toList();
+    return rows.map(CheckIn.fromDbRow).toList();
   }
 
   Future<List<Map<String, dynamic>>> getEnrichedCheckIns() async {
@@ -348,10 +322,10 @@ class SupabaseDataSource {
 
     return rows.map((r) {
       return {
-        'checkIn': _checkInFromRow(r),
-        'booking': r['bookings'] != null ? _bookingFromRow(r['bookings']) : null,
-        'guest': r['guests'] != null ? _guestFromRow(r['guests']) : null,
-        'room': r['rooms'] != null ? _roomFromRow(r['rooms']) : null,
+        'checkIn': CheckIn.fromDbRow(r),
+        'booking': r['bookings'] != null ? Booking.fromDbRow(r['bookings']) : null,
+        'guest': r['guests'] != null ? Guest.fromDbRow(r['guests']) : null,
+        'room': r['rooms'] != null ? Room.fromDbRow(r['rooms']) : null,
       };
     }).toList();
   }
@@ -361,17 +335,19 @@ class SupabaseDataSource {
   Future<List<Expense>> getAllExpenses() async {
     if (hotelId == null) return [];
     final rows = await _db.from('expenses').select().eq('hotel_id', hotelId!).order('date', ascending: false);
-    return rows.map(_expenseFromRow).toList();
+    return rows.map(Expense.fromDbRow).toList();
   }
 
   Future<List<Expense>> getRoomExpenses(String roomId) async {
-    final rows = await _db.from('expenses').select().eq('room_id', roomId).order('date', ascending: false);
-    return rows.map(_expenseFromRow).toList();
+    if (hotelId == null) return [];
+    final rows = await _db.from('expenses').select().eq('room_id', roomId).eq('hotel_id', hotelId!).order('date', ascending: false);
+    return rows.map(Expense.fromDbRow).toList();
   }
 
   Future<List<Expense>> getExpensesByBookingId(String bookingId) async {
-    final rows = await _db.from('expenses').select().eq('booking_id', bookingId).order('date', ascending: false);
-    return rows.map(_expenseFromRow).toList();
+    if (hotelId == null) return [];
+    final rows = await _db.from('expenses').select().eq('booking_id', bookingId).eq('hotel_id', hotelId!).order('date', ascending: false);
+    return rows.map(Expense.fromDbRow).toList();
   }
 
   Future<void> insertExpense(Expense expense) async {

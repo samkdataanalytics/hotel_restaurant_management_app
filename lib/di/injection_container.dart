@@ -26,6 +26,7 @@ import '../domain/usecases/get_enriched_check_ins.dart';
 import '../domain/usecases/get_enriched_bookings.dart';
 import '../domain/usecases/manage_rooms.dart';
 import '../domain/usecases/manage_reservations.dart';
+import '../services/restaurant_service.dart';
 
 final sl = GetIt.instance;
 
@@ -64,6 +65,9 @@ Future<void> initDependencies() async {
   sl.registerLazySingleton<IngredientRepository>(
     () => IngredientRepositoryImpl(),
   );
+
+  // ─── Services (Restaurant) ─────────────────────────────────
+  sl.registerLazySingleton<RestaurantService>(() => RestaurantService());
 
   // ─── Use Cases ────────────────────────────────────────────
   sl.registerLazySingleton(() => LookupBooking(sl(), sl(), sl()));

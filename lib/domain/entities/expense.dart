@@ -62,6 +62,19 @@ class Expense {
     );
   }
 
+  static Expense fromDbRow(Map<String, dynamic> r) => Expense.fromMap({
+        'id': r['id'],
+        'description': r['description'],
+        'amount': r['amount'],
+        'category': r['category'],
+        'date': r['date'],
+        'endDate': r['end_date'],
+        'roomId': r['room_id'],
+        'isBillable': r['is_billable'] ?? false,
+        'isPaid': r['is_paid'] ?? false,
+        'bookingId': r['booking_id'],
+      });
+
   Expense copyWith({
     String? id,
     String? description,

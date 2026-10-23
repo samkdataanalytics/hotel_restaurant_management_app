@@ -53,6 +53,16 @@ class CheckIn {
     );
   }
 
+  static CheckIn fromDbRow(Map<String, dynamic> r) => CheckIn.fromMap({
+        'id': r['id'],
+        'bookingId': r['booking_id'],
+        'guestId': r['guest_id'],
+        'roomId': r['room_id'],
+        'checkInTime': r['check_in_time'],
+        'idVerified': r['id_verified'],
+        'keyIssued': r['key_issued'],
+      });
+
   CheckIn copyWith({
     String? id,
     String? bookingId,

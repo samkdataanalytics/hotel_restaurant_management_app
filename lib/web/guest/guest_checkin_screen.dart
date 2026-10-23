@@ -175,7 +175,6 @@ class _GuestCheckinScreenState extends ConsumerState<GuestCheckinScreen> {
       whatsApp:      _whatsAppCtrl.text.trim(),
       dateOfBirth:   _dob,
     );
-    await _bookingService.updateGuest(updatedGuest);
 
     final prefs = {
       'bikeRental':      _bikeRental,
@@ -187,14 +186,12 @@ class _GuestCheckinScreenState extends ConsumerState<GuestCheckinScreen> {
       'specialRequests': _requestsCtrl.text.trim(),
     };
 
-    final updatedBooking = _booking!.copyWith(
-      isGuestFormSubmitted: true,
-      guestPreferences: prefs,
-      specialRequests: _requestsCtrl.text.trim().isNotEmpty
-          ? _requestsCtrl.text.trim()
-          : _booking!.specialRequests,
+    await _bookingService.submitGuestForm(
+      bookingRef:     _booking!.bookingRef,
+      guest:          updatedGuest,
+      preferences:    prefs,
+      specialRequests: _requestsCtrl.text.trim(),
     );
-    await _bookingService.updateBooking(updatedBooking);
 
     if (mounted) setState(() { _done = true; _submitting = false; });
     } catch (e) {
