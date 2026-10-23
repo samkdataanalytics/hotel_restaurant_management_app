@@ -6,9 +6,8 @@
 -- ends in an error on purpose, so nothing it does can commit. The error message
 -- is the report: expect every line to read PASS.
 --
--- Verified 2026-10-23 on a local Postgres 17 with stand-in auth/storage schemas and
--- the anon / authenticated roles: all 33 checks PASS. Not yet run on hotrest_dev
--- (the migration has not been applied there).
+-- Verified 2026-10-23: all 32 checks PASS on a local Postgres 17 (stand-in auth/storage
+-- schemas) and on hotrest_dev after both migrations were applied.
 --
 -- Covers: who can read published / draft / revision content, that writes only go
 -- through the functions, draft-version conflict, publish -> revision, restore
