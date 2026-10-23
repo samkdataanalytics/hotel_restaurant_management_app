@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app_theme.dart';
 import '../../services/organization_service.dart';
 import '../semantic_palette.dart';
+import 'users/activity_list.dart';
 
 class CompanyDetailScreen extends StatefulWidget {
   const CompanyDetailScreen({super.key, required this.org});
@@ -25,7 +26,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     // Use effectiveStatus so an elapsed-but-not-yet-flipped trial reads
     // 'trial_expired' rather than a stale 'trialing'.
     _currentStatus = widget.org.effectiveStatus;
@@ -380,6 +381,16 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
               ],
             ),
           ),
+          Tab(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.history_rounded, size: 16),
+                SizedBox(width: 8),
+                Text('Activity'),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -395,6 +406,11 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
         children: [
           _PropertiesTab(future: _propertiesFuture),
           _MembersTab(future: _membersFuture),
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            // What this company's people have done, newest first.
+            child: ActivityList(orgId: widget.org.id),
+          ),
         ],
       ),
     );

@@ -33,7 +33,8 @@ jobs:
       - name: Analyze the website CMS
         run: >
           flutter analyze --no-fatal-infos
-          lib/web/cms lib/web/studio lib/web/landing lib/web/auth
+          lib/web/cms lib/web/studio lib/web/landing lib/web/auth lib/web/superadmin/users
+          lib/services/user_tracking_service.dart test/users
           lib/web/landing_screen.dart lib/web/help_screen.dart lib/web/legal_screen.dart
           lib/web/login_screen.dart lib/web/signup_screen.dart test/cms
 
