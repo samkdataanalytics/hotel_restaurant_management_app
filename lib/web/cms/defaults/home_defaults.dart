@@ -98,14 +98,125 @@ const Map<String, Object?> kHomeDefaults = {
         ],
       },
     },
-    {'id': 'features', 'type': 'featureGrid', 'anchor': 'features', 'content': {}},
+    {
+      'id': 'features',
+      'type': 'featureGrid',
+      'anchor': 'features',
+      'content': {
+        'eyebrow': 'Features',
+        'title': 'Everything you need to run a great property',
+        'lead': 'Purpose-built for hotels and restaurants — not a bloated ERP. '
+            "Every tool you need, none you don't.",
+        'items': [
+          {
+            'icon': 'hotel_rounded',
+            'title': 'Hotel management',
+            'bullets': [
+              'Room setup, types and availability',
+              'Reservations and walk-in check-in/out',
+              'Folio billing and payment tracking',
+              'Housekeeping task management',
+              'Occupancy and room status overview',
+            ],
+          },
+          {
+            'icon': 'point_of_sale_rounded',
+            'title': 'Restaurant POS',
+            'bullets': [
+              'Table-side and counter ordering',
+              'Live kitchen display system (KDS)',
+              'Menu and category management',
+              'Split bills and multiple payment modes',
+              'Real-time sales analytics',
+            ],
+          },
+          {
+            'icon': 'qr_code_2_rounded',
+            'title': 'Guest portal',
+            'bullets': [
+              'QR-based self check-in and check-out',
+              'Room service ordering via phone',
+              'Digital menus — no app download',
+              'Booking lookup and stay details',
+              'Direct messaging with front desk',
+            ],
+          },
+          {
+            'icon': 'palette_rounded',
+            'title': 'White-label ready',
+            'bullets': [
+              'Custom brand colours and logo',
+              'Property name on all guest screens',
+              'Branded QR codes and menus',
+              'No HotRest branding visible to guests',
+              'Multi-property brand profiles',
+            ],
+          },
+          {
+            'icon': 'groups_rounded',
+            'title': 'Staff and shifts',
+            'bullets': [
+              'Role-based access control',
+              'Shift scheduling and clock-in/out',
+              'Time tracking and attendance logs',
+              'Staff invite via unique code',
+              'Per-property permission management',
+            ],
+          },
+          {
+            'icon': 'insights_rounded',
+            'title': 'Financial reports',
+            'bullets': [
+              'Daily revenue and expense summaries',
+              'Invoice and folio export to PDF',
+              'Occupancy rate tracking',
+              'Restaurant sales breakdown',
+              'Date-range custom reporting',
+            ],
+          },
+        ],
+      },
+    },
     {
       'id': 'comparison',
       'type': 'comparison',
       'style': {'reveal': false},
       'content': {},
     },
-    {'id': 'testimonials', 'type': 'testimonials', 'content': {}},
+    {
+      'id': 'testimonials',
+      'type': 'testimonials',
+      'content': {
+        'eyebrow': 'Testimonials',
+        'title': 'Loved by hospitality professionals',
+        'items': [
+          {
+            'quote': 'HotRest cut our front-desk workload in half. Check-in used to take '
+                'five minutes per guest — now guests self-check in via QR. The staff '
+                'scheduling alone is worth every cent.',
+            'name': 'Sarah Mitchell',
+            'role': 'General Manager',
+            'place': 'The Riverview Boutique Hotel',
+          },
+          {
+            'quote': 'We run three properties and the multi-property dashboard is a '
+                'game-changer. I can see revenue, occupancy and active restaurant '
+                'orders for all locations in one screen.',
+            'name': 'James Okonkwo',
+            'role': 'Director of Operations',
+            'place': 'Okonkwo Hospitality Group',
+          },
+          {
+            'quote': 'Switching from our old PMS was painless. Onboarding took less than '
+                '20 minutes, and the white-label guest portal means our branding is '
+                "front and centre — not some software company's logo.",
+            'name': 'Priya Ramaswamy',
+            'role': 'Owner',
+            'place': 'Serenity Suites & Restaurant',
+          },
+        ],
+      },
+    },
     {'id': 'pricing', 'type': 'pricing', 'anchor': 'pricing', 'content': {}},
     {
       'id': 'faq',

@@ -16,8 +16,10 @@ import 'cms/render/site_scope.dart';
 import 'cms/sections/before_after_section.dart';
 import 'cms/sections/cta_band_section.dart';
 import 'cms/sections/faq_section.dart';
+import 'cms/sections/feature_grid_section.dart';
 import 'cms/sections/stats_section.dart';
 import 'cms/sections/steps_section.dart';
+import 'cms/sections/testimonials_section.dart';
 
 /// Public marketing site.
 ///
@@ -107,9 +109,9 @@ final _registry = SectionRegistry.of([
   statsDefinition,
   beforeAfterDefinition,
   stepsDefinition,
-  _legacy('featureGrid', () => const _Features()),
+  featureGridDefinition,
   _legacy('comparison', () => const _Comparison()),
-  _legacy('testimonials', () => const _Testimonials()),
+  testimonialsDefinition,
   _legacy('pricing', () => const _Pricing()),
   faqDefinition,
   ctaBandDefinition,
@@ -789,167 +791,6 @@ class _FloatCard extends StatelessWidget {
   }
 }
 
-// ─── Features ────────────────────────────────────────────────────────────────
-
-class _Features extends StatelessWidget {
-  const _Features();
-
-  static const _groups = [
-    (
-      icon: Icons.hotel_rounded,
-      title: 'Hotel management',
-      bullets: [
-        'Room setup, types and availability',
-        'Reservations and walk-in check-in/out',
-        'Folio billing and payment tracking',
-        'Housekeeping task management',
-        'Occupancy and room status overview',
-      ],
-    ),
-    (
-      icon: Icons.point_of_sale_rounded,
-      title: 'Restaurant POS',
-      bullets: [
-        'Table-side and counter ordering',
-        'Live kitchen display system (KDS)',
-        'Menu and category management',
-        'Split bills and multiple payment modes',
-        'Real-time sales analytics',
-      ],
-    ),
-    (
-      icon: Icons.qr_code_2_rounded,
-      title: 'Guest portal',
-      bullets: [
-        'QR-based self check-in and check-out',
-        'Room service ordering via phone',
-        'Digital menus — no app download',
-        'Booking lookup and stay details',
-        'Direct messaging with front desk',
-      ],
-    ),
-    (
-      icon: Icons.palette_rounded,
-      title: 'White-label ready',
-      bullets: [
-        'Custom brand colours and logo',
-        'Property name on all guest screens',
-        'Branded QR codes and menus',
-        'No HotRest branding visible to guests',
-        'Multi-property brand profiles',
-      ],
-    ),
-    (
-      icon: Icons.groups_rounded,
-      title: 'Staff and shifts',
-      bullets: [
-        'Role-based access control',
-        'Shift scheduling and clock-in/out',
-        'Time tracking and attendance logs',
-        'Staff invite via unique code',
-        'Per-property permission management',
-      ],
-    ),
-    (
-      icon: Icons.insights_rounded,
-      title: 'Financial reports',
-      bullets: [
-        'Daily revenue and expense summaries',
-        'Invoice and folio export to PDF',
-        'Occupancy rate tracking',
-        'Restaurant sales breakdown',
-        'Date-range custom reporting',
-      ],
-    ),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final mobile = LK.isMobile(context);
-    final tablet = LK.isTablet(context);
-    final cols = mobile ? 1 : (tablet ? 2 : 3);
-
-    return Shell(
-      child: Column(
-        children: [
-          const SectionHead(
-            eyebrow: 'Features',
-            title: 'Everything you need to run a great property',
-            lead: 'Purpose-built for hotels and restaurants — not a bloated ERP. '
-                "Every tool you need, none you don't.",
-          ),
-          SizedBox(height: mobile ? 40 : 60),
-          LayoutBuilder(builder: (_, c) {
-            const gap = 18.0;
-            final w = (c.maxWidth - gap * (cols - 1)) / cols;
-            return Wrap(
-              spacing: gap,
-              runSpacing: gap,
-              children: [
-                for (var i = 0; i < _groups.length; i++)
-                  SizedBox(
-                    width: w,
-                    child: Reveal(
-                      delayMs: (i % cols) * 70,
-                      child: _FeatureCard(group: _groups[i]),
-                    ),
-                  ),
-              ],
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeatureCard extends StatelessWidget {
-  final ({IconData icon, String title, List<String> bullets}) group;
-  const _FeatureCard({required this.group});
-
-  @override
-  Widget build(BuildContext context) {
-    return Panel(
-      padding: const EdgeInsets.all(26),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: LK.teal.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: Icon(group.icon, size: 21, color: LK.teal),
-          ),
-          const SizedBox(height: 18),
-          Text(group.title, style: LK.h3(context)),
-          const SizedBox(height: 14),
-          for (final b in group.bullets)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 9),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 7),
-                    width: 4,
-                    height: 4,
-                    decoration: const BoxDecoration(color: LK.tealPure, shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 11),
-                  Expanded(child: Text(b, style: LK.small.copyWith(fontSize: 14))),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 // ─── Comparison ──────────────────────────────────────────────────────────────
 
 class _Comparison extends ConsumerStatefulWidget {
@@ -1190,146 +1031,6 @@ class _ComparisonState extends ConsumerState<_Comparison> {
           _cell(v, ours: ours),
         ],
       );
-}
-
-// ─── Testimonials ────────────────────────────────────────────────────────────
-
-class _Testimonials extends StatelessWidget {
-  const _Testimonials();
-
-  static const _items = [
-    (
-      quote: 'HotRest cut our front-desk workload in half. Check-in used to take '
-          'five minutes per guest — now guests self-check in via QR. The staff '
-          'scheduling alone is worth every cent.',
-      name: 'Sarah Mitchell',
-      role: 'General Manager',
-      place: 'The Riverview Boutique Hotel',
-      initials: 'SM',
-    ),
-    (
-      quote: 'We run three properties and the multi-property dashboard is a '
-          'game-changer. I can see revenue, occupancy and active restaurant '
-          'orders for all locations in one screen.',
-      name: 'James Okonkwo',
-      role: 'Director of Operations',
-      place: 'Okonkwo Hospitality Group',
-      initials: 'JO',
-    ),
-    (
-      quote: 'Switching from our old PMS was painless. Onboarding took less than '
-          '20 minutes, and the white-label guest portal means our branding is '
-          "front and centre — not some software company's logo.",
-      name: 'Priya Ramaswamy',
-      role: 'Owner',
-      place: 'Serenity Suites & Restaurant',
-      initials: 'PR',
-    ),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final mobile = LK.isMobile(context);
-    final tablet = LK.isTablet(context);
-    final cols = mobile ? 1 : (tablet ? 2 : 3);
-
-    return Shell(
-      child: Column(
-        children: [
-          const SectionHead(
-            eyebrow: 'Testimonials',
-            title: 'Loved by hospitality professionals',
-          ),
-          SizedBox(height: mobile ? 36 : 56),
-          LayoutBuilder(builder: (_, c) {
-            const gap = 18.0;
-            final w = (c.maxWidth - gap * (cols - 1)) / cols;
-            return Wrap(
-              spacing: gap,
-              runSpacing: gap,
-              children: [
-                for (var i = 0; i < _items.length; i++)
-                  SizedBox(width: w, child: _TestimonialCard(item: _items[i])),
-              ],
-            );
-          }),
-        ],
-      ),
-    );
-  }
-}
-
-class _TestimonialCard extends StatelessWidget {
-  final ({String quote, String name, String role, String place, String initials}) item;
-  const _TestimonialCard({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    return Panel(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              for (var i = 0; i < 5; i++)
-                const Padding(
-                  padding: EdgeInsets.only(right: 3),
-                  child: Icon(Icons.star_rounded, size: 16, color: LK.amber),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            item.quote,
-            style: LK.small.copyWith(color: LK.ink, fontSize: 15, height: 1.65),
-          ),
-          const SizedBox(height: 22),
-          const Divider(height: 1, color: LK.line),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: LK.navy,
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Text(
-                  item.initials,
-                  style: const TextStyle(
-                    fontFamily: 'Outfit',
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.name,
-                        style: const TextStyle(
-                            fontFamily: 'Outfit',
-                            color: LK.ink,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700)),
-                    Text('${item.role} · ${item.place}',
-                        style: LK.micro.copyWith(fontSize: 11.5)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ─── Pricing ─────────────────────────────────────────────────────────────────

@@ -9,8 +9,10 @@ import 'package:hotel_checkin/web/cms/render/site_scope.dart';
 import 'package:hotel_checkin/web/cms/sections/before_after_section.dart';
 import 'package:hotel_checkin/web/cms/sections/cta_band_section.dart';
 import 'package:hotel_checkin/web/cms/sections/faq_section.dart';
+import 'package:hotel_checkin/web/cms/sections/feature_grid_section.dart';
 import 'package:hotel_checkin/web/cms/sections/stats_section.dart';
 import 'package:hotel_checkin/web/cms/sections/steps_section.dart';
+import 'package:hotel_checkin/web/cms/sections/testimonials_section.dart';
 
 /// Sections that read their content from the document. They must render from
 /// the bundled defaults at every width, and survive content that is missing or
@@ -21,6 +23,8 @@ final _defs = {
   'steps': stepsDefinition,
   'faq': faqDefinition,
   'ctaBand': ctaBandDefinition,
+  'featureGrid': featureGridDefinition,
+  'testimonials': testimonialsDefinition,
 };
 
 SectionNode _node(String type, Object? content) => SectionNode.fromJson(J.of({
@@ -84,6 +88,20 @@ void main() {
     expect(find.text('12 days'), findsOneWidget);
     expect(find.text('Trial'), findsOneWidget);
     expect(find.text('Properties'), findsNothing);
+  });
+
+  testWidgets('testimonial initials come from the name unless given', (t) async {
+    final node = _node('testimonials', {
+      'items': [
+        {'quote': 'q1', 'name': 'ada lovelace byron'},
+        {'quote': 'q2', 'name': 'Plato'},
+        {'quote': 'q3', 'name': 'X Y', 'initials': 'ZZ'},
+      ],
+    });
+    await _pump(t, 1280, Builder(builder: (c) => testimonialsDefinition.builder(c, node)));
+    expect(find.text('AB'), findsOneWidget);
+    expect(find.text('P'), findsOneWidget);
+    expect(find.text('ZZ'), findsOneWidget);
   });
 
   testWidgets('steps are numbered by position', (t) async {
