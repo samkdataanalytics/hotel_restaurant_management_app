@@ -53,12 +53,14 @@ class SupabaseSiteRepository implements SiteRepository {
     );
   }
 
-  /// The functions signal a stale save with SQLSTATE 40001.
+  /// The function signals a stale save with its own SQLSTATE, CF409. (It used 40001,
+  /// which PostgREST does not return: the request just hangs. 40001 is still
+  /// accepted so an older database behaves as well as it can.)
   Future<T> _guard<T>(Future<T> Function() run) async {
     try {
       return await run();
     } on PostgrestException catch (e) {
-      if (e.code == '40001' || e.message.startsWith('conflict')) {
+      if (e.code == 'CF409' || e.code == '40001' || e.message.startsWith('conflict')) {
         throw SiteConflict(e.message);
       }
       rethrow;

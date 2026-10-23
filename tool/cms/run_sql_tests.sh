@@ -14,6 +14,7 @@ db=cms_test
 $PSQL -v ON_ERROR_STOP=1 -q -d postgres -c "drop database if exists $db" -c "create database $db"
 $PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/tests/local/supabase_stubs.sql
 $PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/migrations/20261023000001_site_cms.sql >/dev/null 2>&1
+$PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/migrations/20261023000003_site_conflict_code.sql >/dev/null 2>&1
 
 # Each test always ends in an error that carries the report; read it from stderr.
 run_test() { # file, minimum number of PASS lines

@@ -1,6 +1,7 @@
 -- Regression checks for 20261023000001_site_cms.sql.
 --
--- Paste the whole file into the SQL editor and run it, AFTER the migration. It
+-- Paste the whole file into the SQL editor and run it, AFTER the migrations
+-- (20261023000001_site_cms.sql and 20261023000003_site_conflict_code.sql). It
 -- picks a superadmin and an ordinary profile itself, needs no edits, and ALWAYS
 -- ends in an error on purpose, so nothing it does can commit. The error message
 -- is the report: expect every line to read PASS.
@@ -37,13 +38,13 @@ begin
   v := public.site_save_draft('page:test', ok, 0);
   r := r || case when v = 1 then E'1  PASS  superadmin created a draft (v1)\n' else format(E'1  FAIL  got version %s\n', v) end;
 
-  -- 2. a stale save is a conflict (40001)
+  -- 2. a stale save is a conflict (CF409; see 20261023000003_site_conflict_code.sql)
   begin
     perform public.site_save_draft('page:test', ok, 0);
     r := r || E'2  FAIL  stale save accepted\n';
   exception when others then
     get stacked diagnostics st = returned_sqlstate;
-    r := r || case when st = '40001' then E'2  PASS  stale save refused as a conflict\n' else format(E'2  FAIL  unexpected %s\n', st) end;
+    r := r || case when st = 'CF409' then E'2  PASS  stale save refused as a conflict\n' else format(E'2  FAIL  unexpected %s\n', st) end;
   end;
 
   -- 3. the right expected version advances it
