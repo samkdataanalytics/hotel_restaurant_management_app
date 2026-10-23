@@ -2,6 +2,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+/// Compile-time switch for deterministic output: `--dart-define=FREEZE_MOTION=true`.
+///
+/// Reveal, CountUp and WordCycler all animate on their own, so two screenshots
+/// of the same build differ. That makes a pixel comparison against a baseline
+/// meaningless — every diff would be motion noise. With this defined each one
+/// renders its end state and starts no timers. Release builds leave it unset,
+/// so the live site behaves exactly as before.
+const bool kFreezeMotion = bool.fromEnvironment('FREEZE_MOTION');
+
 /// Design tokens and shared atoms for the marketing site.
 ///
 /// Kept out of `app_theme.dart` on purpose: that file is the *product* theme
@@ -542,6 +551,7 @@ class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    if (kFreezeMotion) return widget.child;
     final curve = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic);
     return KeyedSubtree(
       key: _key,
@@ -597,7 +607,7 @@ class _CountUpState extends State<CountUp> with SingleTickerProviderStateMixin {
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (_, __) {
-        final t = Curves.easeOutExpo.transform(_ctrl.value);
+        final t = kFreezeMotion ? 1.0 : Curves.easeOutExpo.transform(_ctrl.value);
         final v = widget.value * t;
         return Text(
           '${widget.prefix}${v.toStringAsFixed(widget.decimals)}${widget.suffix}',
@@ -627,6 +637,9 @@ class _WordCyclerState extends State<WordCycler> {
 
   @override
   Widget build(BuildContext context) {
+    if (kFreezeMotion) {
+      return Text(widget.items.first, style: widget.style);
+    }
     return StreamBuilder<void>(
       stream: _timer,
       builder: (context, _) {
