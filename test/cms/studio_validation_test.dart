@@ -33,8 +33,8 @@ void main() {
       expect(_warnings(siteDefaultJson('page:home')), isEmpty);
     });
 
-    test('every section type has a spec and a valid template', () {
-      for (final spec in kSectionSpecs) {
+    test('every section you can add starts from a valid template', () {
+      for (final spec in kSectionSpecs.where((s) => s.addable)) {
         final doc = _page([
           {'id': spec.type, 'type': spec.type, 'content': spec.template},
         ]);

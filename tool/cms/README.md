@@ -34,3 +34,12 @@ A baseline changes only for a deliberate, explained reason.
 - 2026-10-23, `home_520`: the header gained a menu button on phones (148 px, in
   the header only), because the nav links were unreachable below 768 px. Every
   other capture, at every width, was unchanged.
+- 2026-10-23, `terms_*`, `privacy_*`, `returns_*` (all widths): the footer
+  copyright read "© 2025" typed into the page; it is `© {year}` now and reads 2026
+  (48 px, one digit). Nothing else on those pages changed.
+- 2026-10-23, `help_*` (all widths): the search box's rotating placeholder. The
+  old timer ran even in frozen builds, so the baseline caught whichever hint
+  happened to be showing ("How do I add a menu item?"); frozen builds now show
+  the first hint. The live page still rotates every 3 s. The rest of the page,
+  and every topic's text, is identical (checked widget by widget: 104 of 104
+  texts, 18 topics, 91 steps).

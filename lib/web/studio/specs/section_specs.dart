@@ -14,6 +14,7 @@ class SectionSpec {
     required this.description,
     required this.fields,
     required this.template,
+    this.addable = true,
   });
 
   final String type;
@@ -27,6 +28,10 @@ class SectionSpec {
   /// The `content` a new section of this type starts with. Real, usable copy
   /// rather than empty boxes, so a new section looks like something.
   final Map<String, Object?> template;
+
+  /// False for types that belong to one page (the help list, a legal document):
+  /// they are edited where they are, not added elsewhere.
+  final bool addable;
 }
 
 // ── Reusable pieces ─────────────────────────────────────────────────────────
@@ -538,6 +543,201 @@ const _spacer = SectionSpec(
   },
 );
 
+const _helpTopics = SectionSpec(
+  type: 'helpTopics',
+  label: 'Help topics',
+  icon: Icons.menu_book_rounded,
+  description: 'The searchable help centre.',
+  addable: false,
+  fields: [
+    FieldSpec.text('title', 'Page title', required: true, maxLength: 60),
+    FieldSpec.text('subtitle', 'Line under the title', maxLength: 80,
+        help: '{topicCount} becomes the number of topics.'),
+    FieldSpec.stringList('searchHints', 'Search box hints',
+        itemLabel: 'hint', maxItems: 12, maxLength: 80,
+        help: 'The placeholder rotates through these.'),
+    FieldSpec.list(
+      'categories',
+      'Categories',
+      [
+        FieldSpec.text('name', 'Name', required: true, maxLength: 24,
+            help: 'Topics join a category by using exactly this name.'),
+        FieldSpec.choice('tone', 'Colour', {
+          'blue': 'Blue',
+          'orange': 'Orange',
+          'pink': 'Pink',
+          'green': 'Green',
+          'purple': 'Purple',
+          'slate': 'Slate',
+          'teal': 'Teal',
+        }),
+      ],
+      itemTitleKey: 'name',
+      itemLabel: 'category',
+      maxItems: 10,
+      template: {'name': 'New category', 'tone': 'teal'},
+    ),
+    FieldSpec.list(
+      'topics',
+      'Topics',
+      [
+        FieldSpec.text('id', 'Id', required: true, maxLength: 40,
+            help: 'A short unique name, e.g. "check-in". Not shown to visitors.'),
+        FieldSpec.text('emoji', 'Emoji', maxLength: 16),
+        FieldSpec.text('title', 'Title', required: true, maxLength: 100),
+        FieldSpec.text('subtitle', 'One-line summary', maxLength: 140),
+        FieldSpec.text('category', 'Category', maxLength: 24, help: 'Must match a category name above.'),
+        FieldSpec.list(
+          'steps',
+          'Steps',
+          [
+            FieldSpec.text('title', 'Step', required: true, maxLength: 120),
+            FieldSpec.textarea('body', 'Explanation', maxLength: 600),
+            FieldSpec.textarea('tip', 'Tip (optional)', maxLength: 300),
+            FieldSpec.textarea('note', 'Note (optional)', maxLength: 300),
+          ],
+          itemTitleKey: 'title',
+          itemLabel: 'step',
+          maxItems: 20,
+          template: {'title': 'New step', 'body': ''},
+        ),
+      ],
+      itemTitleKey: 'title',
+      itemLabel: 'topic',
+      maxItems: 60,
+      template: {
+        'id': 'new-topic',
+        'emoji': '📘',
+        'title': 'New topic',
+        'subtitle': '',
+        'category': '',
+        'steps': <Object>[],
+      },
+    ),
+    FieldSpec.divider('Page wording'),
+    FieldSpec.text('backLabel', '"Back" link', maxLength: 30),
+    FieldSpec.text('signInLabel', 'Sign-in button', maxLength: 20),
+    FieldSpec.text('allLabel', '"All" filter', maxLength: 16),
+    FieldSpec.text('exploredLabel', 'Progress badge', maxLength: 40,
+        help: '{opened} and {total} are the counts.'),
+    FieldSpec.text('readTimeLabel', 'Reading time', maxLength: 30, help: '{minutes} is the estimate.'),
+    FieldSpec.text('stepsFooter', 'Step count line', maxLength: 40,
+        help: '{steps} and {category} are filled in.'),
+    FieldSpec.text('tipLabel', 'Tip label', maxLength: 12),
+    FieldSpec.text('noteLabel', 'Note label', maxLength: 12),
+    FieldSpec.text('noResultsTitle', 'No-results heading', maxLength: 60, help: '{query} is what was typed.'),
+    FieldSpec.text('noResultsHint', 'No-results hint', maxLength: 100),
+  ],
+  template: {},
+);
+
+const _legalDoc = SectionSpec(
+  type: 'legalDoc',
+  label: 'Legal document',
+  icon: Icons.gavel_rounded,
+  description: 'A legal page: numbered sections of paragraphs and bullets.',
+  addable: false,
+  fields: [
+    FieldSpec.text('title', 'Page title', required: true, maxLength: 80),
+    FieldSpec.text('updated', 'Last updated', maxLength: 40,
+        help: 'The date the legal text itself last changed, e.g. "April 8, 2025". '
+            'Change it whenever you change the wording.'),
+    FieldSpec.text('backLabel', '"Back" link', maxLength: 30),
+    FieldSpec.text('copyright', 'Copyright line', maxLength: 120, help: '{year} is the current year.'),
+    FieldSpec.list(
+      'footerLinks',
+      'Links to the other legal pages',
+      [
+        FieldSpec.text('label', 'Text', required: true, maxLength: 40),
+        FieldSpec.link('link', 'Where it goes'),
+      ],
+      itemTitleKey: 'label',
+      itemLabel: 'link',
+      maxItems: 6,
+      template: {'label': 'New link', 'link': {'type': 'internal', 'value': '/terms'}},
+    ),
+    FieldSpec.list(
+      'sections',
+      'Sections',
+      [
+        FieldSpec.text('heading', 'Heading', maxLength: 140),
+        FieldSpec.list(
+          'blocks',
+          'Paragraphs and bullets',
+          [
+            FieldSpec.choice('kind', 'Type', {'p': 'Paragraph', 'bullet': 'Bullet'}, defaultValue: 'p'),
+            FieldSpec.textarea('text', 'Text', required: true, maxLength: 2000,
+                help: '{supportEmail} becomes the contact address from Settings.'),
+          ],
+          itemTitleKey: 'text',
+          itemLabel: 'block',
+          maxItems: 40,
+          template: {'kind': 'p', 'text': ''},
+        ),
+      ],
+      itemTitleKey: 'heading',
+      itemLabel: 'section',
+      maxItems: 40,
+      template: {'heading': 'New section', 'blocks': <Object>[]},
+      verify: 'Legal text. As shipped it still describes a Free plan that no longer exists, a 14-day '
+          'refund window beside the {trialDays}-day trial, and names Google Fonts although fonts are '
+          'bundled. Have it reviewed before relying on it.',
+    ),
+  ],
+  template: {},
+);
+
+const _loginCopy = SectionSpec(
+  type: 'loginCopy',
+  label: 'Sign-in screen',
+  icon: Icons.login_rounded,
+  description: 'The wording on the sign-in screen.',
+  addable: false,
+  fields: [
+    FieldSpec.text('metaTitle', 'Browser tab title', maxLength: 70),
+    FieldSpec.text('title', 'Heading', required: true, maxLength: 60),
+    FieldSpec.text('subtitle', 'Line under the heading', maxLength: 100),
+    FieldSpec.text('identifierLabel', 'Email field label', maxLength: 40),
+    FieldSpec.text('passwordLabel', 'Password field label', maxLength: 30),
+    FieldSpec.text('submitLabel', 'Button', maxLength: 30),
+    FieldSpec.text('footerQuestion', 'Question under the card', maxLength: 60),
+    FieldSpec.text('footerAction', 'Link next to it', maxLength: 30),
+  ],
+  template: {},
+);
+
+const _signupCopy = SectionSpec(
+  type: 'signupCopy',
+  label: 'Sign-up screen',
+  icon: Icons.person_add_alt_1_rounded,
+  description: 'The wording on the sign-up screen and its "check your inbox" step.',
+  addable: false,
+  fields: [
+    FieldSpec.text('metaTitle', 'Browser tab title', maxLength: 70),
+    FieldSpec.text('title', 'Heading', required: true, maxLength: 60),
+    FieldSpec.text('subtitle', 'Line under the heading', maxLength: 100),
+    FieldSpec.textarea('trialBanner', 'Free-trial banner', maxLength: 200, protectedTokens: true,
+        help: 'Use {trialDays} for the length. Leave empty to hide the banner.'),
+    FieldSpec.text('emailLabel', 'Email field label', maxLength: 40),
+    FieldSpec.text('passwordLabel', 'Password field label', maxLength: 30),
+    FieldSpec.text('passwordHint', 'Password hint', maxLength: 80,
+        help: 'The sign-up form still requires 6 characters; this only describes it.'),
+    FieldSpec.text('confirmLabel', 'Confirm-password label', maxLength: 30),
+    FieldSpec.text('submitLabel', 'Button', maxLength: 30),
+    FieldSpec.textarea('terms', 'Terms line under the button', maxLength: 200),
+    FieldSpec.text('footerQuestion', 'Question under the card', maxLength: 60),
+    FieldSpec.text('footerAction', 'Link next to it', maxLength: 30),
+    FieldSpec.divider('After sign-up ("check your inbox")'),
+    FieldSpec.text('sentTitle', 'Heading', maxLength: 60),
+    FieldSpec.text('sentSubtitle', 'Line under the heading', maxLength: 100),
+    FieldSpec.text('sentLead', 'Line above the email address', maxLength: 80),
+    FieldSpec.textarea('sentHelp', 'Instructions', maxLength: 300),
+    FieldSpec.text('sentPrimary', 'Main button', maxLength: 30),
+    FieldSpec.text('sentSecondary', 'Second button', maxLength: 40),
+  ],
+  template: {},
+);
+
 /// Every section type the studio can edit, in the order "Add section" lists them.
 const List<SectionSpec> kSectionSpecs = [
   _hero,
@@ -553,6 +753,10 @@ const List<SectionSpec> kSectionSpecs = [
   _richText,
   _imageText,
   _spacer,
+  _helpTopics,
+  _legalDoc,
+  _loginCopy,
+  _signupCopy,
 ];
 
 final Map<String, SectionSpec> kSectionSpecByType = {for (final s in kSectionSpecs) s.type: s};

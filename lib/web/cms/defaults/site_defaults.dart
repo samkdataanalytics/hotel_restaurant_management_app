@@ -1,6 +1,9 @@
 import '../model/site_document.dart';
+import 'auth_defaults.dart';
 import 'chrome_defaults.dart';
+import 'help_defaults.dart';
 import 'home_defaults.dart';
+import 'legal_defaults.dart';
 
 /// Every document the CMS manages, as it shipped before the CMS: what the site
 /// renders when nothing has been published, and what "Start from the live site"
@@ -12,6 +15,12 @@ final Map<String, Map<String, Object?>> kSiteDefaults = {
   'global:header': kHeaderDefaults,
   'global:footer': kFooterDefaults,
   'global:theme': kThemeDefaults,
+  'global:site': kSiteSettingsDefaults,
+  'page:auth': kAuthDefaults,
+  'page:help': kHelpDefaults,
+  'page:terms': kTermsDefaults,
+  'page:returns': kReturnsDefaults,
+  'page:privacy': kPrivacyDefaults,
 };
 
 /// Deep copy, so a caller mutating the result (the editor does) cannot change

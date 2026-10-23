@@ -20,6 +20,9 @@ enum FieldKind {
 
   /// A size that can differ per device: `{desktop, tablet, mobile}`.
   responsiveNumber,
+
+  /// A heading between fields; holds no value.
+  divider,
 }
 
 /// Describes one editable value in a section's JSON. The property panel is
@@ -203,6 +206,8 @@ class FieldSpec {
             minItems: minItems,
             template: template,
             verify: verify);
+
+  const FieldSpec.divider(String label) : this._(FieldKind.divider, '', label);
 
   const FieldSpec.cells(String key, String label, {String? help})
       : this._(FieldKind.cells, key, label, help: help);

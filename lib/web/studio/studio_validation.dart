@@ -6,13 +6,28 @@ import '../cms/model/json_reader.dart';
 import '../cms/model/link_target.dart';
 import '../cms/registry/icon_registry.dart';
 import '../cms/sections/image_text_section.dart' show isLibraryImageUrl;
+import 'specs/chrome_specs.dart';
 import 'specs/field_spec.dart';
 import 'specs/section_specs.dart';
 import 'studio_state.dart';
 
 /// Placeholders the site understands in copy. Anything else in braces is a typo
 /// that would otherwise show up literally on the page.
-const kKnownTokens = {'trialDays', 'annualDiscountPct', 'starterPrice', 'year', 'supportEmail'};
+const kKnownTokens = {
+  'trialDays',
+  'annualDiscountPct',
+  'starterPrice',
+  'year',
+  'supportEmail',
+  // Filled in by the help page itself.
+  'topicCount',
+  'query',
+  'opened',
+  'total',
+  'steps',
+  'category',
+  'minutes',
+};
 
 /// JSON size above which the database would refuse the save (it caps at 256 KB).
 const kMaxDocumentBytes = 200 * 1024;
@@ -52,7 +67,17 @@ List<ValidationIssue> validateSiteDocument(String key, Map<String, dynamic> doc)
     ));
   }
 
-  if (!key.startsWith('page:')) return out;
+  if (!key.startsWith('page:')) {
+    _globals(out, key, doc);
+    return out;
+  }
+
+  // Page-level settings: search text, and the type and layout every section on
+  // the page inherits.
+  final root = J.of(doc);
+  _fields(out, kSeoFields, root.obj('seo'), ['seo'], null, 'Page settings');
+  _fields(out, kThemeTypographyFields, root.obj('typography'), ['typography'], null, 'Page settings');
+  _fields(out, kThemeLayoutFields, root.obj('layout'), ['layout'], null, 'Page settings');
 
   final sections = doc['sections'];
   if (sections is! List) {
@@ -125,6 +150,39 @@ List<ValidationIssue> validateSiteDocument(String key, Map<String, dynamic> doc)
   }
 
   return out;
+}
+
+/// The documents that are not lists of sections: header, footer, theme, settings.
+void _globals(List<ValidationIssue> out, String key, Map<String, dynamic> doc) {
+  final j = J.of(doc);
+  switch (key) {
+    case 'global:header':
+      _fields(out, kHeaderFields, j, const [], null, 'Header');
+    case 'global:footer':
+      _fields(out, kFooterFields, j, const [], null, 'Footer');
+    case 'global:theme':
+      _fields(out, kThemeTypographyFields, j.obj('typography'), ['typography'], null, 'Theme');
+      _fields(out, kThemeLayoutFields, j.obj('layout'), ['layout'], null, 'Theme');
+    case 'global:site':
+      _fields(out, kSiteFields, j, const [], null, 'Settings');
+      final email = j.str('supportEmail').trim();
+      if (email.isNotEmpty && !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+        out.add(const ValidationIssue(
+          severity: IssueSeverity.error,
+          message: 'Settings — Support email: that does not look like an email address.',
+          path: ['supportEmail'],
+        ));
+      }
+      final wa = j.str('whatsappNumber').trim();
+      if (wa.isNotEmpty && !RegExp(r'^[0-9]{8,15}$').hasMatch(wa)) {
+        out.add(const ValidationIssue(
+          severity: IssueSeverity.error,
+          message: 'Settings — WhatsApp number: use 8 to 15 digits, with no +, spaces or dashes. '
+              'Otherwise the chat button stays hidden.',
+          path: ['whatsappNumber'],
+        ));
+      }
+  }
 }
 
 /// Validates page-level settings (SEO, typography, layout) and the global theme.
@@ -282,6 +340,7 @@ void _fields(
 
       case FieldKind.cells:
       case FieldKind.toggle:
+      case FieldKind.divider:
         break;
     }
   }

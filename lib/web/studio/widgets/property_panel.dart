@@ -46,6 +46,12 @@ class PropertyPanel extends StatelessWidget {
           ),
         ),
       StudioWorkspace.theme => _themeTabs(),
+      StudioWorkspace.settings => _Scroll(
+          title: 'Site settings',
+          subtitle: 'Contact details and the chat button, used across the site.',
+          issues: state.issues,
+          child: FieldForm(fields: kSiteFields, values: state.doc, basePath: const [], env: env),
+        ),
       StudioWorkspace.media => const SizedBox.shrink(),
     };
   }

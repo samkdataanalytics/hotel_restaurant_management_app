@@ -76,6 +76,11 @@ class FieldTile extends StatelessWidget {
       FieldKind.group => _GroupEditor(spec: spec, values: values, basePath: basePath, env: env),
       FieldKind.list => _ListEditor(spec: spec, values: values, basePath: basePath, env: env),
       FieldKind.toggle => _toggle(),
+      FieldKind.divider => Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(spec.label.toUpperCase(),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1, color: SC.faint)),
+        ),
       _ => _labelled(context, _control(context)),
     };
   }
@@ -151,6 +156,7 @@ class FieldTile extends StatelessWidget {
       case FieldKind.toggle:
       case FieldKind.group:
       case FieldKind.list:
+      case FieldKind.divider:
         return const SizedBox.shrink();
     }
   }

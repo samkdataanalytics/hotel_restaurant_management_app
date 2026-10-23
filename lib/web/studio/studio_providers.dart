@@ -75,6 +75,7 @@ class StudioUi {
         StudioWorkspace.pages => pageKey,
         StudioWorkspace.navigation => navDoc,
         StudioWorkspace.theme => 'global:theme',
+        StudioWorkspace.settings => 'global:site',
         StudioWorkspace.media => null,
       };
 }

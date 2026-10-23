@@ -1,10 +1,13 @@
+import '../sections/auth_copy_section.dart';
 import '../sections/before_after_section.dart';
 import '../sections/comparison_section.dart';
 import '../sections/cta_band_section.dart';
 import '../sections/faq_section.dart';
 import '../sections/feature_grid_section.dart';
+import '../sections/help_topics_section.dart';
 import '../sections/hero_section.dart';
 import '../sections/image_text_section.dart';
+import '../sections/legal_doc_section.dart';
 import '../sections/pricing_section.dart';
 import '../sections/rich_text_section.dart';
 import '../sections/spacer_section.dart';
@@ -31,4 +34,8 @@ final SectionRegistry publicRegistry = SectionRegistry.of([
   richTextDefinition,
   imageTextDefinition,
   spacerDefinition,
+  legalDocDefinition,
+  helpTopicsDefinition,
+  loginCopyDefinition,
+  signupCopyDefinition,
 ]);

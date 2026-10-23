@@ -9,6 +9,8 @@ import '../studio_validation.dart';
 
 // ── Add section ──────────────────────────────────────────────────────────────
 
+final _addable = [for (final s in kSectionSpecs) if (s.addable) s];
+
 Future<SectionSpec?> showAddSectionDialog(BuildContext context) {
   return showDialog<SectionSpec>(
     context: context,
@@ -40,9 +42,9 @@ Future<SectionSpec?> showAddSectionDialog(BuildContext context) {
                     crossAxisSpacing: 12,
                     mainAxisExtent: 134,
                   ),
-                  itemCount: kSectionSpecs.length,
+                  itemCount: _addable.length,
                   itemBuilder: (_, i) {
-                    final s = kSectionSpecs[i];
+                    final s = _addable[i];
                     return InkWell(
                       borderRadius: BorderRadius.circular(12),
                       onTap: () => Navigator.pop(c, s),

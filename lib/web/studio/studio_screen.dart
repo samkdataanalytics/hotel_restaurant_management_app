@@ -250,12 +250,15 @@ class _StudioScreenState extends ConsumerState<StudioScreen> {
 
     switch (ui.workspace) {
       case StudioWorkspace.pages:
+        // The landing header and footer belong to the home page only; the help,
+        // legal and sign-in pages have their own chrome.
+        final home = state.key == 'page:home';
         return SitePreview(
           doc: previewDocument(state.doc, state.key),
           device: ui.device,
           theme: publishedTheme,
-          header: header,
-          footer: footer,
+          header: home ? header : null,
+          footer: home ? footer : null,
           selectedId: state.selectedId == kPageSettingsId ? null : state.selectedId,
           onSelect: (id) {
             _controller.select(id);
@@ -282,6 +285,14 @@ class _StudioScreenState extends ConsumerState<StudioScreen> {
           doc: ref.watch(siteDocumentProvider('page:home')),
           device: ui.device,
           theme: SiteTheme.fromJson(j.obj('typography'), j.obj('layout')),
+          header: header,
+          footer: footer,
+        );
+      case StudioWorkspace.settings:
+        return SitePreview(
+          doc: ref.watch(siteDocumentProvider('page:home')),
+          device: ui.device,
+          theme: publishedTheme,
           header: header,
           footer: footer,
         );
@@ -395,6 +406,7 @@ class _TopBar extends ConsumerWidget {
               ButtonSegment(value: StudioWorkspace.pages, label: Text('Pages'), icon: Icon(Icons.article_outlined, size: 16)),
               ButtonSegment(value: StudioWorkspace.navigation, label: Text('Header & footer'), icon: Icon(Icons.menu_open_rounded, size: 16)),
               ButtonSegment(value: StudioWorkspace.theme, label: Text('Theme'), icon: Icon(Icons.palette_outlined, size: 16)),
+              ButtonSegment(value: StudioWorkspace.settings, label: Text('Settings'), icon: Icon(Icons.settings_outlined, size: 16)),
               ButtonSegment(value: StudioWorkspace.media, label: Text('Media'), icon: Icon(Icons.photo_library_outlined, size: 16)),
             ],
             selected: {ui.workspace},

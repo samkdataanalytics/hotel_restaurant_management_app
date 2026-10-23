@@ -9,6 +9,11 @@ import '../providers/app_auth_provider.dart';
 import '../router.dart';
 import 'auth/auth_scaffold.dart';
 import 'brand_kit.dart';
+import 'cms/data/site_providers.dart';
+import 'cms/defaults/site_defaults.dart';
+import 'cms/model/json_reader.dart';
+import 'cms/render/seo_scope.dart';
+import 'cms/sections/auth_copy_section.dart';
 
 /// Create an account.
 ///
@@ -137,23 +142,40 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
   }
 
+  /// The wording, from the `page:auth` document (or as it shipped).
+  SignupCopy _copy() {
+    SignupCopy? find(List<dynamic> sections) {
+      for (final s in sections) {
+        if (s.type == 'signupCopy' && s.enabled) return SignupCopy.fromJson(s.content);
+      }
+      return null;
+    }
+
+    return find(ref.watch(siteDocumentProvider('page:auth')).sections) ??
+        find(siteDefaultDocument('page:auth').sections)!;
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_emailSent) return _sentScaffold();
+    final copy = _copy();
+    if (_emailSent) return _sentScaffold(copy);
 
-    return AuthScaffold(
-      title: 'Create your account',
-      subtitle: 'Register your company on HotRest.',
-      banner: const _TrialBanner(),
+    return SeoScope(
+      seo: J({'title': copy.metaTitle}),
+      fallbackTitle: 'Create your account — HotRest',
+      child: AuthScaffold(
+      title: copy.title,
+      subtitle: copy.subtitle,
+      banner: copy.trialBanner.isEmpty ? null : TrialBanner(text: copy.trialBanner),
       footer: AuthFooterPrompt(
-        question: 'Already have an account?',
-        action: 'Sign in',
+        question: copy.footerQuestion,
+        action: copy.footerAction,
         onTap: () => context.go(AppRoutes.login),
       ),
       children: [
         AuthField(
           controller: _emailController,
-          label: 'Work email',
+          label: copy.emailLabel,
           icon: Icons.mail_outline_rounded,
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
@@ -163,7 +185,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         AuthField(
           controller: _passwordController,
           focusNode: _passwordFocus,
-          label: 'Password',
+          label: copy.passwordLabel,
           icon: Icons.lock_outline_rounded,
           obscure: _obscurePassword,
           textInputAction: TextInputAction.next,
@@ -180,16 +202,18 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             tooltip: _obscurePassword ? 'Show password' : 'Hide password',
           ),
         ),
-        const SizedBox(height: 6),
-        Padding(
-          padding: const EdgeInsets.only(left: 2),
-          child: Text('At least 6 characters.', style: LK.micro.copyWith(fontSize: 12)),
-        ),
+        if (copy.passwordHint.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: Text(copy.passwordHint, style: LK.micro.copyWith(fontSize: 12)),
+          ),
+        ],
         const SizedBox(height: 10),
         AuthField(
           controller: _confirmController,
           focusNode: _confirmFocus,
-          label: 'Confirm password',
+          label: copy.confirmLabel,
           icon: Icons.lock_person_outlined,
           obscure: _obscureConfirm,
           textInputAction: TextInputAction.go,
@@ -214,21 +238,22 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         if (_isLoading)
           const AuthBusyButton()
         else
-          CtaButton(label: 'Create account', expand: true, onTap: _signup),
-        const SizedBox(height: 16),
-        Text(
-          'By creating an account you agree to our Terms of Service and '
-          'Privacy Policy.',
-          textAlign: TextAlign.center,
-          style: LK.micro.copyWith(fontSize: 11.5),
-        ),
+          CtaButton(label: copy.submitLabel, expand: true, onTap: _signup),
+        if (copy.terms.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text(
+            copy.terms,
+            textAlign: TextAlign.center,
+            style: LK.micro.copyWith(fontSize: 11.5),
+          ),
+        ],
       ],
-    );
+    ));
   }
 
-  Widget _sentScaffold() => AuthScaffold(
-        title: 'Check your inbox',
-        subtitle: 'One more step to finish setting up.',
+  Widget _sentScaffold(SignupCopy copy) => AuthScaffold(
+        title: copy.sentTitle,
+        subtitle: copy.sentSubtitle,
         children: [
           Container(
             padding: const EdgeInsets.all(20),
@@ -251,7 +276,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'We sent a verification link to',
+                  copy.sentLead,
                   textAlign: TextAlign.center,
                   style: LK.small,
                 ),
@@ -268,8 +293,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Click the link in that email to activate your account. '
-                  'It may take a minute to arrive — check your spam folder too.',
+                  copy.sentHelp,
                   textAlign: TextAlign.center,
                   style: LK.micro.copyWith(fontSize: 12.5, height: 1.55),
                 ),
@@ -278,13 +302,13 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           ),
           const SizedBox(height: 22),
           CtaButton(
-            label: 'Go to sign in',
+            label: copy.sentPrimary,
             expand: true,
             onTap: () => context.go(AppRoutes.login),
           ),
           const SizedBox(height: 12),
           GhostButton(
-            label: 'Use a different email',
+            label: copy.sentSecondary,
             expand: true,
             onTap: () => setState(() {
               _emailSent = false;
@@ -293,39 +317,4 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           ),
         ],
       );
-}
-
-/// The 45-day trial promise, shown above the fields.
-class _TrialBanner extends StatelessWidget {
-  const _TrialBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-      decoration: BoxDecoration(
-        color: LK.teal.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: LK.teal.withValues(alpha: 0.24)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.card_giftcard_rounded, color: LK.teal, size: 19),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Text(
-              '45-day free trial — full access to every feature. '
-              'No credit card required.',
-              style: LK.micro.copyWith(
-                color: LK.teal,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w600,
-                height: 1.45,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

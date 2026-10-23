@@ -130,45 +130,11 @@ class _AuthScaffoldState extends State<AuthScaffold>
                               ),
                             ),
                             const SizedBox(height: 28),
-                            Container(
-                              width: double.infinity,
-                              padding: EdgeInsets.all(mobile ? 24 : 34),
-                              decoration: BoxDecoration(
-                                color: LK.white,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: LK.line),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: LK.navy.withValues(alpha: 0.07),
-                                    blurRadius: 40,
-                                    offset: const Offset(0, 16),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    widget.title,
-                                    textAlign: TextAlign.center,
-                                    style:
-                                        LK.h3(context).copyWith(fontSize: 24),
-                                  ),
-                                  const SizedBox(height: 7),
-                                  Text(
-                                    widget.subtitle,
-                                    textAlign: TextAlign.center,
-                                    style: LK.small.copyWith(color: LK.body),
-                                  ),
-                                  if (widget.banner != null) ...[
-                                    const SizedBox(height: 20),
-                                    widget.banner!,
-                                  ],
-                                  const SizedBox(height: 26),
-                                  ...widget.children,
-                                ],
-                              ),
+                            AuthCard(
+                              title: widget.title,
+                              subtitle: widget.subtitle,
+                              banner: widget.banner,
+                              children: widget.children,
                             ),
                             if (widget.footer != null) ...[
                               const SizedBox(height: 22),
@@ -184,6 +150,68 @@ class _AuthScaffoldState extends State<AuthScaffold>
               }),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The white card with the heading and the fields. Split out of [AuthScaffold] so
+/// the website editor can draw the same card around sample fields.
+class AuthCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final Widget? banner;
+  final List<Widget> children;
+
+  const AuthCard({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.children,
+    this.banner,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = LK.isMobile(context);
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(mobile ? 24 : 34),
+      decoration: BoxDecoration(
+        color: LK.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: LK.line),
+        boxShadow: [
+          BoxShadow(
+            color: LK.navy.withValues(alpha: 0.07),
+            blurRadius: 40,
+            offset: const Offset(0, 16),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: LK.h3(context).copyWith(fontSize: 24),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: LK.small.copyWith(color: LK.body),
+          ),
+          if (banner != null) ...[
+            const SizedBox(height: 20),
+            banner!,
+          ],
+          const SizedBox(height: 26),
+          ...children,
         ],
       ),
     );

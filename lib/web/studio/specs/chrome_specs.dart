@@ -91,3 +91,18 @@ const List<FieldSpec> kThemeLayoutFields = [
   FieldSpec.responsive('sectionGap', 'Gap between sections',
       max: 320, help: 'Replaces the standard gap (128 px on desktop, 72 on phones).'),
 ];
+
+/// Site-wide settings (`global:site`).
+const List<FieldSpec> kSiteFields = [
+  FieldSpec.divider('Contact'),
+  FieldSpec.text('supportEmail', 'Support email', maxLength: 120,
+      help: 'Shown on the legal pages wherever the text says {supportEmail}.'),
+  FieldSpec.divider('WhatsApp chat button'),
+  FieldSpec.text('whatsappNumber', 'WhatsApp number', maxLength: 15,
+      placeholder: '94771234567',
+      help: 'International format, digits only: no +, spaces or dashes. Leave empty to hide the '
+          'button. It only appears when this is a real number.'),
+  FieldSpec.text('whatsappMessage', 'First message', maxLength: 200,
+      help: 'Pre-filled in the chat when a visitor taps the button.'),
+  FieldSpec.text('whatsappLabel', 'Label on hover', maxLength: 30),
+];

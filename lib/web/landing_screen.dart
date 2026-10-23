@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,6 +12,7 @@ import 'cms/defaults/site_defaults.dart';
 import 'cms/registry/public_registry.dart';
 import 'cms/model/json_reader.dart';
 import 'cms/render/anchor_keys.dart';
+import 'cms/render/seo_scope.dart';
 import 'cms/render/site_renderer.dart';
 import 'cms/render/site_scope.dart';
 
@@ -69,32 +69,35 @@ class _LandingScreenState extends ConsumerState<LandingScreen> {
     final header = HeaderContent.fromJson(J.of(ref.watch(siteRawProvider('global:header'))));
     final footer = FooterContent.fromJson(J.of(ref.watch(siteRawProvider('global:footer'))));
 
-    return SiteScope(
-      onScrollTo: _anchors.scrollTo,
-      child: Scaffold(
-        backgroundColor: LK.white,
-        endDrawer: SiteHeaderDrawer(content: header),
-        body: Stack(
-          children: [
-            SingleChildScrollView(
-              controller: _scroll,
-              child: Column(
-                children: [
-                  ...renderer.build(context, doc),
-                  SiteFooter(content: footer),
-                ],
-              ),
+    return SeoScope(
+        seo: doc.seo,
+        fallbackTitle: 'HotRest — hotel and restaurant management',
+        child: SiteScope(
+          onScrollTo: _anchors.scrollTo,
+          child: Scaffold(
+            backgroundColor: LK.white,
+            endDrawer: SiteHeaderDrawer(content: header),
+            body: Stack(
+              children: [
+                SingleChildScrollView(
+                  controller: _scroll,
+                  child: Column(
+                    children: [
+                      ...renderer.build(context, doc),
+                      SiteFooter(content: footer),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: SiteHeader(content: header, scrolled: _scrolled),
+                ),
+                const Positioned(bottom: 26, right: 26, child: WhatsAppFab()),
+              ],
             ),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: SiteHeader(content: header, scrolled: _scrolled),
-            ),
-            const Positioned(bottom: 26, right: 26, child: WhatsAppFab()),
-          ],
-        ),
-      ),
-    );
+          ),
+        ));
   }
 }

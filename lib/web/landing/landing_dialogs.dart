@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../providers/service_providers.dart';
 import '../../services/lead_service.dart';
 import '../brand_kit.dart';
+import '../cms/data/site_providers.dart';
+import '../cms/model/json_reader.dart';
 import '../cms/platform/open_external.dart';
 
 typedef _Highlight = ({IconData icon, Color color, String title, String desc});
@@ -422,43 +424,42 @@ class _EnterpriseContactDialogState
 
 /// Floating WhatsApp contact pill.
 ///
-/// Renders only when a real number has been configured. The previous version
-/// shipped the placeholder `94XXXXXXXXX`, so the button opened a dead wa.me
-/// link — worse on a sales page than no button at all. Put the number in
-/// [waNumber] to bring it back.
-class WhatsAppFab extends StatefulWidget {
+/// Renders only when a real number has been set in the site settings. The first
+/// version shipped the placeholder `94XXXXXXXXX`, so the button opened a dead
+/// wa.me link — worse on a sales page than no button at all. A number that is not
+/// 8 to 15 digits is treated as not set.
+class WhatsAppFab extends ConsumerStatefulWidget {
   const WhatsAppFab({super.key});
 
   /// International format, digits only, no '+' or spaces.
-  static const waNumber = '';
-  static const waMessage = "Hi! I'm interested in HotRest for my property.";
-
-  static bool get configured =>
-      waNumber.isNotEmpty && !waNumber.contains(RegExp('[^0-9]'));
+  static bool isValidNumber(String n) => RegExp(r'^[0-9]{8,15}$').hasMatch(n);
 
   @override
-  State<WhatsAppFab> createState() => _WhatsAppFabState();
+  ConsumerState<WhatsAppFab> createState() => _WhatsAppFabState();
 }
 
-class _WhatsAppFabState extends State<WhatsAppFab> {
+class _WhatsAppFabState extends ConsumerState<WhatsAppFab> {
   bool _hover = false;
 
-  void _open() {
-    final uri = Uri.encodeFull(
-        'https://wa.me/${WhatsAppFab.waNumber}?text=${WhatsAppFab.waMessage}');
+  void _open(String number, String message) {
+    final uri = Uri.encodeFull('https://wa.me/$number?text=$message');
     openExternal(uri);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!WhatsAppFab.configured) return const SizedBox.shrink();
+    final site = J.of(ref.watch(siteRawProvider('global:site')));
+    final number = site.str('whatsappNumber').trim();
+    if (!WhatsAppFab.isValidNumber(number)) return const SizedBox.shrink();
+    final message = site.str('whatsappMessage');
+    final label = site.str('whatsappLabel', 'Chat with us');
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
-        onTap: _open,
+        onTap: () => _open(number, message),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 190),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
@@ -479,12 +480,12 @@ class _WhatsAppFabState extends State<WhatsAppFab> {
               const Icon(Icons.chat_rounded, color: Colors.white, size: 19),
               AnimatedSize(
                 duration: const Duration(milliseconds: 190),
-                child: _hover
-                    ? const Padding(
-                        padding: EdgeInsets.only(left: 9),
+                child: _hover && label.isNotEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.only(left: 9),
                         child: Text(
-                          'Chat with us',
-                          style: TextStyle(
+                          label,
+                          style: const TextStyle(
                             fontFamily: 'Outfit',
                             color: Colors.white,
                             fontSize: 13.5,

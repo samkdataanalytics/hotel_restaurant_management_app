@@ -109,3 +109,15 @@ const Map<String, Object?> kThemeDefaults = {
   'typography': {},
   'layout': {},
 };
+
+/// Site-wide settings: the contact address the legal text refers to, and the
+/// optional WhatsApp chat button. The WhatsApp number is empty because the
+/// button must only appear with a real number (a placeholder number once made it
+/// open a dead link).
+const Map<String, Object?> kSiteSettingsDefaults = {
+  'schema': 1,
+  'supportEmail': 'kasun@ideadeck.biz',
+  'whatsappNumber': '',
+  'whatsappMessage': "Hi! I'm interested in HotRest for my property.",
+  'whatsappLabel': 'Chat with us',
+};
