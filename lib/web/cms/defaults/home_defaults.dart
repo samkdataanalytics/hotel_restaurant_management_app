@@ -28,10 +28,76 @@ const Map<String, Object?> kHomeDefaults = {
       'type': 'stats',
       'layout': {'spaceBefore': 'none'},
       'style': {'reveal': false},
-      'content': {},
+      'content': {
+        'items': [
+          {'value': 500, 'suffix': '+', 'decimals': 0, 'label': 'Properties'},
+          {'value': 50, 'suffix': 'K+', 'decimals': 0, 'label': 'Bookings managed'},
+          {'value': 99.9, 'suffix': '%', 'decimals': 1, 'label': 'Uptime SLA'},
+          {'value': 4.9, 'suffix': '', 'decimals': 1, 'label': 'Average rating'},
+        ],
+      },
     },
-    {'id': 'before-after', 'type': 'beforeAfter', 'content': {}},
-    {'id': 'how-it-works', 'type': 'steps', 'content': {}},
+    {
+      'id': 'before-after',
+      'type': 'beforeAfter',
+      'content': {
+        'eyebrow': 'The difference',
+        'title': 'Life before and after HotRest',
+        'lead': "Sound familiar? You're not alone. Most independent hotels and "
+            'restaurants operate the same way — until they find HotRest.',
+        'before': {
+          'title': 'Before HotRest',
+          'items': [
+            'WhatsApp and phone calls for every booking',
+            'Spreadsheets that break during peak hours',
+            'Paper order tickets lost in the kitchen',
+            'Staff asking each other what to do next',
+            'Hours wasted on manual data entry daily',
+            'Guests waiting 10 minutes to check in',
+          ],
+        },
+        'after': {
+          'title': 'With HotRest',
+          'items': [
+            'One dashboard for front desk, kitchen and finance',
+            'Real-time sync across all departments',
+            'Digital kitchen display — zero lost tickets',
+            'Every staff member knows their tasks instantly',
+            'Save 4+ hours of admin work every single day',
+            'Guests self-check-in in under 30 seconds',
+          ],
+        },
+      },
+    },
+    {
+      'id': 'how-it-works',
+      'type': 'steps',
+      'content': {
+        'eyebrow': 'How it works',
+        'title': 'Up and running in under 20 minutes',
+        'lead': 'No consultants. No training sessions. Just sign up and go.',
+        'items': [
+          {
+            'icon': 'apartment_rounded',
+            'title': 'Set up your property',
+            'desc': 'Add your hotel details, configure room types, build your restaurant '
+                'menu, and invite staff — all in one onboarding flow.',
+          },
+          {
+            'icon': 'dashboard_rounded',
+            'title': 'Manage everything',
+            'desc': 'Check guests in, process restaurant orders, track shifts and monitor '
+                'occupancy from one unified dashboard.',
+          },
+          {
+            'icon': 'trending_up_rounded',
+            'title': 'Grow your business',
+            'desc': 'Use built-in analytics to optimise pricing, spot peak periods and '
+                'make data-driven decisions that increase revenue.',
+          },
+        ],
+      },
+    },
     {'id': 'features', 'type': 'featureGrid', 'anchor': 'features', 'content': {}},
     {
       'id': 'comparison',
@@ -85,7 +151,26 @@ const Map<String, Object?> kHomeDefaults = {
         ],
       },
     },
-    {'id': 'final-cta', 'type': 'ctaBand', 'content': {}},
+    {
+      'id': 'final-cta',
+      'type': 'ctaBand',
+      'content': {
+        'eyebrow': 'Get started in under 5 minutes',
+        'title': 'Ready to transform your property?',
+        'body': 'Join hundreds of hospitality teams already running smarter with '
+            'HotRest. Start your 45-day free trial — full access, no credit '
+            'card required.',
+        'primary': {
+          'label': 'Create free account',
+          'link': {'type': 'internal', 'value': '/signup'},
+        },
+        'secondary': {
+          'label': 'Sign in',
+          'link': {'type': 'internal', 'value': '/login'},
+        },
+        'ticks': ['SOC 2 compliant', 'GDPR ready', '24/7 support'],
+      },
+    },
   ],
 };
 
