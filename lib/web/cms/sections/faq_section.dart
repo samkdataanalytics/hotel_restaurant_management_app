@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../brand_kit.dart';
 import '../model/json_reader.dart';
+import '../model/tokens.dart';
 import '../model/site_document.dart';
 import '../registry/section_registry.dart';
 import 'section_head_content.dart';
 
 class FaqItem {
   const FaqItem({required this.q, required this.a});
-  factory FaqItem.fromJson(J j) => FaqItem(q: j.str('q'), a: j.str('a'));
+  factory FaqItem.fromJson(J j) => FaqItem(q: expandTokens(j.str('q')), a: expandTokens(j.str('a')));
   final String q;
   final String a;
 }

@@ -38,7 +38,7 @@ Future<SectionSpec?> showAddSectionDialog(BuildContext context) {
                     maxCrossAxisExtent: 230,
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
-                    mainAxisExtent: 118,
+                    mainAxisExtent: 134,
                   ),
                   itemCount: kSectionSpecs.length,
                   itemBuilder: (_, i) {

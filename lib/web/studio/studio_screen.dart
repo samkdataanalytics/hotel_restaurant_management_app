@@ -47,7 +47,10 @@ class _StudioScreenState extends ConsumerState<StudioScreen> {
 
   @override
   void dispose() {
-    _controller.flush();
+    // Sent after this frame: flush() updates the controller's state, and doing
+    // that while this element is still being torn down notifies widgets that are
+    // mid-unmount.
+    Future.microtask(_controller.flush);
     setUnloadGuard(false);
     super.dispose();
   }

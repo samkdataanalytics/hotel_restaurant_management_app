@@ -302,6 +302,15 @@ void main() {
     });
   });
 
+  testWidgets('placeholders in FAQ answers and the CTA band become the real numbers', (t) async {
+    await _pump(t, 1280, Builder(builder: (c) => faqDefinition.builder(c, byType['faq']!)));
+    expect(find.text('Do you offer a free trial?'), findsOneWidget);
+    expect(find.textContaining('{trialDays}'), findsNothing);
+    await _pump(t, 1280, Builder(builder: (c) => ctaBandDefinition.builder(c, byType['ctaBand']!)));
+    expect(find.textContaining('45-day free trial'), findsOneWidget);
+    expect(find.textContaining('{'), findsNothing);
+  });
+
   testWidgets('steps are numbered by position', (t) async {
     final node = _node('steps', {
       'items': [

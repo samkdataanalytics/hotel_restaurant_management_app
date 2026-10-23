@@ -46,6 +46,9 @@ void main() {
       expect(expandTokens('{year} {trialDays}', {'year': '2026', 'trialDays': '1'}),
           '2026 45');
     });
+    test('{year} is the current year without being passed', () {
+      expect(expandTokens('© {year}'), '© ${DateTime.now().year}');
+    });
     test('text without braces is returned untouched', () {
       expect(expandTokens('plain'), 'plain');
     });

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hotel_checkin/web/cms/defaults/site_defaults.dart';
 import 'package:hotel_checkin/web/studio/specs/section_specs.dart';
-import 'package:hotel_checkin/web/studio/studio_state.dart';
 import 'package:hotel_checkin/web/studio/studio_validation.dart';
 
 Map<String, dynamic> _page(List<Map<String, dynamic>> sections) => {'schema': 1, 'sections': sections};
@@ -28,6 +27,10 @@ void main() {
   group('the shipped page', () {
     test('the bundled home page has no errors, so it can be published as it is', () {
       expect(_errors(siteDefaultJson('page:home')), isEmpty);
+    });
+
+    test('and no warnings either: the shipped copy uses the placeholders', () {
+      expect(_warnings(siteDefaultJson('page:home')), isEmpty);
     });
 
     test('every section type has a spec and a valid template', () {

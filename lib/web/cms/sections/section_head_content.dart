@@ -1,4 +1,5 @@
 import '../model/json_reader.dart';
+import '../model/tokens.dart';
 
 /// The eyebrow / title / lead block that opens most sections.
 ///
@@ -8,9 +9,9 @@ class HeadContent {
   const HeadContent({this.eyebrow = '', this.title = '', this.lead});
 
   factory HeadContent.fromJson(J j) => HeadContent(
-        eyebrow: j.str('eyebrow'),
-        title: j.str('title'),
-        lead: j.strOrNull('lead'),
+        eyebrow: expandTokens(j.str('eyebrow')),
+        title: expandTokens(j.str('title')),
+        lead: j.strOrNull('lead') == null ? null : expandTokens(j.str('lead')),
       );
 
   final String eyebrow;

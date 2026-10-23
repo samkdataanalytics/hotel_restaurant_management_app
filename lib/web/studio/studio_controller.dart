@@ -81,6 +81,7 @@ class StudioController extends StateNotifier<StudioState> {
       // looked at, but it says plainly that nothing will save.
       problem = _describe(e);
     }
+    if (!mounted) return;
 
     final base = published?.content ?? _defaults(key);
     final doc = deepCopy(draft?.content ?? base);
@@ -289,6 +290,7 @@ class StudioController extends StateNotifier<StudioState> {
   /// Saves the working copy now (if there is something to save).
   Future<void> flush() async {
     _timer?.cancel();
+    if (!mounted) return;
     if (state.key.isEmpty || state.status == SaveStatus.conflict) return;
     if (state.status == SaveStatus.saved || state.loading) return;
 
@@ -297,6 +299,7 @@ class StudioController extends StateNotifier<StudioState> {
     state = state.copyWith(status: SaveStatus.saving, error: null);
     try {
       final v = await _repo.saveDraft(state.key, snapshot, state.draftVersion);
+      if (!mounted) return;
       // If the admin kept typing while this was in flight, the newer edit has its
       // own save scheduled; this one only advances the version.
       final stillCurrent = gen == _generation;
@@ -307,9 +310,9 @@ class StudioController extends StateNotifier<StudioState> {
       );
       if (!stillCurrent) _scheduleSave();
     } on SiteConflict catch (e) {
-      state = state.copyWith(status: SaveStatus.conflict, error: e.message);
+      if (mounted) state = state.copyWith(status: SaveStatus.conflict, error: e.message);
     } catch (e) {
-      state = state.copyWith(status: SaveStatus.error, error: _describe(e));
+      if (mounted) state = state.copyWith(status: SaveStatus.error, error: _describe(e));
     }
   }
 
@@ -327,12 +330,14 @@ class StudioController extends StateNotifier<StudioState> {
     }
     state = state.copyWith(publishing: true, error: null);
     await flush();
+    if (!mounted) return false;
     if (state.status == SaveStatus.error || state.status == SaveStatus.conflict) {
       state = state.copyWith(publishing: false);
       return false;
     }
     try {
       final v = await _repo.publish(state.key, note);
+      if (!mounted) return false;
       state = state.copyWith(
         published: deepCopy(state.doc),
         publishedVersion: v,
@@ -342,7 +347,7 @@ class StudioController extends StateNotifier<StudioState> {
       onPublished?.call();
       return true;
     } catch (e) {
-      state = state.copyWith(publishing: false, error: _describe(e));
+      if (mounted) state = state.copyWith(publishing: false, error: _describe(e));
       return false;
     }
   }
@@ -354,9 +359,10 @@ class StudioController extends StateNotifier<StudioState> {
     try {
       await _repo.discardDraft(key);
     } catch (e) {
-      state = state.copyWith(error: _describe(e));
+      if (mounted) state = state.copyWith(error: _describe(e));
       return;
     }
+    if (!mounted) return;
     await open(key);
   }
 
@@ -364,12 +370,14 @@ class StudioController extends StateNotifier<StudioState> {
   Future<void> restoreRevision(int rev) async {
     final key = state.key;
     await flush();
+    if (!mounted) return;
     try {
       await _repo.restoreRevision(key, rev);
     } catch (e) {
-      state = state.copyWith(error: _describe(e));
+      if (mounted) state = state.copyWith(error: _describe(e));
       return;
     }
+    if (!mounted) return;
     await open(key);
   }
 }

@@ -4,6 +4,7 @@ import '../../brand_kit.dart';
 import '../model/json_reader.dart';
 import '../model/link_target.dart';
 import '../model/site_document.dart';
+import '../model/tokens.dart';
 import '../registry/section_registry.dart';
 import '../render/link_action.dart';
 
@@ -30,9 +31,9 @@ class CtaBandContent {
   });
 
   factory CtaBandContent.fromJson(J j) => CtaBandContent(
-        eyebrow: j.str('eyebrow'),
-        title: j.str('title'),
-        body: j.str('body'),
+        eyebrow: expandTokens(j.str('eyebrow')),
+        title: expandTokens(j.str('title')),
+        body: expandTokens(j.str('body')),
         primary: CtaButtonContent.fromJson(j.obj('primary')),
         secondary: CtaButtonContent.fromJson(j.obj('secondary')),
         ticks: j.strings('ticks').where((t) => t.isNotEmpty).toList(),

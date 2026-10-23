@@ -9,6 +9,6 @@ String expandTokens(String text, [Map<String, String> extra = const {}]) {
   return text.replaceAllMapped(RegExp(r'\{([A-Za-z][A-Za-z0-9]*)\}'), (m) {
     final key = m[1]!;
     // Protected facts first: a caller-supplied value cannot redefine them.
-    return BillingFacts.tokens[key] ?? extra[key] ?? m[0]!;
+    return BillingFacts.tokens[key] ?? extra[key] ?? (key == 'year' ? '${DateTime.now().year}' : null) ?? m[0]!;
   });
 }

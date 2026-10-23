@@ -22,10 +22,10 @@ class HeroContent {
   });
 
   factory HeroContent.fromJson(J j) => HeroContent(
-        badge: j.str('badge'),
-        headline: j.str('headline'),
+        badge: expandTokens(j.str('badge')),
+        headline: expandTokens(j.str('headline')),
         rotating: j.strings('rotating').where((w) => w.isNotEmpty).toList(),
-        body: j.str('body'),
+        body: expandTokens(j.str('body')),
         primary: CtaButtonContent.fromJson(j.obj('primary')),
         secondary: CtaButtonContent.fromJson(j.obj('secondary')),
         ticks: j.strings('ticks').map(expandTokens).where((t) => t.isNotEmpty).toList(),

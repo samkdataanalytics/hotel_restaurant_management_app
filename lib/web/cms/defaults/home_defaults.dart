@@ -346,7 +346,7 @@ const Map<String, Object?> kHomeDefaults = {
         'items': [
           {
             'q': 'Do you offer a free trial?',
-            'a': 'Yes. Every new account starts with a 45-day free trial with full access '
+            'a': 'Yes. Every new account starts with a {trialDays}-day free trial with full access '
                 'to every feature — properties, rooms, restaurant tables, staff accounts '
                 'and the guest portal. No credit card required to start.',
           },
@@ -388,7 +388,7 @@ const Map<String, Object?> kHomeDefaults = {
         'eyebrow': 'Get started in under 5 minutes',
         'title': 'Ready to transform your property?',
         'body': 'Join hundreds of hospitality teams already running smarter with '
-            'HotRest. Start your 45-day free trial — full access, no credit '
+            'HotRest. Start your {trialDays}-day free trial — full access, no credit '
             'card required.',
         'primary': {
           'label': 'Create free account',

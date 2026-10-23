@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../brand_kit.dart';
 import '../model/json_reader.dart';
 import '../model/site_document.dart';
+import '../model/tokens.dart';
 import '../registry/section_registry.dart';
 import '../render/link_action.dart';
 import 'cta_band_section.dart' show CtaButtonContent;
@@ -42,9 +43,9 @@ class ImageTextContent {
   });
 
   factory ImageTextContent.fromJson(J j) => ImageTextContent(
-        eyebrow: j.str('eyebrow'),
-        title: j.str('title'),
-        body: j.str('body'),
+        eyebrow: expandTokens(j.str('eyebrow')),
+        title: expandTokens(j.str('title')),
+        body: expandTokens(j.str('body')),
         image: ImageRef.fromJson(j.obj('image')),
         imageLeft: j.str('imageSide') == 'left',
         cta: CtaButtonContent.fromJson(j.obj('cta')),

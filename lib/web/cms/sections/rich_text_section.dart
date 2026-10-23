@@ -5,6 +5,7 @@ import '../../brand_kit.dart';
 import '../model/json_reader.dart';
 import '../model/rich_text.dart' as md;
 import '../model/site_document.dart';
+import '../model/tokens.dart';
 import '../registry/section_registry.dart';
 import '../render/link_action.dart';
 
@@ -18,9 +19,9 @@ class RichTextContent {
   });
 
   factory RichTextContent.fromJson(J j) => RichTextContent(
-        eyebrow: j.str('eyebrow'),
-        title: j.str('title'),
-        body: j.str('body'),
+        eyebrow: expandTokens(j.str('eyebrow')),
+        title: expandTokens(j.str('title')),
+        body: expandTokens(j.str('body')),
         centered: j.str('align') == 'center',
         wide: j.str('width') == 'wide',
       );
