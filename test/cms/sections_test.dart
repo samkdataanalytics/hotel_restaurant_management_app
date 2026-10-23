@@ -14,10 +14,13 @@ import 'package:hotel_checkin/web/cms/sections/cta_band_section.dart';
 import 'package:hotel_checkin/web/cms/sections/faq_section.dart';
 import 'package:hotel_checkin/web/cms/sections/feature_grid_section.dart';
 import 'package:hotel_checkin/web/cms/sections/stats_section.dart';
+import 'package:hotel_checkin/web/cms/sections/hero_section.dart';
 import 'package:hotel_checkin/web/cms/sections/pricing_section.dart';
 import 'package:hotel_checkin/web/cms/sections/steps_section.dart';
 import 'package:hotel_checkin/services/plan_service.dart';
 import 'package:hotel_checkin/web/cms/sections/testimonials_section.dart';
+
+import 'support/brand_fonts.dart';
 
 /// Sections that read their content from the document. They must render from
 /// the bundled defaults at every width, and survive content that is missing or
@@ -32,6 +35,7 @@ final _defs = {
   'testimonials': testimonialsDefinition,
   'comparison': comparisonDefinition,
   'pricing': pricingDefinition,
+  'hero': heroDefinition,
 };
 
 PlanModel _plan(String slug, String name, double price,
@@ -89,6 +93,8 @@ Future<void> _pump(WidgetTester t, double width, Widget child,
 }
 
 void main() {
+  setUpAll(loadBrandFonts);
+
   final byType = {for (final n in homeDefaults.sections) n.type: n};
 
   for (final entry in _defs.entries) {
@@ -179,6 +185,52 @@ void main() {
       await _pump(t, 520, build(byType['comparison']!));
       expect(find.text('PMS'), findsWidgets);
       expect(find.text('Traditional PMS'), findsNothing);
+    });
+  });
+
+  group('hero', () {
+    Widget build(SectionNode n) => Builder(builder: (c) => heroDefinition.builder(c, n));
+
+    testWidgets('shows the headline, ticks and mock figures from content', (t) async {
+      await _pump(t, 1280, build(byType['hero']!));
+      expect(find.text('Stop running your property on'), findsOneWidget);
+      expect(find.text('45-day free trial'), findsOneWidget);
+      expect(find.text('87%'), findsOneWidget);
+      expect(find.text('Good morning, Alex'), findsOneWidget);
+    });
+
+    testWidgets('an empty rotating-word list does not crash the cycler', (t) async {
+      final node = _node('hero', {'headline': 'Hello', 'rotating': []});
+      await _pump(t, 1280, build(node));
+      expect(t.takeException(), isNull);
+      expect(find.text('Hello'), findsOneWidget);
+    });
+
+    testWidgets('without a mock the window is gone and the page still lays out', (t) async {
+      final node = _node('hero', {'headline': 'Hello', 'body': 'b'});
+      await _pump(t, 1280, build(node));
+      expect(t.takeException(), isNull);
+      expect(find.text('Good morning, Alex'), findsNothing);
+    });
+
+    testWidgets('floating callouts are desktop-only', (t) async {
+      await _pump(t, 1280, build(byType['hero']!));
+      expect(find.text('Guest checked in'), findsOneWidget);
+      await _pump(t, 520, build(byType['hero']!));
+      expect(find.text('Guest checked in'), findsNothing);
+    });
+
+    testWidgets('out-of-range chart and room values are clamped', (t) async {
+      final node = _node('hero', {
+        'headline': 'h',
+        'mock': {
+          'bars': [40, -3, 'x'],
+          'days': ['M'],
+          'rooms': [9, -1],
+        },
+      });
+      await _pump(t, 1280, build(node));
+      expect(t.takeException(), isNull);
     });
   });
 

@@ -21,7 +21,55 @@ const Map<String, Object?> kHomeDefaults = {
       'type': 'hero',
       'layout': {'spaceBefore': 'none'},
       'style': {'reveal': false},
-      'content': {},
+      'content': {
+        'badge': 'Trusted by 500+ properties worldwide',
+        'headline': 'Stop running your property on',
+        'rotating': ['WhatsApp.', 'spreadsheets.', 'paper tickets.', 'phone calls.'],
+        'body': 'Independent hotels and restaurants lose hours every day juggling '
+            'check-ins on WhatsApp, menus on paper and finances in Excel. '
+            'HotRest replaces all of it — one dashboard for every department.',
+        'primary': {
+          'label': 'Start free trial',
+          'link': {'type': 'internal', 'value': '/signup'},
+        },
+        'secondary': {
+          'label': 'Watch demo',
+          'link': {'type': 'action', 'value': 'openDemo'},
+        },
+        'ticks': ['{trialDays}-day free trial', 'Full access', 'No credit card'],
+        // An illustration, not live data: every figure is editable.
+        'mock': {
+          'url': 'app.hotrest.app/dashboard',
+          'greeting': 'Good morning, Alex',
+          'property': 'Grand Ocean Hotel',
+          'liveLabel': 'Live',
+          'kpis': [
+            {'label': 'Occupancy', 'value': '87%', 'delta': '+6%'},
+            {'label': "Today's revenue", 'value': '4,280', 'delta': '+12%'},
+            {'label': 'Active orders', 'value': '12', 'delta': 'Now'},
+          ],
+          'chartTitle': 'Revenue · last 7 days',
+          // Shaped like a real week: a midweek dip and a weekend peak.
+          'bars': [0.42, 0.55, 0.38, 0.62, 0.78, 1.0, 0.86],
+          'days': ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
+          // 0 free, 1 occupied, 2 cleaning
+          'rooms': [1, 1, 0, 2, 1, 0, 0, 1, 2, 0, 1, 1],
+          'floats': [
+            {
+              'icon': 'qr_code_2_rounded',
+              'tone': 'teal',
+              'title': 'Guest checked in',
+              'sub': 'via QR · 24 seconds',
+            },
+            {
+              'icon': 'restaurant_rounded',
+              'tone': 'navy',
+              'title': 'Table 6 · order fired',
+              'sub': 'sent to kitchen display',
+            },
+          ],
+        },
+      },
     },
     {
       'id': 'stats',
