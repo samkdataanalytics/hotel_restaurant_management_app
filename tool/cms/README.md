@@ -26,3 +26,11 @@ Headless Chrome clamps the viewport to 500px, so the narrowest width is 520.
 Captures at the same width use the same canvas height, so a plain pixel diff is
 meaningful. Pricing comes from the dev database, so re-baseline if plans change.
 Requires Python with Pillow, and Google Chrome at the macOS default path.
+
+## Re-baselines
+
+A baseline changes only for a deliberate, explained reason.
+
+- 2026-10-23, `home_520`: the header gained a menu button on phones (148 px, in
+  the header only), because the nav links were unreachable below 768 px. Every
+  other capture, at every width, was unchanged.
