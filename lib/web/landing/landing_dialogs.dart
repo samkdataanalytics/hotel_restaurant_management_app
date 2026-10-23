@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:web/web.dart' as webpkg;
 
 import '../../providers/service_providers.dart';
 import '../../services/lead_service.dart';
 import '../brand_kit.dart';
+import '../cms/platform/open_external.dart';
 
 typedef _Highlight = ({IconData icon, Color color, String title, String desc});
 
@@ -446,7 +446,7 @@ class _WhatsAppFabState extends State<WhatsAppFab> {
   void _open() {
     final uri = Uri.encodeFull(
         'https://wa.me/${WhatsAppFab.waNumber}?text=${WhatsAppFab.waMessage}');
-    webpkg.window.open(uri, '_blank');
+    openExternal(uri);
   }
 
   @override

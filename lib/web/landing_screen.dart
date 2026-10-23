@@ -8,6 +8,12 @@ import '../providers/service_providers.dart';
 import '../services/plan_service.dart';
 import 'landing/landing_dialogs.dart';
 import 'brand_kit.dart';
+import 'cms/defaults/home_defaults.dart';
+import 'cms/registry/section_registry.dart';
+import 'cms/render/anchor_keys.dart';
+import 'cms/render/site_renderer.dart';
+import 'cms/render/site_scope.dart';
+import 'cms/sections/faq_section.dart';
 
 /// Public marketing site.
 ///
@@ -27,8 +33,7 @@ class LandingScreen extends StatefulWidget {
 
 class _LandingScreenState extends State<LandingScreen> {
   final _scroll = ScrollController();
-  final _featuresKey = GlobalKey();
-  final _pricingKey = GlobalKey();
+  final _anchors = AnchorKeys();
   bool _scrolled = false;
 
   @override
@@ -46,67 +51,65 @@ class _LandingScreenState extends State<LandingScreen> {
     super.dispose();
   }
 
-  void _jumpTo(GlobalKey key) {
-    final ctx = key.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      duration: const Duration(milliseconds: 650),
-      curve: Curves.easeInOutCubic,
-      alignment: 0.02,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final gap = LK.sectionGap(context);
+    final renderer = SiteRenderer(
+      registry: _registry,
+      fallback: homeDefaults,
+      anchors: _anchors,
+    );
 
-    return Scaffold(
-      backgroundColor: LK.white,
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            controller: _scroll,
-            child: Column(
-              children: [
-                const _Hero(),
-                const _TrustBar(),
-                SizedBox(height: gap),
-                const Reveal(child: _PainSection()),
-                SizedBox(height: gap),
-                const Reveal(child: _HowItWorks()),
-                SizedBox(height: gap),
-                Reveal(child: KeyedSubtree(key: _featuresKey, child: const _Features())),
-                SizedBox(height: gap),
-                const _Comparison(),
-                SizedBox(height: gap),
-                const Reveal(child: _Testimonials()),
-                SizedBox(height: gap),
-                Reveal(child: KeyedSubtree(key: _pricingKey, child: const _Pricing())),
-                SizedBox(height: gap),
-                const Reveal(child: _Faq()),
-                SizedBox(height: gap),
-                const Reveal(child: _FinalCta()),
-                const _Footer(),
-              ],
+    return SiteScope(
+      onScrollTo: _anchors.scrollTo,
+      child: Scaffold(
+        backgroundColor: LK.white,
+        body: Stack(
+          children: [
+            SingleChildScrollView(
+              controller: _scroll,
+              child: Column(
+                children: [
+                  ...renderer.build(context, homeDefaults),
+                  const _Footer(),
+                ],
+              ),
             ),
-          ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: _Nav(
-              scrolled: _scrolled,
-              onFeatures: () => _jumpTo(_featuresKey),
-              onPricing: () => _jumpTo(_pricingKey),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: _Nav(
+                scrolled: _scrolled,
+                onFeatures: () => _anchors.scrollTo('features'),
+                onPricing: () => _anchors.scrollTo('pricing'),
+              ),
             ),
-          ),
-          const Positioned(bottom: 26, right: 26, child: WhatsAppFab()),
-        ],
+            const Positioned(bottom: 26, right: 26, child: WhatsAppFab()),
+          ],
+        ),
       ),
     );
   }
 }
+
+/// Section types the document can name. Sections still drawn by their original
+/// widget are wrapped here and ignore their content; each moves into
+/// `cms/sections/` and out of this list as it is converted to read its content.
+SectionDefinition _legacy(String type, Widget Function() build) =>
+    SectionDefinition(type: type, label: type, builder: (_, __) => build());
+
+final _registry = SectionRegistry.of([
+  _legacy('hero', () => const _Hero()),
+  _legacy('stats', () => const _TrustBar()),
+  _legacy('beforeAfter', () => const _PainSection()),
+  _legacy('steps', () => const _HowItWorks()),
+  _legacy('featureGrid', () => const _Features()),
+  _legacy('comparison', () => const _Comparison()),
+  _legacy('testimonials', () => const _Testimonials()),
+  _legacy('pricing', () => const _Pricing()),
+  faqDefinition,
+  _legacy('ctaBand', () => const _FinalCta()),
+]);
 
 // ─── Navigation ──────────────────────────────────────────────────────────────
 
@@ -2038,141 +2041,6 @@ class _PlanCard extends StatelessWidget {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-// ─── FAQ ─────────────────────────────────────────────────────────────────────
-
-class _Faq extends StatelessWidget {
-  const _Faq();
-
-  static const _items = [
-    (
-      q: 'Do you offer a free trial?',
-      a: 'Yes. Every new account starts with a 45-day free trial with full access '
-          'to every feature — properties, rooms, restaurant tables, staff accounts '
-          'and the guest portal. No credit card required to start.',
-    ),
-    (
-      q: 'Can I manage multiple properties?',
-      a: 'Absolutely. Our Pro plan supports up to three properties, and the '
-          'Enterprise plan offers unlimited properties with a dedicated account '
-          'manager.',
-    ),
-    (
-      q: 'Do guests need to download an app?',
-      a: 'No. The guest portal works entirely via QR code in any mobile browser. '
-          'Guests can check in, browse the restaurant menu, order room service and '
-          'check out — all from their phone.',
-    ),
-    (
-      q: 'How secure is guest and payment data?',
-      a: 'HotRest is built on enterprise-grade infrastructure with row-level '
-          'security, encrypted data at rest and in transit, and GDPR-ready data '
-          'handling.',
-    ),
-    (
-      q: 'Can I white-label the guest portal?',
-      a: 'Yes, on Pro and Enterprise plans. You can set your own logo, brand '
-          'colours and property name. Guests see your brand — not ours.',
-    ),
-    (
-      q: 'Can I cancel or downgrade anytime?',
-      a: 'Of course. There are no long-term contracts. You can upgrade, downgrade '
-          'or cancel your plan at any time from account settings.',
-    ),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Shell(
-      maxWidth: 820,
-      child: Column(
-        children: [
-          const SectionHead(
-            eyebrow: 'FAQ',
-            title: 'Frequently asked questions',
-          ),
-          SizedBox(height: LK.isMobile(context) ? 32 : 48),
-          for (final it in _items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _FaqTile(q: it.q, a: it.a),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FaqTile extends StatefulWidget {
-  final String q;
-  final String a;
-  const _FaqTile({required this.q, required this.a});
-
-  @override
-  State<_FaqTile> createState() => _FaqTileState();
-}
-
-class _FaqTileState extends State<_FaqTile> {
-  bool _open = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () => setState(() => _open = !_open),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
-          decoration: BoxDecoration(
-            color: _open ? LK.white : LK.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _open ? LK.teal.withValues(alpha: 0.3) : LK.line),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.q,
-                      style: TextStyle(
-                        fontFamily: 'Outfit',
-                        color: LK.ink,
-                        fontSize: 15.5,
-                        fontWeight: _open ? FontWeight.w700 : FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  AnimatedRotation(
-                    duration: const Duration(milliseconds: 180),
-                    turns: _open ? 0.125 : 0,
-                    child: Icon(
-                      Icons.add_rounded,
-                      size: 20,
-                      color: _open ? LK.teal : LK.muted,
-                    ),
-                  ),
-                ],
-              ),
-              AnimatedCrossFade(
-                duration: const Duration(milliseconds: 200),
-                crossFadeState:
-                    _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                firstChild: const SizedBox(width: double.infinity),
-                secondChild: Padding(
-                  padding: const EdgeInsets.only(top: 12, right: 28),
-                  child: Text(widget.a, style: LK.small),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
