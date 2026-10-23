@@ -40,6 +40,7 @@ class SectionNode {
     this.content = const J({}),
     this.layout = const J({}),
     this.style = const J({}),
+    this.typography = const J({}),
   });
 
   /// Throws [FormatException] without an id and type — a section the registry
@@ -60,6 +61,7 @@ class SectionNode {
       content: j.obj('content'),
       layout: j.obj('layout'),
       style: j.obj('style'),
+      typography: j.obj('typography'),
     );
   }
 
@@ -76,6 +78,10 @@ class SectionNode {
   final J layout;
   final J style;
 
+  /// Per-section type overrides (`display`, `heading`, `subheading`, `lead` sizes
+  /// per device, fonts, colours). Read by `TypeOverrides.fromJson`.
+  final J typography;
+
   /// Whether the section takes the standard gap before it. Hero and the stats
   /// strip sit flush; everything else is separated.
   bool get spaceBefore => layout.str('spaceBefore', 'section') == 'section';
@@ -86,7 +92,13 @@ class SectionNode {
 
 /// A page's ordered list of sections.
 class SiteDocument {
-  const SiteDocument({this.schema = 1, this.sections = const [], this.seo = const J({})});
+  const SiteDocument({
+    this.schema = 1,
+    this.sections = const [],
+    this.seo = const J({}),
+    this.typography = const J({}),
+    this.layout = const J({}),
+  });
 
   /// Tolerant: a malformed section is dropped, not fatal.
   factory SiteDocument.fromJson(Object? v) {
@@ -94,6 +106,8 @@ class SiteDocument {
     return SiteDocument(
       schema: j.integer('schema', 1),
       seo: j.obj('seo'),
+      typography: j.obj('typography'),
+      layout: j.obj('layout'),
       sections: j.list('sections', SectionNode.fromJson),
     );
   }
@@ -101,6 +115,11 @@ class SiteDocument {
   final int schema;
   final List<SectionNode> sections;
   final J seo;
+
+  /// Page-level typography and layout: the middle of the cascade, below the
+  /// global theme and above each section.
+  final J typography;
+  final J layout;
 
   SectionNode? byId(String id) {
     for (final s in sections) {

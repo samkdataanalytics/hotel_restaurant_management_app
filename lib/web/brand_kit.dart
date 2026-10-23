@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'cms/render/type_scope.dart';
+
 /// Compile-time switch for deterministic output: `--dart-define=FREEZE_MOTION=true`.
 ///
 /// Reveal, CountUp and WordCycler all animate on their own, so two screenshots
@@ -70,39 +72,55 @@ class LK {
   // Negative tracking at display sizes is what separates a set headline from
   // default browser text; it is the single highest-leverage typographic move
   // on a page like this.
-  static TextStyle display(BuildContext c) => TextStyle(
-        fontFamily: 'Outfit',
-        color: ink,
-        fontSize: isMobile(c) ? 36 : 60,
-        height: 1.06,
-        fontWeight: FontWeight.w800,
-        letterSpacing: isMobile(c) ? -1.0 : -2.0,
+  static TextStyle display(BuildContext c) => TypeScope.style(
+        c,
+        TypeSlot.display,
+        TextStyle(
+          fontFamily: 'Outfit',
+          color: ink,
+          fontSize: isMobile(c) ? 36 : 60,
+          height: 1.06,
+          fontWeight: FontWeight.w800,
+          letterSpacing: isMobile(c) ? -1.0 : -2.0,
+        ),
       );
 
-  static TextStyle h2(BuildContext c) => TextStyle(
-        fontFamily: 'Outfit',
-        color: ink,
-        fontSize: isMobile(c) ? 28 : 42,
-        height: 1.12,
-        fontWeight: FontWeight.w800,
-        letterSpacing: isMobile(c) ? -0.7 : -1.3,
+  static TextStyle h2(BuildContext c) => TypeScope.style(
+        c,
+        TypeSlot.heading,
+        TextStyle(
+          fontFamily: 'Outfit',
+          color: ink,
+          fontSize: isMobile(c) ? 28 : 42,
+          height: 1.12,
+          fontWeight: FontWeight.w800,
+          letterSpacing: isMobile(c) ? -0.7 : -1.3,
+        ),
       );
 
-  static TextStyle h3(BuildContext c) => const TextStyle(
-        fontFamily: 'Outfit',
-        color: ink,
-        fontSize: 19,
-        height: 1.25,
-        fontWeight: FontWeight.w700,
-        letterSpacing: -0.3,
+  static TextStyle h3(BuildContext c) => TypeScope.style(
+        c,
+        TypeSlot.subheading,
+        const TextStyle(
+          fontFamily: 'Outfit',
+          color: ink,
+          fontSize: 19,
+          height: 1.25,
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.3,
+        ),
       );
 
-  static TextStyle lead(BuildContext c) => TextStyle(
-        fontFamily: 'Outfit',
-        color: body,
-        fontSize: isMobile(c) ? 16 : 18,
-        height: 1.62,
-        fontWeight: FontWeight.w400,
+  static TextStyle lead(BuildContext c) => TypeScope.style(
+        c,
+        TypeSlot.lead,
+        TextStyle(
+          fontFamily: 'Outfit',
+          color: body,
+          fontSize: isMobile(c) ? 16 : 18,
+          height: 1.62,
+          fontWeight: FontWeight.w400,
+        ),
       );
 
   static const small = TextStyle(
@@ -132,7 +150,9 @@ class Shell extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: LK.gutter(context)),
         child: Center(
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxWidth ?? LK.maxContent),
+            constraints: BoxConstraints(
+              maxWidth: maxWidth ?? LayoutScope.of(context).maxWidth ?? LK.maxContent,
+            ),
             child: child,
           ),
         ),
@@ -192,7 +212,9 @@ class SectionHead extends StatelessWidget {
         Text(
           title,
           textAlign: TextAlign.center,
-          style: LK.h2(context).copyWith(color: onDark ? Colors.white : LK.ink),
+          // Light grounds use the heading style as it comes, so a heading colour
+          // set in the theme applies; dark grounds always read white.
+          style: onDark ? LK.h2(context).copyWith(color: Colors.white) : LK.h2(context),
         ),
         if (lead != null) ...[
           const SizedBox(height: 16),
