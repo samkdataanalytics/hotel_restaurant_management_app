@@ -246,7 +246,49 @@ const Map<String, Object?> kHomeDefaults = {
         ],
       },
     },
-    {'id': 'pricing', 'type': 'pricing', 'anchor': 'pricing', 'content': {}},
+    {
+      'id': 'pricing',
+      'type': 'pricing',
+      'anchor': 'pricing',
+      'content': {
+        'eyebrow': 'Pricing',
+        'title': 'Simple, transparent pricing',
+        // {trialDays} and {annualDiscountPct} are BillingFacts, not free text.
+        'lead': 'Every plan starts with a {trialDays}-day free trial — full access to every '
+            'feature, no credit card required. Upgrade anytime.',
+        'flags': [
+          {
+            'icon': 'card_giftcard_rounded',
+            'text': '{trialDays}-day free trial on every plan',
+            'tone': 'teal',
+          },
+          {
+            'icon': 'lock_clock_rounded',
+            'text': 'Early-access rates locked in for life',
+            'tone': 'amber',
+          },
+        ],
+        'labels': {
+          'monthly': 'Monthly',
+          'annual': 'Annual',
+          'annualBadge': 'Save {annualDiscountPct}%',
+          'monthlyPeriod': '/month',
+          'annualPeriod': '/mo, billed annually',
+          'featuredBadge': 'Most popular',
+          'cta': 'Start free trial',
+          'enterpriseCta': 'Contact sales',
+          'customPrice': 'Custom',
+          'freePrice': 'Free',
+          'currency': 'LKR',
+          'emptyMessage': 'Pricing is being updated — please check back shortly.',
+          'extras': {
+            'all': ['Hotel + restaurant modules', 'Guest portal (QR check-in & menu)'],
+            'paid': ['White-label branding'],
+            'enterprise': ['Dedicated account manager', 'SLA & uptime guarantee'],
+          },
+        },
+      },
+    },
     {
       'id': 'faq',
       'type': 'faq',

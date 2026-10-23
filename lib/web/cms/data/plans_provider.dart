@@ -6,14 +6,17 @@ import '../../../services/plan_service.dart';
 /// The active plans, fetched once per app session and shared by every section
 /// that quotes a price. The comparison table and the pricing cards used to each
 /// make their own request for the same rows.
-final activePlansProvider = FutureProvider<List<PlanModel>>(
+///
+/// Auto-disposed so that leaving the page and coming back fetches again, as each
+/// section used to on its own, and a failed fetch is not remembered all session.
+final activePlansProvider = FutureProvider.autoDispose<List<PlanModel>>(
   (ref) => ref.read(planServiceProvider).getActivePlans(),
 );
 
 /// The Starter plan's monthly price in whole currency units, or null while it
 /// loads or if it cannot be had. Marketing copy shows a fallback in that case:
 /// a missing price must not blank the page.
-final starterMonthlyPriceProvider = FutureProvider<int?>((ref) async {
+final starterMonthlyPriceProvider = FutureProvider.autoDispose<int?>((ref) async {
   try {
     final plans = await ref.watch(activePlansProvider.future);
     final starter = plans.where((p) => p.slug == 'starter').firstOrNull;

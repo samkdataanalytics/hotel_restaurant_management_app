@@ -14,7 +14,9 @@ import 'package:hotel_checkin/web/cms/sections/cta_band_section.dart';
 import 'package:hotel_checkin/web/cms/sections/faq_section.dart';
 import 'package:hotel_checkin/web/cms/sections/feature_grid_section.dart';
 import 'package:hotel_checkin/web/cms/sections/stats_section.dart';
+import 'package:hotel_checkin/web/cms/sections/pricing_section.dart';
 import 'package:hotel_checkin/web/cms/sections/steps_section.dart';
+import 'package:hotel_checkin/services/plan_service.dart';
 import 'package:hotel_checkin/web/cms/sections/testimonials_section.dart';
 
 /// Sections that read their content from the document. They must render from
@@ -29,7 +31,31 @@ final _defs = {
   'featureGrid': featureGridDefinition,
   'testimonials': testimonialsDefinition,
   'comparison': comparisonDefinition,
+  'pricing': pricingDefinition,
 };
+
+PlanModel _plan(String slug, String name, double price,
+        {bool custom = false, bool highlighted = false, int properties = 1}) =>
+    PlanModel(
+      id: slug,
+      name: name,
+      slug: slug,
+      priceMonthly: price,
+      isCustomPrice: custom,
+      maxProperties: properties,
+      maxUsers: 5,
+      maxRooms: 20,
+      maxTables: 10,
+      isHighlighted: highlighted,
+      isActive: true,
+      sortOrder: 0,
+    );
+
+final _plans = [
+  _plan('starter', 'Starter', 3450),
+  _plan('growth', 'Growth', 8000, highlighted: true, properties: 3),
+  _plan('enterprise', 'Enterprise', 0, custom: true, properties: -1),
+];
 
 SectionNode _node(String type, Object? content) => SectionNode.fromJson(J.of({
       'id': type,
@@ -38,7 +64,7 @@ SectionNode _node(String type, Object? content) => SectionNode.fromJson(J.of({
     }));
 
 Future<void> _pump(WidgetTester t, double width, Widget child,
-    {Object? starterPrice = 3450}) async {
+    {Object? starterPrice = 3450, Object? plans}) async {
   t.view.physicalSize = Size(width, 1600);
   t.view.devicePixelRatio = 1;
   addTearDown(t.view.reset);
@@ -46,6 +72,11 @@ Future<void> _pump(WidgetTester t, double width, Widget child,
     overrides: [
       // No network in tests: the price is whatever the test says it is.
       starterMonthlyPriceProvider.overrideWith((ref) async => starterPrice as int?),
+      activePlansProvider.overrideWith((ref) async {
+        final p = plans ?? _plans;
+        if (p is List<PlanModel>) return p;
+        throw p;
+      }),
     ],
     child: MaterialApp(
       home: SiteScope(
@@ -148,6 +179,74 @@ void main() {
       await _pump(t, 520, build(byType['comparison']!));
       expect(find.text('PMS'), findsWidgets);
       expect(find.text('Traditional PMS'), findsNothing);
+    });
+  });
+
+  group('pricing', () {
+    Widget build([SectionNode? n]) =>
+        Builder(builder: (c) => pricingDefinition.builder(c, n ?? byType['pricing']!));
+
+    testWidgets('shows a card per plan and features exactly one', (t) async {
+      await _pump(t, 1280, build());
+      expect(find.text('Starter'), findsOneWidget);
+      expect(find.text('Growth'), findsOneWidget);
+      expect(find.text('LKR 3450'), findsOneWidget);
+      expect(find.text('Custom'), findsOneWidget);
+      expect(find.text('Most popular'), findsOneWidget);
+    });
+
+    testWidgets('two highlighted plans still feature only the first', (t) async {
+      final two = [
+        _plan('a', 'A', 1000, highlighted: true),
+        _plan('b', 'B', 2000, highlighted: true),
+      ];
+      await _pump(t, 1280, build(), plans: two);
+      expect(find.text('Most popular'), findsOneWidget);
+    });
+
+    testWidgets('annual toggle applies the shared discount to the displayed price', (t) async {
+      await _pump(t, 1280, build());
+      expect(find.text('Save 20%'), findsOneWidget);
+      await t.tap(find.text('Annual'));
+      // The price cross-fades; settle so the outgoing figure is gone.
+      await t.pumpAndSettle();
+      expect(find.text('LKR 2760'), findsOneWidget); // 3450 less 20%
+      expect(find.text('LKR 3450'), findsNothing);
+      expect(find.text('/mo, billed annually'), findsWidgets);
+    });
+
+    testWidgets('trial length in the copy comes from BillingFacts', (t) async {
+      await _pump(t, 1280, build());
+      expect(find.text('45-day free trial on every plan'), findsOneWidget);
+      expect(find.textContaining('{trialDays}'), findsNothing);
+    });
+
+    testWidgets('enterprise card carries the enterprise extras only', (t) async {
+      await _pump(t, 1280, build());
+      expect(find.text('Dedicated account manager'), findsOneWidget);
+      expect(find.text('SLA & uptime guarantee'), findsOneWidget);
+    });
+
+    testWidgets('unlimited limits read "Unlimited"', (t) async {
+      await _pump(t, 1280, build());
+      expect(find.text('Unlimited properties'), findsOneWidget);
+    });
+
+    testWidgets('no plans shows the holding message, not a blank', (t) async {
+      await _pump(t, 1280, build(), plans: <PlanModel>[]);
+      expect(find.textContaining('Pricing is being updated'), findsOneWidget);
+    });
+
+    testWidgets('a failed plans fetch shows the holding message', (t) async {
+      await _pump(t, 1280, build(), plans: Exception('offline'));
+      expect(find.textContaining('Pricing is being updated'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    testWidgets('survives empty content with sensible labels', (t) async {
+      await _pump(t, 1280, build(_node('pricing', {})));
+      expect(find.text('Start free trial'), findsWidgets);
+      expect(find.text('Monthly'), findsOneWidget);
     });
   });
 
