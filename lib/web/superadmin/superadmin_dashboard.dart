@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app_theme.dart';
 import '../../services/organization_service.dart';
 import '../semantic_palette.dart';
+import 'tracking/platform_overview_panel.dart';
 
 class SuperadminDashboard extends StatefulWidget {
   const SuperadminDashboard({super.key});
@@ -135,6 +136,10 @@ class _DashboardContent extends StatelessWidget {
             totalMembers: totalMembers,
             planCounts: planCounts,
           ),
+          const SizedBox(height: 28),
+
+          // What is happening across the platform (loads on its own).
+          const PlatformOverviewPanel(),
           const SizedBox(height: 28),
 
           // Plan breakdown + recent companies

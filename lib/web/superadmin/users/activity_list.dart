@@ -4,15 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app_theme.dart';
 import '../../../providers/service_providers.dart';
 import '../../../services/user_tracking_service.dart';
+import '../tracking/tracking_links.dart';
 import 'users_format.dart';
 
 /// A filterable, pageable view of the activity log: everything, one company, or
 /// one person. Used on the Users page, in a user's detail, and on a company.
 class ActivityList extends ConsumerStatefulWidget {
-  const ActivityList({super.key, this.userId, this.orgId, this.showActor = true, this.emptyHint});
+  const ActivityList({super.key, this.userId, this.orgId, this.propertyId, this.showActor = true, this.emptyHint});
 
   final String? userId;
   final String? orgId;
+  final String? propertyId;
 
   /// Hidden when the list is already one person's.
   final bool showActor;
@@ -40,7 +42,7 @@ class _ActivityListState extends ConsumerState<ActivityList> {
   @override
   void didUpdateWidget(ActivityList old) {
     super.didUpdateWidget(old);
-    if (old.userId != widget.userId || old.orgId != widget.orgId) _load(reset: true);
+    if (old.userId != widget.userId || old.orgId != widget.orgId || old.propertyId != widget.propertyId) _load(reset: true);
   }
 
   Future<void> _load({required bool reset}) async {
@@ -56,6 +58,7 @@ class _ActivityListState extends ConsumerState<ActivityList> {
       final page = await ref.read(userTrackingServiceProvider).activity(
             userId: widget.userId,
             orgId: widget.orgId,
+            propertyId: widget.propertyId,
             actionPrefix: _prefix,
             limit: _pageSize,
             before: _entries.isEmpty ? null : _entries.last.createdAt,
@@ -219,7 +222,15 @@ class _Row extends StatelessWidget {
               children: [
                 Text.rich(
                   TextSpan(children: [
-                    if (showActor) TextSpan(text: '${entry.actor}  ', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    if (showActor)
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.baseline,
+                        baseline: TextBaseline.alphabetic,
+                        child: InkWell(
+                          onTap: entry.userId.isEmpty ? null : () => openUser(context, entry.userId),
+                          child: Text('${entry.actor}  ', style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Color(0xFF1E293B))),
+                        ),
+                      ),
                     TextSpan(text: ActivityLabels.label(entry.action)),
                   ]),
                   style: const TextStyle(fontSize: 13.5, color: Color(0xFF1E293B)),
@@ -232,7 +243,22 @@ class _Row extends StatelessWidget {
                 if (where.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(where, style: const TextStyle(fontSize: 11.5, color: Color(0xFF94A3B8))),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (entry.orgName.isNotEmpty)
+                          InkWell(
+                            onTap: () => openCompany(context, entry.orgId),
+                            child: Text(entry.orgName, style: TextStyle(fontSize: 11.5, color: AppTheme.brandTeal, fontWeight: FontWeight.w600)),
+                          ),
+                        if (entry.orgName.isNotEmpty && entry.propertyName.isNotEmpty) const Text(' › ', style: TextStyle(fontSize: 11.5, color: Color(0xFF94A3B8))),
+                        if (entry.propertyName.isNotEmpty)
+                          InkWell(
+                            onTap: () => openProperty(context, entry.propertyId),
+                            child: Text(entry.propertyName, style: TextStyle(fontSize: 11.5, color: AppTheme.brandTeal, fontWeight: FontWeight.w600)),
+                          ),
+                      ],
+                    ),
                   ),
               ],
             ),

@@ -40,4 +40,9 @@ $PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/tests/local/user_tracking_stubs.s
 $PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/migrations/20261023000002_superadmin_user_tracking.sql >/dev/null 2>&1
 run_test supabase/tests/user_tracking.sql 25
 run_test supabase/tests/local/user_tracking_triggers.sql 10
+
+# Companies and properties: more stand-ins and a little data, the migration, the tests.
+$PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/tests/local/company_property_stubs.sql
+$PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/migrations/20261023000004_superadmin_companies_properties.sql >/dev/null 2>&1
+run_test supabase/tests/company_property_tracking.sql 25
 echo "All SQL tests passed"

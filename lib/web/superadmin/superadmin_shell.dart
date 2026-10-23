@@ -8,6 +8,7 @@ import 'companies_list_screen.dart';
 import 'superadmin_plans_screen.dart';
 import 'superadmin_leads_screen.dart';
 import '../studio/studio_screen.dart';
+import 'tracking/superadmin_properties_screen.dart';
 import 'users/superadmin_users_screen.dart';
 
 // ─── Nav item model ───────────────────────────────────────────────────────────
@@ -35,6 +36,7 @@ class _SuperadminShellState extends ConsumerState<SuperadminShell> {
   static const _pages = <Widget>[
     SuperadminDashboard(),
     CompaniesListScreen(),
+    SuperadminPropertiesScreen(),
     SuperadminUsersScreen(),
     SuperadminPlansScreen(),
     SuperadminLeadsScreen(),
@@ -44,14 +46,15 @@ class _SuperadminShellState extends ConsumerState<SuperadminShell> {
   static const _navItems = <_NavItem>[
     _NavItem(Icons.dashboard_rounded, 'Dashboard', 0),
     _NavItem(Icons.business_rounded, 'Companies', 1),
-    _NavItem(Icons.people_alt_rounded, 'Users', 2),
-    _NavItem(Icons.layers_rounded, 'Plans', 3),
-    _NavItem(Icons.mark_email_unread_rounded, 'Leads', 4),
-    _NavItem(Icons.web_rounded, 'Website', 5),
+    _NavItem(Icons.apartment_rounded, 'Properties', 2),
+    _NavItem(Icons.people_alt_rounded, 'Users', 3),
+    _NavItem(Icons.layers_rounded, 'Plans', 4),
+    _NavItem(Icons.mark_email_unread_rounded, 'Leads', 5),
+    _NavItem(Icons.web_rounded, 'Website', 6),
   ];
 
   /// The website editor needs the width: it has three panes of its own.
-  static const _studioIndex = 5;
+  static const _studioIndex = 6;
 
   void _select(int index) => setState(() {
         _selectedIndex = index;

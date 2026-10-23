@@ -109,8 +109,8 @@ class _FakeService extends UserTrackingService {
   }
 
   @override
-  Future<List<ActivityEntry>> activity({String? userId, String? orgId, String actionPrefix = '', int limit = 50, DateTime? before}) async {
-    calls.add('activity:${userId ?? '-'}:${orgId ?? '-'}:$actionPrefix:${before != null}');
+  Future<List<ActivityEntry>> activity({String? userId, String? orgId, String? propertyId, String actionPrefix = '', int limit = 50, DateTime? before}) async {
+    calls.add('activity:${userId ?? '-'}:${orgId ?? '-'}:$actionPrefix:${before != null}${propertyId == null ? '' : ':p=$propertyId'}');
     if (fail != null) throw fail!;
     final list = entries.where((e) => actionPrefix.isEmpty || e.action.startsWith(actionPrefix)).where((e) => before == null || e.createdAt.isBefore(before)).toList();
     return list.take(limit).toList();

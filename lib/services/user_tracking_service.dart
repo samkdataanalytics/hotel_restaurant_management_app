@@ -316,6 +316,7 @@ class ActivityEntry {
     required this.userName,
     required this.orgId,
     required this.orgName,
+    required this.propertyId,
     required this.propertyName,
     required this.action,
     required this.entity,
@@ -331,6 +332,7 @@ class ActivityEntry {
         userName: _s(j['user_name']),
         orgId: _s(j['org_id']),
         orgName: _s(j['org_name']),
+        propertyId: _s(j['property_id']),
         propertyName: _s(j['property_name']),
         action: _s(j['action']),
         entity: _s(j['entity']),
@@ -345,6 +347,7 @@ class ActivityEntry {
   final String userName;
   final String orgId;
   final String orgName;
+  final String propertyId;
   final String propertyName;
   final String action;
   final String entity;
@@ -512,17 +515,24 @@ class UserTrackingService {
   Future<List<ActivityEntry>> activity({
     String? userId,
     String? orgId,
+    String? propertyId,
     String actionPrefix = '',
     int limit = 50,
     DateTime? before,
   }) async {
-    final rows = await _db.rpc('superadmin_user_activity', params: {
+    final params = {
       'p_user_id': userId,
       'p_org_id': orgId,
       'p_action_prefix': actionPrefix.isEmpty ? null : actionPrefix,
       'p_limit': limit,
       'p_before': before?.toUtc().toIso8601String(),
-    });
+    };
+    // Filtering by property needs the newer function (migration ...0004); every
+    // other view keeps using the original, so users and companies still work on a
+    // database that has only ...0002.
+    final rows = propertyId == null
+        ? await _db.rpc('superadmin_user_activity', params: params)
+        : await _db.rpc('superadmin_activity', params: {...params, 'p_property_id': propertyId});
     return rows is List ? [for (final e in rows) if (e is Map) ActivityEntry.fromJson(Map<String, dynamic>.from(e))] : const [];
   }
 }
