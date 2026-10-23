@@ -26,11 +26,14 @@ Object? getAt(Object? root, JsonPath path) {
 void setAt(Map<String, dynamic> root, JsonPath path, Object? value) {
   if (path.isEmpty) throw ArgumentError('path must not be empty');
   Object cur = root;
+  // The containers walked through, so a removal can tidy up behind itself.
+  final chain = <(Object container, Object step)>[];
   for (var i = 0; i < path.length - 1; i++) {
     final step = path[i];
     final nextIsIndex = path[i + 1] is int;
     if (step is String && cur is Map) {
       final next = cur[step];
+      chain.add((cur, step));
       if (next is Map || next is List) {
         cur = next as Object;
       } else {
@@ -39,6 +42,7 @@ void setAt(Map<String, dynamic> root, JsonPath path, Object? value) {
         cur = created;
       }
     } else if (step is int && cur is List && step >= 0 && step < cur.length) {
+      chain.add((cur, step));
       cur = cur[step] as Object;
     } else {
       throw ArgumentError('cannot step $step into ${cur.runtimeType}');
@@ -48,6 +52,7 @@ void setAt(Map<String, dynamic> root, JsonPath path, Object? value) {
   if (last is String && cur is Map) {
     if (value == null) {
       cur.remove(last);
+      _pruneEmptyMaps(chain, cur);
     } else {
       cur[last] = value;
     }
@@ -55,6 +60,22 @@ void setAt(Map<String, dynamic> root, JsonPath path, Object? value) {
     cur[last] = value;
   } else {
     throw ArgumentError('cannot set $last on ${cur.runtimeType}');
+  }
+}
+
+/// After a key is removed, drops maps it leaves empty (`typography: {heading: {}}`
+/// becomes nothing), so resetting a setting leaves the document as if it had never
+/// been set. `content` is kept even when empty: every section has one.
+void _pruneEmptyMaps(List<(Object, Object)> chain, Object leaf) {
+  Object child = leaf;
+  for (var i = chain.length - 1; i >= 0; i--) {
+    final (container, step) = chain[i];
+    if (child is Map && child.isEmpty && container is Map && step is String && step != 'content') {
+      container.remove(step);
+      child = container;
+    } else {
+      return;
+    }
   }
 }
 

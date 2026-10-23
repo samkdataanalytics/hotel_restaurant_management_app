@@ -591,3 +591,16 @@ const List<FieldSpec> kTypographyFields = [
   FieldSpec.color('bodyColor', 'Intro text colour'),
 ];
 
+
+/// Visibility tab. Paths are relative to the section node itself.
+const List<FieldSpec> kVisibilityFields = [
+  FieldSpec.toggle('enabled', 'Show this section', defaultValue: true,
+      help: 'Switched off, the section stays here but visitors do not see it.'),
+  FieldSpec.group('visibility', 'Show on', [
+    FieldSpec.toggle('desktop', 'Desktop (1100px and wider)', defaultValue: true),
+    FieldSpec.toggle('tablet', 'Tablet (768 to 1099px)', defaultValue: true),
+    FieldSpec.toggle('mobile', 'Phone (under 768px)', defaultValue: true),
+  ]),
+  FieldSpec.text('anchor', 'Link anchor', maxLength: 40,
+      help: 'Lets links jump to this section, e.g. "pricing". Lowercase letters, numbers and dashes.'),
+];

@@ -20,8 +20,12 @@ class RichSpan {
   final LinkTarget? link;
 
   @override
-  bool operator ==(Object o) =>
-      o is RichSpan && o.text == text && o.bold == bold && o.italic == italic && o.link == link;
+  bool operator ==(Object other) =>
+      other is RichSpan &&
+      other.text == text &&
+      other.bold == bold &&
+      other.italic == italic &&
+      other.link == link;
 
   @override
   int get hashCode => Object.hash(text, bold, italic, link);

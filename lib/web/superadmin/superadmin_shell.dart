@@ -7,6 +7,7 @@ import 'superadmin_dashboard.dart';
 import 'companies_list_screen.dart';
 import 'superadmin_plans_screen.dart';
 import 'superadmin_leads_screen.dart';
+import '../studio/studio_screen.dart';
 
 // ─── Nav item model ───────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ class _SuperadminShellState extends ConsumerState<SuperadminShell> {
     CompaniesListScreen(),
     SuperadminPlansScreen(),
     SuperadminLeadsScreen(),
+    StudioScreen(),
   ];
 
   static const _navItems = <_NavItem>[
@@ -42,9 +44,16 @@ class _SuperadminShellState extends ConsumerState<SuperadminShell> {
     _NavItem(Icons.business_rounded, 'Companies', 1),
     _NavItem(Icons.layers_rounded, 'Plans', 2),
     _NavItem(Icons.mark_email_unread_rounded, 'Leads', 3),
+    _NavItem(Icons.web_rounded, 'Website', 4),
   ];
 
-  void _select(int index) => setState(() => _selectedIndex = index);
+  /// The website editor needs the width: it has three panes of its own.
+  static const _studioIndex = 4;
+
+  void _select(int index) => setState(() {
+        _selectedIndex = index;
+        if (index == _studioIndex) _sidebarExpanded = false;
+      });
 
   @override
   Widget build(BuildContext context) {

@@ -1,5 +1,3 @@
-import 'dart:ui' show Color;
-
 import 'package:flutter/widgets.dart';
 
 import '../model/color_ref.dart';

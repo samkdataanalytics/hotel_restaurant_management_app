@@ -309,7 +309,8 @@ class LinkField extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String>(
-          value: type,
+          key: ValueKey(type),
+          initialValue: type,
           isExpanded: true,
           decoration: SC.input(),
           style: SC.body,
@@ -321,7 +322,8 @@ class LinkField extends StatelessWidget {
         const SizedBox(height: 8),
         switch (type) {
           'internal' => DropdownButtonFormField<String>(
-              value: _routeLabels.containsKey(val.split('?').first) ? val.split('?').first : null,
+              key: ValueKey(_routeLabels.containsKey(val.split('?').first) ? val.split('?').first : null),
+              initialValue: _routeLabels.containsKey(val.split('?').first) ? val.split('?').first : null,
               isExpanded: true,
               decoration: SC.input(hint: 'Choose a page', error: error),
               style: SC.body,
@@ -361,7 +363,8 @@ class LinkField extends StatelessWidget {
                   onChanged: (v) => emit('anchor', v.trim()),
                 )
               : DropdownButtonFormField<String>(
-                  value: anchors.contains(val) ? val : null,
+                  key: ValueKey(anchors.contains(val) ? val : null),
+                  initialValue: anchors.contains(val) ? val : null,
                   isExpanded: true,
                   decoration: SC.input(hint: 'Choose a section', error: error),
                   style: SC.body,
@@ -369,7 +372,8 @@ class LinkField extends StatelessWidget {
                   onChanged: (v) => v == null ? null : emit('anchor', v),
                 ),
           'action' => DropdownButtonFormField<String>(
-              value: _actionLabels.containsKey(val) ? val : null,
+              key: ValueKey(_actionLabels.containsKey(val) ? val : null),
+              initialValue: _actionLabels.containsKey(val) ? val : null,
               isExpanded: true,
               decoration: SC.input(hint: 'Choose an action', error: error),
               style: SC.body,

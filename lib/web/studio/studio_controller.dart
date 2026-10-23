@@ -255,14 +255,13 @@ class StudioController extends StateNotifier<StudioState> {
     if (state.selectedId == id) state = state.copyWith(selectedId: nextSel);
   }
 
-  /// [newIndex] follows `ReorderableListView.onReorder`: it is the index before
-  /// the item is removed, so moving down needs the usual -1.
+  /// Moves the section at [oldIndex] so that it ends up at [newIndex] in the
+  /// resulting list. (This is `ReorderableListView.onReorderItem`'s convention:
+  /// the index is already adjusted for the removed item.)
   void moveSection(int oldIndex, int newIndex) {
     final list = _sections;
     if (oldIndex < 0 || oldIndex >= list.length) return;
-    var to = newIndex;
-    if (to > oldIndex) to -= 1;
-    to = to.clamp(0, list.length - 1);
+    final to = newIndex.clamp(0, list.length - 1);
     if (to == oldIndex) return;
     _mutate((doc) {
       final l = _list(doc);

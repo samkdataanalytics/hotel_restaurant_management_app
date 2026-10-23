@@ -118,7 +118,7 @@ void main() {
     test('undo and redo restore exact states', () async {
       final c = _make(MemorySiteRepository());
       await c.open('page:home');
-      c.moveSection(0, 3); // a to the end
+      c.moveSection(0, 2); // a to the end
       expect(_ids(c), ['b', 'c', 'a']);
       expect(c.state.canUndo, isTrue);
       c.undo();
@@ -244,15 +244,17 @@ void main() {
       expect(c.state.selectedId, isNull);
     });
 
-    test('moveSection follows ReorderableListView semantics', () async {
+    test('moveSection puts the section at the final index', () async {
       final c = _make(MemorySiteRepository());
       await c.open('page:home');
-      c.moveSection(0, 2); // drag a below b: Flutter passes newIndex 2
+      c.moveSection(0, 1); // a below b
       expect(_ids(c), ['b', 'a', 'c']);
       c.moveSection(2, 0);
       expect(_ids(c), ['c', 'b', 'a']);
       c.moveSection(1, 1);
       expect(_ids(c), ['c', 'b', 'a'], reason: 'no-op');
+      c.moveSection(0, 99);
+      expect(_ids(c), ['b', 'a', 'c'], reason: 'clamped to the end');
     });
 
     test('disable is stored only when off', () async {

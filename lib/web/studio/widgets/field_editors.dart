@@ -259,7 +259,8 @@ class _ChoiceEditor extends StatelessWidget {
       );
     }
     return DropdownButtonFormField<String>(
-      value: spec.options.containsKey(current) ? current : null,
+      key: ValueKey(spec.options.containsKey(current) ? current : null),
+      initialValue: spec.options.containsKey(current) ? current : null,
       isExpanded: true,
       style: SC.body,
       decoration: SC.input(hint: def == null ? 'Site default' : null, error: error),
