@@ -4,7 +4,10 @@ import '../sections/cta_band_section.dart';
 import '../sections/faq_section.dart';
 import '../sections/feature_grid_section.dart';
 import '../sections/hero_section.dart';
+import '../sections/image_text_section.dart';
 import '../sections/pricing_section.dart';
+import '../sections/rich_text_section.dart';
+import '../sections/spacer_section.dart';
 import '../sections/stats_section.dart';
 import '../sections/steps_section.dart';
 import '../sections/testimonials_section.dart';
@@ -25,4 +28,7 @@ final SectionRegistry publicRegistry = SectionRegistry.of([
   pricingDefinition,
   faqDefinition,
   ctaBandDefinition,
+  richTextDefinition,
+  imageTextDefinition,
+  spacerDefinition,
 ]);
