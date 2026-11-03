@@ -7,6 +7,7 @@ import 'web/landing_screen.dart';
 import 'web/login_screen.dart';
 import 'web/signup_screen.dart';
 import 'web/superadmin/superadmin_shell.dart';
+import 'web/suspended_screen.dart';
 import 'web/onboarding/onboarding_shell.dart';
 import 'web/onboarding/onboarding_profile_screen.dart';
 import 'web/onboarding/property_setup_screen.dart';
@@ -55,6 +56,7 @@ class AppRoutes {
   static const acceptInvite  = '/accept-invite';
   static const guestMenu     = '/menu';
   static const roomService   = '/room-service';
+  static const suspended     = kSuspendedPath;
 }
 
 // ─── Router provider ─────────────────────────────────────────────────────────
@@ -107,6 +109,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         if (loc.startsWith(AppRoutes.superadmin)) return null;
         return AppRoutes.superadmin;
       }
+
+      // A suspended company's members can sign in but see only the suspended notice
+      // (and can sign out). Checked before every other in-app route.
+      if (auth.isSuspended) {
+        return suspensionRedirect(suspended: true, location: loc);
+      }
+      if (loc == AppRoutes.suspended) return AppRoutes.appDashboard;
 
       // Allow any /app/* sub-route through once we've passed auth checks
       if (loc.startsWith('${AppRoutes.app}/')) return null;
@@ -175,6 +184,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.emailVerified,
         builder: (_, __) => const EmailVerifiedScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.suspended,
+        builder: (_, __) => const SuspendedScreen(),
       ),
       GoRoute(
         path: AppRoutes.superadmin,

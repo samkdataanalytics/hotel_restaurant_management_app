@@ -49,4 +49,8 @@ run_test supabase/tests/company_property_tracking.sql 25
 # A database without the optional staff_invites table: the detail screens must still work.
 $PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/migrations/20261103000001_superadmin_optional_tables.sql >/dev/null 2>&1
 run_test supabase/tests/superadmin_optional_tables.sql 6
+
+# Plan limits, the expired-trial pause and suspension, enforced by triggers.
+$PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/migrations/20261103000002_plan_limits_server_side.sql >/dev/null 2>&1
+run_test supabase/tests/local/plan_limits.sql 18
 echo "All SQL tests passed"

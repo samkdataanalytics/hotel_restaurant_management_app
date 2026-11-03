@@ -58,6 +58,9 @@ class AppAuthState {
   int? get trialDaysLeft => organization?.trialDaysLeft;
   /// True when the trial has lapsed unpaid — app is read-only, creation blocked.
   bool get isTrialExpired => organization?.isTrialExpired ?? false;
+  /// True when the user's company is suspended: every member is signed in but locked out.
+  /// A superadmin is never locked out.
+  bool get isSuspended => isLoggedIn && !isSuperadmin && (organization?.isSuspended ?? false);
 
   AppAuthState copyWith({
     bool? isLoading,

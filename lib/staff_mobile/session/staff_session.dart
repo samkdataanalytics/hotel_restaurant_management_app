@@ -97,6 +97,14 @@ class StaffSession extends AsyncNotifier<StaffSessionState> {
       );
     }
 
+    if (auth.isSuspended) {
+      return const StaffSessionState(
+        blocker: StaffBlocker.setupRequired,
+        blockerReason:
+            'This organisation\'s account is suspended. Please contact support.',
+      );
+    }
+
     if (auth.isTrialExpired) {
       return const StaffSessionState(
         blocker: StaffBlocker.setupRequired,

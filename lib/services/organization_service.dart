@@ -123,6 +123,9 @@ class Organization {
   /// True when the org may view but not create/modify records (expired trial).
   bool get isReadOnly => isTrialExpired;
 
+  /// True when a superadmin has put the company on hold. Its users cannot use the app.
+  bool get isSuspended => status == 'suspended';
+
   /// Status corrected for an elapsed-but-not-yet-flipped trial. Reporting and
   /// admin displays should use this instead of the raw [status] column, because
   /// an idle org keeps a stale 'trialing' value until its owner next logs in
