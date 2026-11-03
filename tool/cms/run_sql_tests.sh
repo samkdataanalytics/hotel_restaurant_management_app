@@ -45,4 +45,8 @@ run_test supabase/tests/local/user_tracking_triggers.sql 10
 $PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/tests/local/company_property_stubs.sql
 $PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/migrations/20261023000004_superadmin_companies_properties.sql >/dev/null 2>&1
 run_test supabase/tests/company_property_tracking.sql 25
+
+# A database without the optional staff_invites table: the detail screens must still work.
+$PSQL -v ON_ERROR_STOP=1 -q -d $db -f supabase/migrations/20261103000001_superadmin_optional_tables.sql >/dev/null 2>&1
+run_test supabase/tests/superadmin_optional_tables.sql 6
 echo "All SQL tests passed"
