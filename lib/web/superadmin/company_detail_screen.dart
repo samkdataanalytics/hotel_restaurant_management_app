@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../app_theme.dart';
 import '../../services/organization_service.dart';
 import '../semantic_palette.dart';
+import 'tracking/company_insight_view.dart';
+import 'tracking/tracking_links.dart';
+import 'users/activity_list.dart';
 
 class CompanyDetailScreen extends StatefulWidget {
   const CompanyDetailScreen({super.key, required this.org});
@@ -25,7 +28,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     // Use effectiveStatus so an elapsed-but-not-yet-flipped trial reads
     // 'trial_expired' rather than a stale 'trialing'.
     _currentStatus = widget.org.effectiveStatus;
@@ -364,6 +367,16 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Icon(Icons.insights_rounded, size: 16),
+                SizedBox(width: 8),
+                Text('Overview'),
+              ],
+            ),
+          ),
+          Tab(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Icon(Icons.apartment_rounded, size: 16),
                 SizedBox(width: 8),
                 Text('Properties'),
@@ -380,6 +393,16 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
               ],
             ),
           ),
+          Tab(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.history_rounded, size: 16),
+                SizedBox(width: 8),
+                Text('Activity'),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -389,12 +412,20 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen>
 
   Widget _buildTabViews() {
     return SizedBox(
-      height: 420,
+      height: 520,
       child: TabBarView(
         controller: _tabController,
         children: [
+          // Plan usage, totals, who is in it and what they do. Its properties and
+          // members open their own detail from here.
+          CompanyInsightView(orgId: widget.org.id),
           _PropertiesTab(future: _propertiesFuture),
           _MembersTab(future: _membersFuture),
+          SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            // What this company's people have done, newest first.
+            child: ActivityList(orgId: widget.org.id),
+          ),
         ],
       ),
     );
@@ -513,7 +544,11 @@ class _PropertiesTab extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           itemCount: props.length,
           separatorBuilder: (_, __) => const SizedBox(height: 10),
-          itemBuilder: (_, i) => _PropertyCard(property: props[i]),
+          itemBuilder: (ctx, i) => InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => openProperty(ctx, props[i].id),
+            child: _PropertyCard(property: props[i]),
+          ),
         );
       },
     );
@@ -627,7 +662,10 @@ class _MembersTab extends StatelessWidget {
             height: 1,
             color: Colors.grey.shade100,
           ),
-          itemBuilder: (_, i) => _MemberRow(member: members[i]),
+          itemBuilder: (ctx, i) => InkWell(
+            onTap: () => openUser(ctx, members[i].userId),
+            child: _MemberRow(member: members[i]),
+          ),
         );
       },
     );

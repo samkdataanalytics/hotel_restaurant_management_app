@@ -22,6 +22,9 @@ class AuthScaffold extends StatefulWidget {
   /// "Already have an account?" style prompt under the card.
   final Widget? footer;
 
+  /// The link back to the marketing site, above the logo.
+  final String backLabel;
+
   const AuthScaffold({
     super.key,
     required this.title,
@@ -29,6 +32,7 @@ class AuthScaffold extends StatefulWidget {
     required this.children,
     this.banner,
     this.footer,
+    this.backLabel = 'Back to site',
   });
 
   @override
@@ -111,7 +115,7 @@ class _AuthScaffoldState extends State<AuthScaffold>
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _BackToSite(),
+                            _BackToSite(label: widget.backLabel),
                             const SizedBox(height: 26),
                             MouseRegion(
                               cursor: SystemMouseCursors.click,
@@ -130,45 +134,11 @@ class _AuthScaffoldState extends State<AuthScaffold>
                               ),
                             ),
                             const SizedBox(height: 28),
-                            Container(
-                              width: double.infinity,
-                              padding: EdgeInsets.all(mobile ? 24 : 34),
-                              decoration: BoxDecoration(
-                                color: LK.white,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: LK.line),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: LK.navy.withValues(alpha: 0.07),
-                                    blurRadius: 40,
-                                    offset: const Offset(0, 16),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    widget.title,
-                                    textAlign: TextAlign.center,
-                                    style:
-                                        LK.h3(context).copyWith(fontSize: 24),
-                                  ),
-                                  const SizedBox(height: 7),
-                                  Text(
-                                    widget.subtitle,
-                                    textAlign: TextAlign.center,
-                                    style: LK.small.copyWith(color: LK.body),
-                                  ),
-                                  if (widget.banner != null) ...[
-                                    const SizedBox(height: 20),
-                                    widget.banner!,
-                                  ],
-                                  const SizedBox(height: 26),
-                                  ...widget.children,
-                                ],
-                              ),
+                            AuthCard(
+                              title: widget.title,
+                              subtitle: widget.subtitle,
+                              banner: widget.banner,
+                              children: widget.children,
                             ),
                             if (widget.footer != null) ...[
                               const SizedBox(height: 22),
@@ -190,7 +160,73 @@ class _AuthScaffoldState extends State<AuthScaffold>
   }
 }
 
+/// The white card with the heading and the fields. Split out of [AuthScaffold] so
+/// the website editor can draw the same card around sample fields.
+class AuthCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final Widget? banner;
+  final List<Widget> children;
+
+  const AuthCard({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.children,
+    this.banner,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final mobile = LK.isMobile(context);
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(mobile ? 24 : 34),
+      decoration: BoxDecoration(
+        color: LK.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: LK.line),
+        boxShadow: [
+          BoxShadow(
+            color: LK.navy.withValues(alpha: 0.07),
+            blurRadius: 40,
+            offset: const Offset(0, 16),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: LK.h3(context).copyWith(fontSize: 24),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: LK.small.copyWith(color: LK.body),
+          ),
+          if (banner != null) ...[
+            const SizedBox(height: 20),
+            banner!,
+          ],
+          const SizedBox(height: 26),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
 class _BackToSite extends StatefulWidget {
+  const _BackToSite({required this.label});
+
+  final String label;
+
   @override
   State<_BackToSite> createState() => _BackToSiteState();
 }
@@ -215,7 +251,7 @@ class _BackToSiteState extends State<_BackToSite> {
                   size: 16, color: _hover ? LK.teal : LK.muted),
               const SizedBox(width: 7),
               Text(
-                'Back to site',
+                widget.label,
                 style: LK.micro.copyWith(
                   color: _hover ? LK.teal : LK.muted,
                   fontWeight: FontWeight.w600,

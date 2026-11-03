@@ -6,6 +6,8 @@ import '../services/plan_service.dart';
 import '../services/guest_menu_service.dart';
 import '../services/lead_service.dart';
 import '../services/organization_service.dart';
+import '../services/platform_tracking_service.dart';
+import '../services/user_tracking_service.dart';
 
 /// Riverpod providers for all application services.
 ///
@@ -38,3 +40,9 @@ final leadServiceProvider =
 
 final organizationServiceProvider =
     Provider<OrganizationService>((_) => OrganizationService());
+
+final userTrackingServiceProvider =
+    Provider<UserTrackingService>((_) => UserTrackingService());
+
+final platformTrackingServiceProvider =
+    Provider<PlatformTrackingService>((_) => PlatformTrackingService());

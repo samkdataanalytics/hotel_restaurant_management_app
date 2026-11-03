@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'di/injection_container.dart';
+import 'web/cms/data/site_content_store.dart';
 import 'mobile/mobile_app.dart';
 import 'providers/hotel_session.dart';
 import 'router.dart';
@@ -28,6 +29,11 @@ void main() async {
     url:     supabaseUrl,
     anonKey: supabaseAnonKey,
   );
+  // Start fetching published website content now, in parallel with the rest of
+  // start-up. Never awaited: the page paints from the cache or the bundled
+  // defaults and swaps in fresh content if it arrives.
+  SiteContentStore.instance.start();
+
   await initDependencies();
 
   // Legacy HotelSession (still used by existing hotel screens)

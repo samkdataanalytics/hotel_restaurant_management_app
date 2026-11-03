@@ -892,6 +892,13 @@ class OrganizationService {
     return result;
   }
 
+  /// One company by id, for opening its dialog from somewhere other than the list.
+  Future<Organization?> getOrganization(String orgId) async {
+    final rows = await _db.from('organizations').select().eq('id', orgId).limit(1);
+    if (rows.isEmpty) return null;
+    return Organization.fromRow(rows.first);
+  }
+
   Future<List<OrgProperty>> getOrgProperties(String orgId) async {
     final rows = await _db
         .from('hotels')

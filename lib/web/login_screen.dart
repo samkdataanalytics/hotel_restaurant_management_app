@@ -7,6 +7,11 @@ import '../router.dart';
 import '../services/auth_identity.dart';
 import 'auth/auth_scaffold.dart';
 import 'brand_kit.dart';
+import 'cms/data/site_providers.dart';
+import 'cms/defaults/site_defaults.dart';
+import 'cms/model/json_reader.dart';
+import 'cms/render/seo_scope.dart';
+import 'cms/sections/auth_copy_section.dart';
 
 /// Staff and owner sign-in.
 ///
@@ -124,56 +129,72 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
+  /// The wording, from the `page:auth` document (or as it shipped).
+  LoginCopy _copy() {
+    LoginCopy? find(List<dynamic> sections) {
+      for (final s in sections) {
+        if (s.type == 'loginCopy' && s.enabled) return LoginCopy.fromJson(s.content);
+      }
+      return null;
+    }
+
+    return find(ref.watch(siteDocumentProvider('page:auth')).sections) ??
+        find(siteDefaultDocument('page:auth').sections)!;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AuthScaffold(
-      title: 'Welcome back',
-      subtitle: 'Sign in to your management portal.',
-      footer: AuthFooterPrompt(
-        question: "Don't have an account?",
-        action: 'Create one',
-        onTap: () => context.go(AppRoutes.signup),
-      ),
-      children: [
-        AuthField(
-          controller: _emailController,
-          label: 'Email or username',
-          icon: Icons.person_outline_rounded,
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
-          onSubmitted: (_) => _passwordFocus.requestFocus(),
-        ),
-        const SizedBox(height: 14),
-        AuthField(
-          controller: _passwordController,
-          focusNode: _passwordFocus,
-          label: 'Password',
-          icon: Icons.lock_outline_rounded,
-          obscure: _obscurePassword,
-          textInputAction: TextInputAction.go,
-          onSubmitted: (_) => _isLoading ? null : _login(),
-          trailing: IconButton(
-            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-            icon: Icon(
-              _obscurePassword
-                  ? Icons.visibility_outlined
-                  : Icons.visibility_off_outlined,
-              color: LK.muted,
-              size: 20,
-            ),
-            tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+    final copy = _copy();
+    return SeoScope(
+        seo: J({'title': copy.metaTitle}),
+        fallbackTitle: 'Sign in — HotRest',
+        child: AuthScaffold(
+          backLabel: copy.backLabel,
+          title: copy.title,
+          subtitle: copy.subtitle,
+          footer: AuthFooterPrompt(
+            question: copy.footerQuestion,
+            action: copy.footerAction,
+            onTap: () => context.go(AppRoutes.signup),
           ),
-        ),
-        if (_error != null) ...[
-          const SizedBox(height: 14),
-          AuthInlineError(_error!),
-        ],
-        const SizedBox(height: 24),
-        if (_isLoading)
-          const AuthBusyButton()
-        else
-          CtaButton(label: 'Sign in', expand: true, onTap: _login),
-      ],
-    );
+          children: [
+            AuthField(
+              controller: _emailController,
+              label: copy.identifierLabel,
+              icon: Icons.person_outline_rounded,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              onSubmitted: (_) => _passwordFocus.requestFocus(),
+            ),
+            const SizedBox(height: 14),
+            AuthField(
+              controller: _passwordController,
+              focusNode: _passwordFocus,
+              label: copy.passwordLabel,
+              icon: Icons.lock_outline_rounded,
+              obscure: _obscurePassword,
+              textInputAction: TextInputAction.go,
+              onSubmitted: (_) => _isLoading ? null : _login(),
+              trailing: IconButton(
+                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                  color: LK.muted,
+                  size: 20,
+                ),
+                tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 14),
+              AuthInlineError(_error!),
+            ],
+            const SizedBox(height: 24),
+            if (_isLoading)
+              const AuthBusyButton()
+            else
+              CtaButton(label: copy.submitLabel, expand: true, onTap: _login),
+          ],
+        ));
   }
 }

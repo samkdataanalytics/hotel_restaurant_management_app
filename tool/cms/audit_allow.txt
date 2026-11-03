@@ -1,0 +1,32 @@
+# Text that is deliberately in code, with the reason. One per line: text :: reason
+# Anything the audit finds that is not here is reported (and fails CI with --strict).
+
+# Brand name shown only if the logo image fails to load.
+HotRest :: fallback for a missing logo image
+
+# Screen-reader hints, not visible copy.
+Close menu :: accessibility label
+Menu :: accessibility label
+
+# Status text produced by the app when something goes wrong, with technical detail.
+Could not send that: $e :: system error message
+Try again :: button on the sign-in error pop-up (system feedback)
+
+# Studio-only names for section types, shown in the editor, never to visitors.
+Before / after :: editor label
+Call to action band :: editor label
+Comparison table :: editor label
+Feature grid :: editor label
+Frequently asked questions :: editor label
+Help topics :: editor label
+Hero :: editor label
+How it works :: editor label
+Image and text :: editor label
+Legal document :: editor label
+Pricing :: editor label
+Sign-in screen :: editor label
+Sign-up screen :: editor label
+Spacer :: editor label
+Stats strip :: editor label
+Testimonials :: editor label
+Text block :: editor label
