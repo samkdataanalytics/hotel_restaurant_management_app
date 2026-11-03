@@ -16,8 +16,10 @@ import 'package:hotel_checkin/web/studio/studio_state.dart';
 
 import 'support/brand_fonts.dart';
 
-const _shots = '/private/tmp/claude-501/-Users-chirathweerakkody-Documents-hotel-restaurant-management-app/'
-    'bcf6b4fb-8460-4634-9b85-b9d7dc85c26e/scratchpad/shots';
+/// Screenshots are for looking at the editor by hand, so they are written only
+/// when STUDIO_SHOTS_DIR names a folder: `STUDIO_SHOTS_DIR=/tmp/shots flutter test ...`.
+/// Without it (CI, a plain `flutter test`) they are skipped and nothing is written.
+final String? _shots = Platform.environment['STUDIO_SHOTS_DIR'];
 
 PlanModel _plan(String slug, String name, double price, {bool hi = false}) => PlanModel(
       id: slug,
@@ -77,12 +79,14 @@ Future<_Harness> _pump(WidgetTester t, {double width = 1500, double height = 900
 GlobalKey? _lastKey;
 
 Future<void> _shot(WidgetTester t, String name) async {
+  final dir = _shots;
+  if (dir == null || dir.isEmpty) return;
   await t.runAsync(() async {
     final boundary = t.renderObject<RenderRepaintBoundary>(find.byKey(_lastKey!));
     final image = await boundary.toImage(pixelRatio: 1);
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
-    Directory(_shots).createSync(recursive: true);
-    File('$_shots/$name.png').writeAsBytesSync(data!.buffer.asUint8List());
+    Directory(dir).createSync(recursive: true);
+    File('$dir/$name.png').writeAsBytesSync(data!.buffer.asUint8List());
   });
 }
 
